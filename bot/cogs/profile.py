@@ -57,10 +57,12 @@ class ProfileCog(commands.Cog):
         except Exception:
             badges = []
 
-        # Audit state — derived from risk score
+        # Audit state — aligned with 4-tier risk system
+        # LOW (0-20): cleared / neutral  |  MEDIUM (21-50): neutral
+        # HIGH (51-80): flagged           |  CRITICAL (81-100): flagged
         risk = user_data.get("risk_score", 0)
         taxes = user_data.get("taxes_paid", 0)
-        if risk >= 60:
+        if risk >= 51:
             audit_state = "flagged"
         elif risk <= 20 and taxes > 0:
             audit_state = "cleared"

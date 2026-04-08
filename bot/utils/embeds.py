@@ -414,21 +414,78 @@ class EmbedFactory:
         return embed
 
     @staticmethod
-    def blackmarket_purchase(item: dict, cost: int, new_balance: int, new_risk: int) -> discord.Embed:
+    def blackmarket_purchase(
+        item: dict,
+        cost: int,
+        new_balance: int,
+        old_risk: int,
+        new_risk: int,
+        risk_delta: int,
+    ) -> discord.Embed:
+        # ── Risk tier classification ────────────────────────────────────────
+        def _tier(r: int):
+            if r <= 20:   return ("LOW",      "🟢", VOID_BLACK)
+            elif r <= 50: return ("MEDIUM",   "🟡", 0x7A5C00)
+            elif r <= 80: return ("HIGH",     "🟠", 0x8B2500)
+            else:         return ("CRITICAL", "🔴", DARK_RED)
+
+        old_label, old_icon, _ = _tier(old_risk)
+        new_label, new_icon, embed_color = _tier(new_risk)
+
+        # ── Cerberus pressure line ──────────────────────────────────────────
+        CERBERUS_LINES = {
+            "LOW":      "*The transaction is sealed. No trace remains.*",
+            "MEDIUM":   "*The market remembers. Cerberus has taken notice.*",
+            "HIGH":     "*The hound stirs. Your record grows suspicious.*",
+            "CRITICAL": "*Cerberus is watching. Every move is catalogued.*",
+        }
+        desc = CERBERUS_LINES[new_label]
+
         embed = discord.Embed(
-            title="🕵️  Transaction Complete",
-            description=f"*The item is yours. No record will be found... in the official ledger.*",
-            color=DEEP_PURPLE,
+            title="🕵️  Black Market — Transaction Sealed",
+            description=desc,
+            color=embed_color,
         )
         embed.add_field(name="\u200b", value=SEP, inline=False)
-        embed.add_field(name="ITEM", value=f"**{item['name']}**", inline=True)
-        embed.add_field(name="COST", value=format_dc(cost), inline=True)
+
+        # ── Item block ──────────────────────────────────────────────────────
+        embed.add_field(name="ITEM ACQUIRED", value=f"**{item['name']}**", inline=True)
+        embed.add_field(name="COST", value=f"**{format_dc(cost)}**", inline=True)
         embed.add_field(name="\u200b", value="\u200b", inline=True)
-        embed.add_field(name="EFFECT", value=item["description"], inline=False)
+        embed.add_field(name="EFFECT", value=f"*{item['description']}*", inline=False)
         embed.add_field(name="\u200b", value=SEP, inline=False)
+
+        # ── Risk ledger ─────────────────────────────────────────────────────
+        if risk_delta > 0:
+            delta_str   = f"+{risk_delta} Risk"
+            tier_change = f"{old_icon} {old_label}  →  {new_icon} {new_label}" if new_label != old_label else f"{new_icon} {new_label}"
+        elif risk_delta < 0:
+            delta_str   = f"{risk_delta} Risk  *(reduced)*"
+            tier_change = f"{old_icon} {old_label}  →  {new_icon} {new_label}" if new_label != old_label else f"{new_icon} {new_label}"
+        else:
+            delta_str   = "No change"
+            tier_change = f"{new_icon} {new_label}"
+
+        risk_block = (
+            f"```"
+            f"Before    {old_risk:>4} / 100\n"
+            f"Delta     {delta_str}\n"
+            f"After     {new_risk:>4} / 100"
+            f"```"
+        )
+        embed.add_field(name="RISK RECORD", value=risk_block, inline=False)
+        embed.add_field(name="RISK STATUS", value=f"**{tier_change}**", inline=True)
         embed.add_field(name="BALANCE", value=f"**{format_dc(new_balance)}**", inline=True)
-        embed.add_field(name="RISK SCORE", value=f"**{new_risk}/100**", inline=True)
-        embed.set_footer(text="Kingdom Treasury  ·  Kingdom of Hell")
+        embed.add_field(name="\u200b", value=SEP, inline=False)
+
+        # ── Dynamic footer ──────────────────────────────────────────────────
+        FOOTER_LINES = {
+            "LOW":      "No immediate threat detected.",
+            "MEDIUM":   "Cerberus is aware of your presence.",
+            "HIGH":     "Cerberus is watching. Use /identity to check your record.",
+            "CRITICAL": "Immediate audit risk. The Kingdom is closing in.",
+        }
+        embed.set_footer(text=f"{FOOTER_LINES[new_label]}  ·  Kingdom Treasury")
         return embed
 
     # ─── Cerberus Audit ──────────────────────────────────────

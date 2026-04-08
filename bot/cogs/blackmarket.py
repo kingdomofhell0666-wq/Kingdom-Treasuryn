@@ -35,10 +35,12 @@ class BlackMarketCog(commands.Cog):
                 return
 
             embed = EmbedFactory.blackmarket_purchase(
-                result["item"],
-                result["cost"],
-                result["new_balance"],
-                result["new_risk"],
+                item=result["item"],
+                cost=result["cost"],
+                new_balance=result["new_balance"],
+                old_risk=result["old_risk"],
+                new_risk=result["new_risk"],
+                risk_delta=result["risk_delta"],
             )
             await inter.response.send_message(embed=embed, ephemeral=True)
 

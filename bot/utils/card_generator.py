@@ -190,6 +190,99 @@ def _double_line(draw, y: int, theme: dict):
     draw.line([(PAD, y + 3), (W - PAD, y + 3)], fill=(*theme["border"][:3], 30), width=1)
 
 
+# ─── Risk Tier system ─────────────────────────────────────────────────────────
+
+def get_risk_tier(risk: int) -> dict:
+    """Return tier metadata for a given risk score (0-100)."""
+    if risk <= 20:
+        return dict(
+            label="LOW",
+            color=(80, 200, 120),          # calm green
+            border_alpha=0,
+            overlay_alpha=0,
+            border_color=(0, 0, 0),
+            cerberus_line=None,
+            glow_boost=0,
+        )
+    elif risk <= 50:
+        return dict(
+            label="MEDIUM",
+            color=(210, 165, 40),          # amber gold
+            border_alpha=40,
+            overlay_alpha=18,
+            border_color=(180, 100, 0),
+            cerberus_line="Cerberus has taken notice.",
+            glow_boost=0,
+        )
+    elif risk <= 80:
+        return dict(
+            label="HIGH",
+            color=(215, 80, 40),           # deep orange-red
+            border_alpha=80,
+            overlay_alpha=38,
+            border_color=(190, 30, 0),
+            cerberus_line="Cerberus is watching.",
+            glow_boost=1,
+        )
+    else:
+        return dict(
+            label="CRITICAL",
+            color=(230, 30, 30),           # bright danger red
+            border_alpha=130,
+            overlay_alpha=62,
+            border_color=(220, 0, 0),
+            cerberus_line="Your ledger is no longer clean.",
+            glow_boost=2,
+        )
+
+
+def _risk_tier_overlay(card: Image.Image, risk: int):
+    """Apply a visual overlay to the card that intensifies with risk tier."""
+    tier = get_risk_tier(risk)
+    if tier["overlay_alpha"] == 0:
+        return
+
+    oa = tier["overlay_alpha"]
+    bc = tier["border_color"]
+
+    # Corner vignette — dark red bleeds in from all four corners
+    vignette = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    vd = ImageDraw.Draw(vignette)
+
+    # Top edge
+    for i in range(80):
+        a = int(oa * (1 - i / 80) * 1.4)
+        vd.line([(0, i), (W, i)], fill=(*bc, a))
+    # Bottom edge
+    for i in range(80):
+        a = int(oa * (1 - i / 80) * 1.4)
+        vd.line([(0, H - 1 - i), (W, H - 1 - i)], fill=(*bc, a))
+    # Left edge
+    for i in range(60):
+        a = int(oa * (1 - i / 60))
+        vd.line([(i, 0), (i, H)], fill=(*bc, a))
+    # Right edge
+    for i in range(60):
+        a = int(oa * (1 - i / 60))
+        vd.line([(W - 1 - i, 0), (W - 1 - i, H)], fill=(*bc, a))
+
+    card.alpha_composite(vignette)
+
+    # Glowing danger border for HIGH and CRITICAL
+    ba = tier["border_alpha"]
+    if ba > 0:
+        border_layer = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+        bd = ImageDraw.Draw(border_layer)
+        bd.rounded_rectangle([(1, 1), (W - 2, H - 2)],
+                              radius=RADIUS, outline=(*bc, ba), width=3)
+        blurred = border_layer.filter(ImageFilter.GaussianBlur(8))
+        card.alpha_composite(blurred)
+        bd2 = ImageDraw.Draw(border_layer)
+        bd2.rounded_rectangle([(1, 1), (W - 2, H - 2)],
+                               radius=RADIUS, outline=(*bc, min(255, ba + 40)), width=2)
+        card.alpha_composite(border_layer)
+
+
 # ─── Background sigil ─────────────────────────────────────────────────────────
 
 def _bg_sigil(card: Image.Image, theme: dict):
@@ -491,6 +584,7 @@ def generate_card(
 
     t = _t(skin_id)
     badges = badges or []
+    tier = get_risk_tier(risk_score)
 
     # ── Canvas ──────────────────────────────────────────────────────────────
     card = _gradient(W, H, t["bg1"], t["bg2"])
@@ -500,6 +594,9 @@ def generate_card(
 
     # ── Wealth zone highlight ──────────────────────────────────────────────
     _wealth_highlight(card, t)
+
+    # ── Risk tier overlay (vignette + danger border) ───────────────────────
+    _risk_tier_overlay(card, risk_score)
 
     draw = ImageDraw.Draw(card)
 
@@ -637,12 +734,26 @@ def generate_card(
 
     _stat(cols[0], "KINGDOM RANK", f"#{kingdom_rank}")
     _stat(cols[1], "TAXES FILED", _fmt_dc(taxes_paid))
-    rs_col_str = f"{risk_score} / 100"
-    _stat(cols[2], "RISK SCORE", rs_col_str, large=False)
+
+    # Risk Score stat — shows number + tier label in tier color
+    rs_lbl_w = _tw(draw, "RISK SCORE", lbl_f)
+    draw.text((cols[2] - rs_lbl_w // 2, STATS_Y + 6), "RISK SCORE",
+              font=lbl_f, fill=(*t["text2"][:3], 178))
+    rs_num_str = f"{risk_score} / 100"
+    rs_num_f = val_f2
+    rs_num_w = _tw(draw, rs_num_str, rs_num_f)
+    tc = tier["color"]
+    _glow(card, (cols[2] - rs_num_w // 2, STATS_Y + 26), rs_num_str, rs_num_f,
+          (*tc, 235), t["glow"], blur=6, spread=2)
+    draw = ImageDraw.Draw(card)
+    tier_lbl_f = _font(13, bold=True)
+    tier_lw = _tw(draw, tier["label"], tier_lbl_f)
+    _glow(card, (cols[2] - tier_lw // 2, STATS_Y + 60), tier["label"], tier_lbl_f,
+          (*tc, 240), (*tc, 200), blur=5, spread=1)
     draw = ImageDraw.Draw(card)
 
     # Risk score mini-bar
-    _risk_bar(draw, risk_score, t, STATS_Y + 108)
+    _risk_bar(draw, risk_score, t, STATS_Y + 112)
 
     _double_line(draw, DIV4, t)
 
@@ -848,10 +959,25 @@ def generate_card(
     # ZONE 7 — FOOTER
     # ────────────────────────────────────────────────────────────────────────
 
-    ff = _font(11)
-    fw = _tw(draw, footer_flavor, ff)
-    draw.text(((W - fw) // 2, FOOTER_Y + 18), footer_flavor,
-              font=ff, fill=(*t["text2"][:3], 152))
+    # Footer: show Cerberus warning if risk is elevated, else flavor text
+    cerberus_line = tier.get("cerberus_line")
+    if cerberus_line:
+        ff_warn = _font(12, bold=True)
+        fw_w = _tw(draw, cerberus_line, ff_warn)
+        tc_warn = tier["color"]
+        _glow(card, ((W - fw_w) // 2, FOOTER_Y + 10), cerberus_line, ff_warn,
+              (*tc_warn, 220), (*tc_warn, 180), blur=6, spread=1)
+        draw = ImageDraw.Draw(card)
+        # Subtle flavor below
+        ff2 = _font(9)
+        fw2 = _tw(draw, footer_flavor, ff2)
+        draw.text(((W - fw2) // 2, FOOTER_Y + 32), footer_flavor,
+                  font=ff2, fill=(*t["text2"][:3], 110))
+    else:
+        ff = _font(11)
+        fw = _tw(draw, footer_flavor, ff)
+        draw.text(((W - fw) // 2, FOOTER_Y + 18), footer_flavor,
+                  font=ff, fill=(*t["text2"][:3], 152))
 
     # Card ID / watermark
     wm_f = _font(8)

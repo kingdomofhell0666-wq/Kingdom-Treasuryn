@@ -129,6 +129,7 @@ class BlackMarketService:
 
         user = await self.db.upsert_user(discord_id, username)
         cost = item["cost"]
+        old_risk = user.get("risk_score", 0)
 
         if user["balance"] < cost:
             needed = cost - user["balance"]
@@ -164,9 +165,12 @@ class BlackMarketService:
             await self.db.adjust_risk_score(discord_id, risk_delta)
 
         updated_user = await self.db.get_user(discord_id)
+        new_risk = updated_user.get("risk_score", 0) if updated_user else 0
         return {
             "item": item,
             "cost": cost,
             "new_balance": updated_user["balance"] if updated_user else 0,
-            "new_risk": updated_user.get("risk_score", 0) if updated_user else 0,
+            "old_risk": old_risk,
+            "new_risk": new_risk,
+            "risk_delta": new_risk - old_risk,
         }

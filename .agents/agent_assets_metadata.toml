@@ -108,3 +108,27 @@ id = "o1no9tAOc2ZJ5MJcENq27"
 uri = "file://bot/assets/previews/royal_dark_cleared.png"
 type = "image"
 title = "Royal Dark — CLEARED"
+
+[[outputs]]
+id = "hUDeelmhS59YcRRVYK0qB"
+uri = "file://bot/assets/previews/tier_low.png"
+type = "image"
+title = "Risk: LOW (0-20) — Clean, stable, no threat"
+
+[[outputs]]
+id = "esXn5IfGnSFKujWVtyszN"
+uri = "file://bot/assets/previews/tier_medium.png"
+type = "image"
+title = "Risk: MEDIUM (21-50) — Amber tension, Cerberus notices"
+
+[[outputs]]
+id = "KnmGSWQPXu8EjfJhYU-fo"
+uri = "file://bot/assets/previews/tier_high.png"
+type = "image"
+title = "Risk: HIGH (51-80) — Red vignette, audit active"
+
+[[outputs]]
+id = "OV1IH8toWfuNfwv_iJYvP"
+uri = "file://bot/assets/previews/tier_critical.png"
+type = "image"
+title = "Risk: CRITICAL (81-100) — Aggressive overlay, danger state"
