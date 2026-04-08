@@ -1,0 +1,67 @@
+import discord
+from discord.ext import commands
+import logging
+
+from .database import Database
+from .services import (
+    EconomyService,
+    RankService,
+    CooldownService,
+    TransactionService,
+    TreasuryService,
+    AuditService,
+)
+
+logger = logging.getLogger("kingdom_treasury")
+
+
+class KingdomTreasuryBot(commands.Bot):
+    def __init__(self):
+        intents = discord.Intents.default()
+        intents.members = True
+
+        super().__init__(
+            command_prefix="!kt_",
+            intents=intents,
+            help_command=None,
+        )
+
+        self.db: Database = Database()
+
+        self.rank_service = RankService()
+        self.economy_service: EconomyService = None
+        self.cooldown_service: CooldownService = None
+        self.transaction_service: TransactionService = None
+        self.treasury_service: TreasuryService = None
+        self.audit_service: AuditService = None
+
+    async def setup_hook(self):
+        await self.db.connect()
+
+        self.economy_service = EconomyService(self.db)
+        self.cooldown_service = CooldownService(self.db)
+        self.transaction_service = TransactionService(self.db)
+        self.treasury_service = TreasuryService(self.db)
+        self.audit_service = AuditService(self.db)
+
+        from .cogs.economy import EconomyCog
+        from .cogs.profile import ProfileCog
+
+        await self.add_cog(EconomyCog(self))
+        await self.add_cog(ProfileCog(self))
+
+        await self.tree.sync()
+        logger.info("Command tree synchronized.")
+
+    async def on_ready(self):
+        logger.info(f"Kingdom Treasury online — {self.user} ({self.user.id})")
+        await self.change_presence(
+            activity=discord.Activity(
+                type=discord.ActivityType.watching,
+                name="the Kingdom's wealth",
+            )
+        )
+
+    async def close(self):
+        await self.db.close()
+        await super().close()
