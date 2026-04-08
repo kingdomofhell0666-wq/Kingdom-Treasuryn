@@ -77,10 +77,11 @@ class KingdomTreasuryBot(commands.Bot):
     async def on_ready(self):
         logger.info(f"Kingdom Treasury online — {self.user} ({self.user.id})")
         await self.change_presence(
+            status=discord.Status.dnd,
             activity=discord.Activity(
                 type=discord.ActivityType.watching,
-                name="the Kingdom's wealth",
-            )
+                name="every transaction in the Kingdom",
+            ),
         )
 
     async def close(self):
