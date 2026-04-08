@@ -1,0 +1,44 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "BZZs0zfLLb-qGT_EhEzYI"
+uri = "file://bot/assets/previews/default.png"
+type = "image"
+title = "Default — Infernal Standard"
+
+[[outputs]]
+id = "Nb81ezYFXgq9cYwf7FObq"
+uri = "file://bot/assets/previews/blood_crown.png"
+type = "image"
+title = "Blood Crown"
+
+[[outputs]]
+id = "9mZez_QogV_H2IB_0Wo9D"
+uri = "file://bot/assets/previews/abyss_smoke.png"
+type = "image"
+title = "Abyss Smoke"
+
+[[outputs]]
+id = "zRPTRfkVz4FrSQsJH5lW3"
+uri = "file://bot/assets/previews/infernal_gold.png"
+type = "image"
+title = "Infernal Gold"
+
+[[outputs]]
+id = "fIKgPNdpA4Tm8MjZNBtGZ"
+uri = "file://bot/assets/previews/royal_dark.png"
+type = "image"
+title = "Royal Dark"
+
+[[outputs]]
+id = "uFkD3p4jByJT9tVH8Jrwh"
+uri = "file://bot/assets/previews/black_throne.png"
+type = "image"
+title = "Black Throne"
+
+[[outputs]]
+id = "2TgXvKT02Dzg_O1qk6Poo"
+uri = "file://bot/assets/previews/crimson_sigil.png"
+type = "image"
+title = "Crimson Sigil"

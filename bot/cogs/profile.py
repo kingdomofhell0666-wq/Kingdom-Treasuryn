@@ -6,6 +6,8 @@ from typing import Optional
 from ..services import AuditService
 from ..services.cosmetic_service import CosmeticService
 from ..utils.embeds import EmbedFactory
+from ..utils.card_generator import generate_card, fetch_avatar
+from ..utils.skins import get_skin
 from ..ui import IdentityView
 
 
@@ -43,29 +45,61 @@ class ProfileCog(commands.Cog):
         user_data = await self.db.upsert_user(discord_id, username)
         kingdom_rank = await self.audit.get_kingdom_rank(discord_id)
 
+        # Skin + title
+        skin_id = user_data.get("equipped_skin") or "default"
+        skin = get_skin(skin_id)
+        equipped_title = user_data.get("equipped_title") or "Unmarked"
+
+        # Fetch avatar bytes async
         avatar_url = None
         try:
-            avatar_url = target.display_avatar.url
+            avatar_url = target.display_avatar.with_size(128).url
         except Exception:
             pass
+        avatar_bytes = await fetch_avatar(avatar_url)
 
-        mention = target.mention if not is_own_card else None
+        # Generate card image
+        try:
+            card_buf = generate_card(
+                username=username,
+                equipped_title=equipped_title,
+                rank=user_data.get("rank", "Forsaken"),
+                balance=user_data.get("balance", 0),
+                kingdom_rank=kingdom_rank,
+                taxes_paid=user_data.get("taxes_paid", 0),
+                risk_score=user_data.get("risk_score", 0),
+                skin_id=skin_id,
+                avatar_bytes=avatar_bytes,
+                footer_flavor=skin.footer_flavor.strip('"'),
+            )
+            card_file = discord.File(card_buf, filename="identity.png")
 
-        embed = EmbedFactory.identity(
-            user_data=user_data,
-            kingdom_rank=kingdom_rank,
-            avatar_url=avatar_url,
-            mention=mention,
-        )
-        view = IdentityView(is_own_card=is_own_card)
-        await interaction.followup.send(embed=embed, view=view)
+            # Minimal embed just to attach the image cleanly
+            embed = discord.Embed(color=skin.color)
+            embed.set_image(url="attachment://identity.png")
+            if not is_own_card:
+                embed.set_footer(text=f"Identity of {username}  ·  Kingdom Treasury")
+
+            view = IdentityView(is_own_card=is_own_card)
+            await interaction.followup.send(embed=embed, file=card_file, view=view)
+
+        except Exception as e:
+            # Fallback to embed-only if image generation fails
+            import logging
+            logging.getLogger("kingdom_treasury").exception("Card generation failed")
+            embed = EmbedFactory.identity(
+                user_data=user_data,
+                kingdom_rank=kingdom_rank,
+                avatar_url=avatar_url,
+                mention=target.mention if not is_own_card else None,
+            )
+            view = IdentityView(is_own_card=is_own_card)
+            await interaction.followup.send(embed=embed, view=view)
 
     @app_commands.command(name="wealth", description="Check your current balance.")
     async def wealth(self, interaction: discord.Interaction):
         discord_id = str(interaction.user.id)
         username = interaction.user.display_name
-
         user_data = await self.db.upsert_user(discord_id, username)
-
         embed = EmbedFactory.wealth(user_data)
         await interaction.response.send_message(embed=embed)
