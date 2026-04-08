@@ -58,10 +58,15 @@ class ProfileCog(commands.Cog):
             pass
         avatar_bytes = await fetch_avatar(avatar_url)
 
+        # display_name = server nickname if set, else global username
+        display_name = target.display_name
+        global_name = target.name
+
         # Generate card image
         try:
             card_buf = generate_card(
-                username=username,
+                username=global_name,
+                display_name=display_name,
                 equipped_title=equipped_title,
                 rank=user_data.get("rank", "Forsaken"),
                 balance=user_data.get("balance", 0),
