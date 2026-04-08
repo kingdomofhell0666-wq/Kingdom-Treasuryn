@@ -47,19 +47,19 @@ title = "Crimson Sigil"
 id = "ddMLzfx3O8zmaKPlidwet"
 uri = "file://bot/assets/previews/default_neutral.png"
 type = "image"
-title = "Default — Neutral (No badges)"
+title = "Default — Neutral"
 
 [[outputs]]
 id = "hn7pJ9143H1yQYFvrdFFK"
 uri = "file://bot/assets/previews/default_flagged.png"
 type = "image"
-title = "Default — CERBERUS FLAGGED (Risk 75)"
+title = "Default — FLAGGED"
 
 [[outputs]]
 id = "g0D2a4kKubHd9vNaB2kvd"
 uri = "file://bot/assets/previews/default_cleared.png"
 type = "image"
-title = "Default — CLEARED (Clean record + 4 badges)"
+title = "Default — CLEARED"
 
 [[outputs]]
 id = "Egvq589Sp9xp_TBX8EYVs"
@@ -77,7 +77,7 @@ title = "Infernal Gold — CLEARED"
 id = "tAbtE3U5RV-vlQvf-Cjc7"
 uri = "file://bot/assets/previews/abyss_smoke_neutral.png"
 type = "image"
-title = "Abyss Smoke — Neutral (3 badges)"
+title = "Abyss Smoke — Neutral"
 
 [[outputs]]
 id = "ZAUYPIVHSY5TEOPGTj-jo"
@@ -96,3 +96,15 @@ id = "8S6aJmbu2KAVFQIN-IMHm"
 uri = "file://bot/assets/previews/royal_dark_neutral.png"
 type = "image"
 title = "Royal Dark — Neutral"
+
+[[outputs]]
+id = "kzYZLPEz3pyOKHAcykYmN"
+uri = "file://bot/assets/previews/black_throne_neutral.png"
+type = "image"
+title = "Black Throne — Neutral"
+
+[[outputs]]
+id = "o1no9tAOc2ZJ5MJcENq27"
+uri = "file://bot/assets/previews/royal_dark_cleared.png"
+type = "image"
+title = "Royal Dark — CLEARED"

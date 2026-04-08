@@ -16,28 +16,28 @@ _DEJA_R = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
 
 # ─── Card geometry ────────────────────────────────────────────────────────────
 W, H     = 900, 1100
-RADIUS   = 30
-PAD      = 32
+RADIUS   = 26
+PAD      = 18           # tight — content dominates the surface
 
 # ── Zone boundaries (y) ──────────────────────────────────────────────────────
-HEADER_H  = 56
+HEADER_H  = 50
 
-DIV1      = 56
-ID_Y      = 64
-AV_SZ     = 176
+DIV1      = 50
+ID_Y      = 56
+AV_SZ     = 206          # large avatar
 AV_X      = PAD
-AV_Y      = ID_Y + 14
+AV_Y      = ID_Y + 10
 
-DIV2      = 280
-WEALTH_Y  = 288
-DIV3      = 510
-STATS_Y   = 518
-DIV4      = 664
-BADGE_Y   = 672
-DIV5      = 840
-AUDIT_Y   = 848
-DIV6      = 1014
-FOOTER_Y  = 1022
+DIV2      = 278
+WEALTH_Y  = 284
+DIV3      = 508
+STATS_Y   = 514
+DIV4      = 656
+BADGE_Y   = 662
+DIV5      = 832
+AUDIT_Y   = 838
+DIV6      = 1008
+FOOTER_Y  = 1014
 
 # ─── Skin themes ──────────────────────────────────────────────────────────────
 THEMES = {
@@ -514,22 +514,22 @@ def generate_card(
                             radius=RADIUS - 3, outline=(*t["border"][:3], 45), width=1)
 
     # Header center text
-    hf = _font(9, cinzel=True)
+    hf = _font(10, cinzel=True)
     htxt = "KINGDOM  OF  HELL    ·    INFERNAL  IDENTITY  CARD"
-    draw.text(((W - _tw(draw, htxt, hf)) // 2, 16), htxt,
-              font=hf, fill=(*t["text2"][:3], 150))
+    draw.text(((W - _tw(draw, htxt, hf)) // 2, 14), htxt,
+              font=hf, fill=(*t["text2"][:3], 155))
 
-    # Kingdom Rank badge — top right
+    # Kingdom Rank badge — top right (larger, dominant)
     kr_str = f"#{kingdom_rank}"
-    krf = _font(28, bold=True, cinzel=True)
+    krf = _font(36, bold=True, cinzel=True)
     krw = _tw(draw, kr_str, krf)
-    _glow(card, (W - PAD - krw, 10), kr_str, krf,
-          (*t["gold"][:3], 248), t["glow"], blur=14, spread=3)
+    _glow(card, (W - PAD - krw, 6), kr_str, krf,
+          (*t["gold"][:3], 252), t["glow"], blur=16, spread=4)
     draw = ImageDraw.Draw(card)
-    krl = _font(8, cinzel=True)
+    krl = _font(9, cinzel=True)
     krlw = _tw(draw, "KINGDOM RANK", krl)
-    draw.text((W - PAD - krlw, 40), "KINGDOM RANK",
-              font=krl, fill=(*t["text2"][:3], 135))
+    draw.text((W - PAD - krlw, 44), "KINGDOM RANK",
+              font=krl, fill=(*t["text2"][:3], 140))
 
     _double_line(draw, DIV1, t)
 
@@ -541,30 +541,30 @@ def generate_card(
     draw = ImageDraw.Draw(card)
 
     # Display name — dominant
-    name_x = AV_X + AV_SZ + 24
-    max_name_w = W - name_x - PAD - 60
+    name_x = AV_X + AV_SZ + 22
+    max_name_w = W - name_x - PAD - 50
 
     dn = display_name or username
-    name_font = _fit_font(draw, dn, max_name_w, 56, 26, bold=True)
-    name_y = AV_Y + 8
+    name_font = _fit_font(draw, dn, max_name_w, 64, 28, bold=True)
+    name_y = AV_Y + 6
     _glow(card, (name_x, name_y), dn, name_font,
-          t["text1"], t["glow"], blur=9, spread=2)
+          t["text1"], t["glow"], blur=10, spread=3)
     draw = ImageDraw.Draw(card)
 
     # Secondary line: Rank — Title
     has_title = equipped_title and equipped_title.lower() not in ("unmarked", "")
     title_text = equipped_title if has_title else "Kingdom of Hell"
-    rp_font = _font(17, bold=True)
-    sec_font = _font(17)
-    name_h = getattr(name_font, "size", 42)
-    sec_y = name_y + name_h + 8
+    rp_font = _font(19, bold=True)
+    sec_font = _font(19)
+    name_h = getattr(name_font, "size", 52)
+    sec_y = name_y + name_h + 6
     rank_part = f"{rank}  —  "
     rpw = _tw(draw, rank_part, rp_font)
     _glow(card, (name_x, sec_y), rank_part, rp_font,
-          (*t["gold"][:3], 232), t["glow"], blur=5, spread=1)
+          (*t["gold"][:3], 236), t["glow"], blur=5, spread=1)
     draw = ImageDraw.Draw(card)
     draw.text((name_x + rpw, sec_y), title_text,
-              font=sec_font, fill=(*t["accent"][:3], 215))
+              font=sec_font, fill=(*t["accent"][:3], 220))
 
     # Tax bracket tag
     RANK_TAX = {
@@ -573,15 +573,15 @@ def generate_card(
     }
     tax_rate = RANK_TAX.get(rank, 0.12)
     tax_str = "TAX EXEMPT" if tax_rate == 0 else f"TAX BRACKET  {int(tax_rate * 100)}%"
-    tbf = _font(11)
+    tbf = _font(12)
     draw.text((name_x, sec_y + 26), tax_str,
-              font=tbf, fill=(*t["text2"][:3], 155))
+              font=tbf, fill=(*t["text2"][:3], 158))
 
     # Username (subtle)
     if username and username.lower() != dn.lower():
         unf = _font(11)
         draw.text((name_x, sec_y + 46), f"@{username}",
-                  font=unf, fill=(*t["text2"][:3], 100))
+                  font=unf, fill=(*t["text2"][:3], 105))
 
     _double_line(draw, DIV2, t)
 
@@ -589,30 +589,30 @@ def generate_card(
     # ZONE 3 — WEALTH (DOMINANT)
     # ────────────────────────────────────────────────────────────────────────
 
-    wlf = _font(11, cinzel=True)
+    wlf = _font(13, cinzel=True)
     wlw = _tw(draw, "WEALTH", wlf)
-    draw.text(((W - wlw) // 2, WEALTH_Y + 14), "WEALTH",
-              font=wlf, fill=(*t["text2"][:3], 175))
+    draw.text(((W - wlw) // 2, WEALTH_Y + 10), "WEALTH",
+              font=wlf, fill=(*t["text2"][:3], 180))
 
     bal_str = _fmt_dc(balance)
-    bal_font = _fit_font(draw, bal_str, W - 80, 80, 44, bold=True)
+    bal_font = _fit_font(draw, bal_str, W - 60, 92, 50, bold=True)
     bal_w = _tw(draw, bal_str, bal_font)
-    bal_y = WEALTH_Y + 36
+    bal_y = WEALTH_Y + 30
     _glow(card, ((W - bal_w) // 2, bal_y), bal_str, bal_font,
-          (*t["gold"][:3], 252), t["glow"], blur=20, spread=5)
+          (*t["gold"][:3], 255), t["glow"], blur=24, spread=6)
     draw = ImageDraw.Draw(card)
 
-    bal_h = getattr(bal_font, "size", 72)
-    accent_y = bal_y + bal_h + 18
+    bal_h = getattr(bal_font, "size", 82)
+    accent_y = bal_y + bal_h + 14
     draw.line([(W // 5, accent_y), (2 * W // 5, accent_y)],
-              fill=(*t["border"][:3], 55), width=1)
+              fill=(*t["border"][:3], 60), width=1)
     draw.line([(3 * W // 5, accent_y), (4 * W // 5, accent_y)],
-              fill=(*t["border"][:3], 55), width=1)
+              fill=(*t["border"][:3], 60), width=1)
     dc_lbl = "D  E  V  I  L  C  O  I  N  S"
-    dc_f = _font(9, cinzel=True)
+    dc_f = _font(10, cinzel=True)
     dc_w = _tw(draw, dc_lbl, dc_f)
     draw.text(((W - dc_w) // 2, accent_y - 4), dc_lbl,
-              font=dc_f, fill=(*t["text2"][:3], 110))
+              font=dc_f, fill=(*t["text2"][:3], 118))
 
     _double_line(draw, DIV3, t)
 
@@ -620,20 +620,20 @@ def generate_card(
     # ZONE 4 — STATS
     # ────────────────────────────────────────────────────────────────────────
 
-    lbl_f = _font(9, cinzel=True)
-    val_f  = _font(22, bold=True)
-    val_f2 = _font(15, bold=True)
+    lbl_f = _font(11, cinzel=True)
+    val_f  = _font(28, bold=True)
+    val_f2 = _font(18, bold=True)
 
     cols = [W // 6, W // 2, 5 * W // 6]
 
     def _stat(cx_: int, label: str, value: str, large: bool = True):
         lw_ = _tw(draw, label, lbl_f)
-        draw.text((cx_ - lw_ // 2, STATS_Y + 8), label,
-                  font=lbl_f, fill=(*t["text2"][:3], 175))
+        draw.text((cx_ - lw_ // 2, STATS_Y + 6), label,
+                  font=lbl_f, fill=(*t["text2"][:3], 178))
         vf = val_f if large else val_f2
         vw_ = _tw(draw, value, vf)
-        _glow(card, (cx_ - vw_ // 2, STATS_Y + 28), value, vf,
-              (*t["accent"][:3], 228), t["glow"], blur=6, spread=1)
+        _glow(card, (cx_ - vw_ // 2, STATS_Y + 26), value, vf,
+              (*t["accent"][:3], 232), t["glow"], blur=7, spread=2)
 
     _stat(cols[0], "KINGDOM RANK", f"#{kingdom_rank}")
     _stat(cols[1], "TAXES FILED", _fmt_dc(taxes_paid))
@@ -642,7 +642,7 @@ def generate_card(
     draw = ImageDraw.Draw(card)
 
     # Risk score mini-bar
-    _risk_bar(draw, risk_score, t, STATS_Y + 110)
+    _risk_bar(draw, risk_score, t, STATS_Y + 108)
 
     _double_line(draw, DIV4, t)
 
@@ -651,7 +651,7 @@ def generate_card(
     # ────────────────────────────────────────────────────────────────────────
 
     badge_section_y = BADGE_Y
-    blbl_f = _font(9, cinzel=True)
+    blbl_f = _font(11, cinzel=True)
     blw = _tw(draw, "EARNED COMMENDATIONS", blbl_f)
     draw.text(((W - blw) // 2, badge_section_y + 6), "EARNED COMMENDATIONS",
               font=blbl_f, fill=(*t["text2"][:3], 160))
@@ -733,18 +733,18 @@ def generate_card(
         draw.line([(tri_cx, tri_cy + 4), (tri_cx, tri_cy + 12)],
                   fill=(220, 40, 40, 220), width=2)
 
-        at_f = _font(15, bold=True)
+        at_f = _font(18, bold=True)
         at_w = _tw(draw, "CERBERUS AUDIT  —  ACTIVE", at_f)
-        _glow(card, ((W - at_w) // 2, az + 14),
+        _glow(card, ((W - at_w) // 2, az + 12),
               "CERBERUS AUDIT  —  ACTIVE", at_f,
-              (225, 42, 42, 240), (180, 0, 0), blur=8, spread=2)
+              (225, 42, 42, 245), (180, 0, 0), blur=9, spread=2)
         draw = ImageDraw.Draw(card)
 
-        rs_f = _font(12)
+        rs_f = _font(13)
         rs_str = f"Risk Level: {risk_score}/100   ·   Immediate attention required."
         rs_w = _tw(draw, rs_str, rs_f)
         draw.text(((W - rs_w) // 2, az + 40), rs_str,
-                  font=rs_f, fill=(208, 140, 140, 200))
+                  font=rs_f, fill=(208, 140, 140, 205))
 
         # Red risk bar
         _risk_bar(draw, risk_score, t, az + 68)
@@ -777,14 +777,14 @@ def generate_card(
         draw.line([(sc_cx - 3, sc_cy + 10), (sc_cx + 12, sc_cy - 10)],
                   fill=(*t["gold"][:3], 210), width=3)
 
-        clr_f = _font(15, bold=True)
+        clr_f = _font(18, bold=True)
         clr_str = "RECORD VERIFIED  —  CERBERUS CLEARED"
         clr_w = _tw(draw, clr_str, clr_f)
-        _glow(card, ((W - clr_w) // 2, az + 14), clr_str, clr_f,
-              (*t["gold"][:3], 230), t["glow"], blur=6, spread=1)
+        _glow(card, ((W - clr_w) // 2, az + 12), clr_str, clr_f,
+              (*t["gold"][:3], 234), t["glow"], blur=7, spread=1)
         draw = ImageDraw.Draw(card)
 
-        cf2 = _font(11)
+        cf2 = _font(13)
         cm = f"Risk Score: {risk_score}/100   ·   Kingdom record in good standing."
         cmw = _tw(draw, cm, cf2)
         draw.text(((W - cmw) // 2, az + 42), cm,
@@ -799,11 +799,11 @@ def generate_card(
 
     else:
         # Neutral kingdom status
-        ns_f = _font(12, cinzel=True)
+        ns_f = _font(14, cinzel=True)
         ns = "KINGDOM STATUS"
         nsw = _tw(draw, ns, ns_f)
-        draw.text(((W - nsw) // 2, az + 18), ns,
-                  font=ns_f, fill=(*t["text2"][:3], 150))
+        draw.text(((W - nsw) // 2, az + 16), ns,
+                  font=ns_f, fill=(*t["text2"][:3], 155))
 
         div_cx = W // 2
         draw.line([(div_cx - 80, az + 38), (div_cx - 12, az + 38)],
@@ -816,16 +816,16 @@ def generate_card(
                       (div_cx, az + 44), (div_cx - 7, az + 38)],
                      fill=(*t["accent"][:3], 160))
 
-        st_f = _font(13, bold=True)
+        st_f = _font(16, bold=True)
         st = "STANDING MEMBER  ·  NO AUDIT PENDING"
         stw = _tw(draw, st, st_f)
-        draw.text(((W - stw) // 2, az + 56), st,
-                  font=st_f, fill=(*t["accent"][:3], 185))
+        draw.text(((W - stw) // 2, az + 54), st,
+                  font=st_f, fill=(*t["accent"][:3], 190))
 
-        sf2 = _font(10)
+        sf2 = _font(12)
         sv = "All records nominal. Cerberus rests."
         svw = _tw(draw, sv, sf2)
-        draw.text(((W - svw) // 2, az + 84), sv,
+        draw.text(((W - svw) // 2, az + 82), sv,
                   font=sf2, fill=(*t["text2"][:3], 140))
 
         # Skin indicator
