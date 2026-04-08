@@ -42,3 +42,57 @@ id = "2TgXvKT02Dzg_O1qk6Poo"
 uri = "file://bot/assets/previews/crimson_sigil.png"
 type = "image"
 title = "Crimson Sigil"
+
+[[outputs]]
+id = "ddMLzfx3O8zmaKPlidwet"
+uri = "file://bot/assets/previews/default_neutral.png"
+type = "image"
+title = "Default — Neutral (No badges)"
+
+[[outputs]]
+id = "hn7pJ9143H1yQYFvrdFFK"
+uri = "file://bot/assets/previews/default_flagged.png"
+type = "image"
+title = "Default — CERBERUS FLAGGED (Risk 75)"
+
+[[outputs]]
+id = "g0D2a4kKubHd9vNaB2kvd"
+uri = "file://bot/assets/previews/default_cleared.png"
+type = "image"
+title = "Default — CLEARED (Clean record + 4 badges)"
+
+[[outputs]]
+id = "Egvq589Sp9xp_TBX8EYVs"
+uri = "file://bot/assets/previews/blood_crown_flagged.png"
+type = "image"
+title = "Blood Crown — FLAGGED"
+
+[[outputs]]
+id = "-8BL8Q9qSzx0vefZvzev9"
+uri = "file://bot/assets/previews/infernal_gold_cleared.png"
+type = "image"
+title = "Infernal Gold — CLEARED"
+
+[[outputs]]
+id = "tAbtE3U5RV-vlQvf-Cjc7"
+uri = "file://bot/assets/previews/abyss_smoke_neutral.png"
+type = "image"
+title = "Abyss Smoke — Neutral (3 badges)"
+
+[[outputs]]
+id = "ZAUYPIVHSY5TEOPGTj-jo"
+uri = "file://bot/assets/previews/black_throne_flagged.png"
+type = "image"
+title = "Black Throne — FLAGGED"
+
+[[outputs]]
+id = "n-D6nrEaTxSk_qrw1NYl_"
+uri = "file://bot/assets/previews/crimson_sigil_cleared.png"
+type = "image"
+title = "Crimson Sigil — CLEARED"
+
+[[outputs]]
+id = "8S6aJmbu2KAVFQIN-IMHm"
+uri = "file://bot/assets/previews/royal_dark_neutral.png"
+type = "image"
+title = "Royal Dark — Neutral"

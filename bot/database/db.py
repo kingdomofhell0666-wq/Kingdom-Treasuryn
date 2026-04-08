@@ -93,6 +93,7 @@ class Database:
             "ALTER TABLE users ADD COLUMN equipped_title TEXT",
             "ALTER TABLE users ADD COLUMN owned_skins TEXT NOT NULL DEFAULT '[]'",
             "ALTER TABLE users ADD COLUMN equipped_skin TEXT",
+            "ALTER TABLE users ADD COLUMN owned_badges TEXT NOT NULL DEFAULT '[]'",
         ]
         for sql in migrations:
             try:
