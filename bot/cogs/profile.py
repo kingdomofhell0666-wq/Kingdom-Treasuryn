@@ -5,6 +5,7 @@ from typing import Optional
 
 from ..services import AuditService
 from ..utils.embeds import EmbedFactory
+from ..ui import IdentityView
 
 
 class ProfileCog(commands.Cog):
@@ -50,17 +51,15 @@ class ProfileCog(commands.Cog):
             avatar_url=avatar_url,
             mention=mention,
         )
-        await interaction.followup.send(embed=embed)
+        view = IdentityView()
+        await interaction.followup.send(embed=embed, view=view)
 
-    @app_commands.command(name="wealth", description="View your current wallet balance.")
+    @app_commands.command(name="wealth", description="Check your current balance.")
     async def wealth(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True)
-
         discord_id = str(interaction.user.id)
         username = interaction.user.display_name
 
         user_data = await self.db.upsert_user(discord_id, username)
-        kingdom_rank = await self.audit.get_kingdom_rank(discord_id)
 
-        embed = EmbedFactory.wealth(user_data, kingdom_rank)
-        await interaction.followup.send(embed=embed, ephemeral=True)
+        embed = EmbedFactory.wealth(user_data)
+        await interaction.response.send_message(embed=embed)

@@ -2,8 +2,9 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from ..services import EconomyService, CooldownService, AuditService
+from ..services import EconomyService, CooldownService, AuditService, TreasuryService
 from ..services.rank_service import RankService
+from ..services.transaction_service import TransactionService
 from ..utils.embeds import EmbedFactory
 from ..ui import MarketView
 
@@ -29,10 +30,14 @@ class EconomyCog(commands.Cog):
         return self.bot.audit_service
 
     @property
+    def treasury(self) -> TreasuryService:
+        return self.bot.treasury_service
+
+    @property
     def rank_service(self) -> RankService:
         return self.bot.rank_service
 
-    @app_commands.command(name="grind", description="Descend into the mines and extract DevilCoins.")
+    @app_commands.command(name="grind", description="Descend into the Infernal Mines.")
     async def grind(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=False)
 
@@ -55,7 +60,7 @@ class EconomyCog(commands.Cog):
             await interaction.followup.send(embed=embed, ephemeral=True)
             return
 
-        embed = EmbedFactory.grind_success(result)
+        embed = EmbedFactory.grind_result(result)
         await interaction.followup.send(embed=embed)
 
     @app_commands.command(name="tribute", description="Receive tribute from the realm. Once per day.")
@@ -81,7 +86,7 @@ class EconomyCog(commands.Cog):
             await interaction.followup.send(embed=embed, ephemeral=True)
             return
 
-        embed = EmbedFactory.tribute_success(result)
+        embed = EmbedFactory.tribute_result(result)
         await interaction.followup.send(embed=embed)
 
     @app_commands.command(name="transfer", description="Transfer DevilCoins to another soul.")
@@ -121,14 +126,21 @@ class EconomyCog(commands.Cog):
         )
         await interaction.followup.send(embed=embed)
 
-    @app_commands.command(name="market", description="View the Kingdom's rank market.")
+    @app_commands.command(name="vault", description="View the total reserves of the Kingdom Treasury.")
+    async def vault(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=False)
+        balance = await self.treasury.get_balance()
+        embed = EmbedFactory.vault(balance)
+        await interaction.followup.send(embed=embed)
+
+    @app_commands.command(name="market", description="Browse all purchasable ranks.")
     async def market(self, interaction: discord.Interaction):
         purchasable = self.rank_service.get_purchasable_ranks()
         view = MarketView(purchasable)
         embed = view.build_embed()
         await interaction.response.send_message(embed=embed, view=view)
 
-    @app_commands.command(name="ascend", description="Ascend to a higher rank in the Kingdom.")
+    @app_commands.command(name="ascend", description="Purchase a rank and ascend the hierarchy.")
     @app_commands.describe(rank_name="The rank you wish to ascend to.")
     async def ascend(self, interaction: discord.Interaction, rank_name: str):
         await interaction.response.defer(ephemeral=False)
@@ -137,7 +149,9 @@ class EconomyCog(commands.Cog):
         username = interaction.user.display_name
 
         if not self.rank_service.rank_exists(rank_name):
-            embed = EmbedFactory.error(f"The rank '{rank_name}' is not recognized by the Kingdom.")
+            embed = EmbedFactory.error(
+                f"The rank **{rank_name}** does not exist in the Kingdom's records."
+            )
             await interaction.followup.send(embed=embed, ephemeral=True)
             return
 
@@ -152,12 +166,12 @@ class EconomyCog(commands.Cog):
         if user["balance"] < cost:
             needed = cost - user["balance"]
             embed = EmbedFactory.error(
-                f"Your coffers are insufficient. You require {needed:,} more DC to ascend to **{rank_name}**."
+                f"Your coffers fall short by **{needed:,} DC**.\n"
+                f"Ascension to **{rank_name}** requires **{cost:,} DC**."
             )
             await interaction.followup.send(embed=embed, ephemeral=True)
             return
 
-        from ..services.transaction_service import TransactionService
         tx_service = TransactionService(self.db)
         await tx_service.ascension_payment(discord_id, rank_name, cost)
 
