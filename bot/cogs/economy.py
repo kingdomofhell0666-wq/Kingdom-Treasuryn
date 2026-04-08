@@ -5,8 +5,9 @@ from discord.ext import commands
 from ..services import EconomyService, CooldownService, AuditService, TreasuryService
 from ..services.rank_service import RankService
 from ..services.transaction_service import TransactionService
+from ..services.cerberus_service import CerberusService
 from ..utils.embeds import EmbedFactory
-from ..ui import MarketView
+from ..ui import MarketView, AscendConfirmView
 
 
 class EconomyCog(commands.Cog):
@@ -37,6 +38,12 @@ class EconomyCog(commands.Cog):
     def rank_service(self) -> RankService:
         return self.bot.rank_service
 
+    @property
+    def cerberus(self) -> CerberusService:
+        return self.bot.cerberus_service
+
+    # ─── /grind ───────────────────────────────────────────────
+
     @app_commands.command(name="grind", description="Descend into the Infernal Mines.")
     async def grind(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=False)
@@ -63,6 +70,22 @@ class EconomyCog(commands.Cog):
         embed = EmbedFactory.grind_result(result)
         await interaction.followup.send(embed=embed)
 
+        # Cerberus audit check (fires silently after the main response)
+        audit = await self.cerberus.check_and_run_audit(discord_id)
+        if audit and audit["triggered"]:
+            outcome = audit["outcome"]
+            if outcome == "penalized":
+                audit_embed = EmbedFactory.cerberus_penalty(
+                    audit["penalty"], audit["penalty_pct"], audit["risk_delta"]
+                )
+            elif outcome == "immune":
+                audit_embed = EmbedFactory.cerberus_immune()
+            else:
+                audit_embed = EmbedFactory.cerberus_cleared(audit["risk_delta"])
+            await interaction.followup.send(embed=audit_embed)
+
+    # ─── /tribute ─────────────────────────────────────────────
+
     @app_commands.command(name="tribute", description="Receive tribute from the realm. Once per day.")
     async def tribute(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=False)
@@ -88,6 +111,22 @@ class EconomyCog(commands.Cog):
 
         embed = EmbedFactory.tribute_result(result)
         await interaction.followup.send(embed=embed)
+
+        # Cerberus audit check
+        audit = await self.cerberus.check_and_run_audit(discord_id)
+        if audit and audit["triggered"]:
+            outcome = audit["outcome"]
+            if outcome == "penalized":
+                audit_embed = EmbedFactory.cerberus_penalty(
+                    audit["penalty"], audit["penalty_pct"], audit["risk_delta"]
+                )
+            elif outcome == "immune":
+                audit_embed = EmbedFactory.cerberus_immune()
+            else:
+                audit_embed = EmbedFactory.cerberus_cleared(audit["risk_delta"])
+            await interaction.followup.send(embed=audit_embed)
+
+    # ─── /transfer ────────────────────────────────────────────
 
     @app_commands.command(name="transfer", description="Transfer DevilCoins to another soul.")
     @app_commands.describe(
@@ -126,12 +165,16 @@ class EconomyCog(commands.Cog):
         )
         await interaction.followup.send(embed=embed)
 
+    # ─── /vault ───────────────────────────────────────────────
+
     @app_commands.command(name="vault", description="View the total reserves of the Kingdom Treasury.")
     async def vault(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=False)
         balance = await self.treasury.get_balance()
         embed = EmbedFactory.vault(balance)
         await interaction.followup.send(embed=embed)
+
+    # ─── /market ──────────────────────────────────────────────
 
     @app_commands.command(name="market", description="Browse all purchasable ranks.")
     async def market(self, interaction: discord.Interaction):
@@ -140,8 +183,10 @@ class EconomyCog(commands.Cog):
         embed = view.build_embed()
         await interaction.response.send_message(embed=embed, view=view)
 
+    # ─── /ascend ──────────────────────────────────────────────
+
     @app_commands.command(name="ascend", description="Purchase a rank and ascend the hierarchy.")
-    @app_commands.describe(rank_name="The rank you wish to ascend to.")
+    @app_commands.describe(rank_name="The rank you wish to ascend to (must be the next rank).")
     async def ascend(self, interaction: discord.Interaction, rank_name: str):
         await interaction.response.defer(ephemeral=False)
 
@@ -160,9 +205,21 @@ class EconomyCog(commands.Cog):
             await interaction.followup.send(embed=embed, ephemeral=True)
             return
 
-        cost = self.rank_service.get_rank_cost(rank_name)
         user = await self.db.upsert_user(discord_id, username)
+        current_rank = user.get("rank", "Forsaken")
 
+        if not self.rank_service.can_ascend_to(current_rank, rank_name):
+            next_rank = self.rank_service.get_next_rank(current_rank)
+            if next_rank:
+                embed = EmbedFactory.error(
+                    f"You must ascend in order. Your next rank is **{next_rank}**."
+                )
+            else:
+                embed = EmbedFactory.error("You have reached the pinnacle. No further ascension is possible.")
+            await interaction.followup.send(embed=embed, ephemeral=True)
+            return
+
+        cost = self.rank_service.get_rank_cost(rank_name)
         if user["balance"] < cost:
             needed = cost - user["balance"]
             embed = EmbedFactory.error(
@@ -172,11 +229,15 @@ class EconomyCog(commands.Cog):
             await interaction.followup.send(embed=embed, ephemeral=True)
             return
 
-        tx_service = TransactionService(self.db)
-        await tx_service.ascension_payment(discord_id, rank_name, cost)
+        confirm_embed = EmbedFactory.ascend_confirm(rank_name, cost, user["balance"])
 
-        updated_user = await self.db.get_user(discord_id)
-        new_balance = updated_user["balance"] if updated_user else 0
+        async def do_ascend(inter: discord.Interaction):
+            tx_service = TransactionService(self.db)
+            await tx_service.ascension_payment(discord_id, rank_name, cost)
+            updated_user = await self.db.get_user(discord_id)
+            new_balance = updated_user["balance"] if updated_user else 0
+            success_embed = EmbedFactory.ascend_success(rank_name, cost, new_balance)
+            await inter.followup.send(embed=success_embed)
 
-        embed = EmbedFactory.ascend_success(rank_name, cost, new_balance)
-        await interaction.followup.send(embed=embed)
+        view = AscendConfirmView(rank_name, cost, do_ascend)
+        await interaction.followup.send(embed=confirm_embed, view=view)

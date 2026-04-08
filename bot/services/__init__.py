@@ -4,6 +4,9 @@ from .cooldown_service import CooldownService
 from .transaction_service import TransactionService
 from .treasury_service import TreasuryService
 from .audit_service import AuditService
+from .cerberus_service import CerberusService
+from .blackmarket_service import BlackMarketService
+from .investment_service import InvestmentService
 
 __all__ = [
     "EconomyService",
@@ -12,4 +15,7 @@ __all__ = [
     "TransactionService",
     "TreasuryService",
     "AuditService",
+    "CerberusService",
+    "BlackMarketService",
+    "InvestmentService",
 ]
