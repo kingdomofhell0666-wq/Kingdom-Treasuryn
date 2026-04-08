@@ -13,6 +13,7 @@ from .services import (
     CerberusService,
     BlackMarketService,
     InvestmentService,
+    CosmeticService,
 )
 
 logger = logging.getLogger("kingdom_treasury")
@@ -40,6 +41,7 @@ class KingdomTreasuryBot(commands.Bot):
         self.cerberus_service: CerberusService = None
         self.blackmarket_service: BlackMarketService = None
         self.investment_service: InvestmentService = None
+        self.cosmetic_service: CosmeticService = None
 
     async def setup_hook(self):
         await self.db.connect()
@@ -52,16 +54,19 @@ class KingdomTreasuryBot(commands.Bot):
         self.cerberus_service = CerberusService(self.db)
         self.blackmarket_service = BlackMarketService(self.db)
         self.investment_service = InvestmentService(self.db)
+        self.cosmetic_service = CosmeticService(self.db)
 
         from .cogs.economy import EconomyCog
         from .cogs.profile import ProfileCog
         from .cogs.investment import InvestmentCog
         from .cogs.blackmarket import BlackMarketCog
+        from .cogs.cosmetics import CosmeticsCog
 
         await self.add_cog(EconomyCog(self))
         await self.add_cog(ProfileCog(self))
         await self.add_cog(InvestmentCog(self))
         await self.add_cog(BlackMarketCog(self))
+        await self.add_cog(CosmeticsCog(self))
 
         await self.tree.sync()
         logger.info("Command tree synchronized.")

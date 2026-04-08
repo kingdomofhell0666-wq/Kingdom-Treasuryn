@@ -51,45 +51,104 @@ class EmbedFactory:
         avatar_url: Optional[str] = None,
         mention: Optional[str] = None,
     ) -> discord.Embed:
+        from .skins import get_skin
+
+        # ── Pull data ──────────────────────────────────────────────────────
         rank = user_data.get("rank", "Forsaken")
-        title = user_data.get("title", "Unmarked")
         balance = user_data.get("balance", 0)
         taxes_paid = user_data.get("taxes_paid", 0)
         risk_score = user_data.get("risk_score", 0)
         username = user_data.get("username", "Unknown")
-        display = mention if mention else f"**{username}**"
+        equipped_skin_id = user_data.get("equipped_skin") or "default"
+        equipped_title = user_data.get("equipped_title") or "Unmarked"
 
+        skin = get_skin(equipped_skin_id)
+        sep = skin.separator
+        si = skin.stat_icon
+
+        # ── Display name ───────────────────────────────────────────────────
+        display_name = mention if mention else f"**{username}**"
+
+        # ── Decorated rank ─────────────────────────────────────────────────
+        decorated_rank = f"{skin.rank_prefix}{rank}{skin.rank_suffix}"
+
+        # ── Title display ──────────────────────────────────────────────────
+        title_display = f"{skin.title_prefix}*{equipped_title}*"
+
+        # ── Description block: name + title ───────────────────────────────
+        description = f"{display_name}\n{title_display}"
+
+        # ── Build embed ────────────────────────────────────────────────────
         embed = discord.Embed(
-            title="👑  Kingdom Identity Card",
-            description=display,
-            color=BLOOD_RED,
+            title=skin.title_banner,
+            description=description,
+            color=skin.color,
         )
+
         if avatar_url:
             embed.set_thumbnail(url=avatar_url)
 
-        embed.add_field(name="\u200b", value=SEP, inline=False)
-        embed.add_field(name="Rank", value=f"**{rank}**", inline=True)
-        embed.add_field(name="Title", value=f"*{title}*", inline=True)
-        embed.add_field(name="\u200b", value=SEP, inline=False)
+        # ── Separator ─────────────────────────────────────────────────────
+        embed.add_field(name="\u200b", value=sep, inline=False)
+
+        # ── Rank + Tax Bracket row ────────────────────────────────────────
+        from ..services.rank_service import RANK_DICT
+        rank_entry = RANK_DICT.get(rank, {})
+        tax_rate = rank_entry.get("tax_rate", 0.12)
+        tax_display = f"{int(tax_rate * 100)}%" if tax_rate > 0 else "Exempt"
+
         embed.add_field(
-            name="💰  Wealth",
-            value=f"**{format_dc(balance)}**\nKingdom Rank: **#{kingdom_rank}**",
-            inline=False,
-        )
-        embed.add_field(name="\u200b", value=SEP, inline=False)
-        embed.add_field(
-            name="📊  Stats",
-            value=f"Taxes Paid: **{format_dc(taxes_paid)}**",
+            name=f"⚔  RANK",
+            value=f"**{decorated_rank}**",
             inline=True,
         )
-        if risk_score > 0:
-            embed.add_field(
-                name="⚠  Risk",
-                value=f"**{risk_score}/100**",
-                inline=True,
-            )
-        embed.add_field(name="\u200b", value=SEP, inline=False)
-        embed.set_footer(text='"The Abyss remembers your name."  ·  Kingdom Treasury')
+        embed.add_field(
+            name=f"📊  TAX BRACKET",
+            value=f"**{tax_display}**",
+            inline=True,
+        )
+        embed.add_field(name="\u200b", value="\u200b", inline=True)
+
+        # ── Separator ─────────────────────────────────────────────────────
+        embed.add_field(name="\u200b", value=sep, inline=False)
+
+        # ── Wealth block ──────────────────────────────────────────────────
+        embed.add_field(
+            name=f"{skin.wealth_prefix}  COFFERS",
+            value=f"**{format_dc(balance)}**",
+            inline=True,
+        )
+        embed.add_field(
+            name="🏆  KINGDOM RANK",
+            value=f"**#{kingdom_rank}**",
+            inline=True,
+        )
+        embed.add_field(name="\u200b", value="\u200b", inline=True)
+
+        # ── Separator ─────────────────────────────────────────────────────
+        embed.add_field(name="\u200b", value=sep, inline=False)
+
+        # ── Stats record block ────────────────────────────────────────────
+        risk_line = f"\nRisk Score      {risk_score:>4}/100" if risk_score > 0 else ""
+        stats_block = (
+            f"```"
+            f"Taxes Filed     {format_dc(taxes_paid):>14}"
+            f"{risk_line}\n"
+            f"Card Skin       {skin.name:>14}"
+            f"```"
+        )
+        embed.add_field(
+            name=f"{si}  RECORD",
+            value=stats_block,
+            inline=False,
+        )
+
+        # ── Separator + footer ────────────────────────────────────────────
+        embed.add_field(name="\u200b", value=sep, inline=False)
+        embed.set_footer(
+            text=f"{skin.footer_flavor}  ·  Kingdom Treasury"
+        )
+
         return embed
 
     # ─── Wealth ──────────────────────────────────────────────

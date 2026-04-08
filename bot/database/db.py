@@ -337,6 +337,36 @@ class Database:
         await self._db.execute("DELETE FROM user_perks WHERE id = ?", (perk_id,))
         await self._db.commit()
 
+    # ─── Cosmetics ────────────────────────────────────────────
+
+    async def set_equipped_skin(self, discord_id: str, skin_id: str):
+        await self._db.execute(
+            "UPDATE users SET equipped_skin = ? WHERE discord_id = ?",
+            (skin_id, discord_id),
+        )
+        await self._db.commit()
+
+    async def set_owned_skins(self, discord_id: str, skins_json: str):
+        await self._db.execute(
+            "UPDATE users SET owned_skins = ? WHERE discord_id = ?",
+            (skins_json, discord_id),
+        )
+        await self._db.commit()
+
+    async def set_equipped_title(self, discord_id: str, title: str):
+        await self._db.execute(
+            "UPDATE users SET equipped_title = ? WHERE discord_id = ?",
+            (title, discord_id),
+        )
+        await self._db.commit()
+
+    async def set_owned_titles(self, discord_id: str, titles_json: str):
+        await self._db.execute(
+            "UPDATE users SET owned_titles = ? WHERE discord_id = ?",
+            (titles_json, discord_id),
+        )
+        await self._db.commit()
+
     # ─── Leaderboard ──────────────────────────────────────────
 
     async def get_leaderboard(self, limit: int = 10) -> List[dict]:

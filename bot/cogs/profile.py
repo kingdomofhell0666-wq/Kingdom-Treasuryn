@@ -4,6 +4,7 @@ from discord.ext import commands
 from typing import Optional
 
 from ..services import AuditService
+from ..services.cosmetic_service import CosmeticService
 from ..utils.embeds import EmbedFactory
 from ..ui import IdentityView
 
@@ -20,9 +21,13 @@ class ProfileCog(commands.Cog):
     def audit(self) -> AuditService:
         return self.bot.audit_service
 
+    @property
+    def cosmetics(self) -> CosmeticService:
+        return self.bot.cosmetic_service
+
     @app_commands.command(
         name="identity",
-        description="View your Kingdom Identity Card, or another soul's.",
+        description="View your Kingdom Identity Card, or inspect another soul's.",
     )
     @app_commands.describe(user="The soul whose identity you wish to inspect.")
     async def identity(
@@ -31,6 +36,7 @@ class ProfileCog(commands.Cog):
         await interaction.response.defer(ephemeral=False)
 
         target = user or interaction.user
+        is_own_card = target.id == interaction.user.id
         discord_id = str(target.id)
         username = target.display_name
 
@@ -43,7 +49,7 @@ class ProfileCog(commands.Cog):
         except Exception:
             pass
 
-        mention = target.mention if user else None
+        mention = target.mention if not is_own_card else None
 
         embed = EmbedFactory.identity(
             user_data=user_data,
@@ -51,7 +57,7 @@ class ProfileCog(commands.Cog):
             avatar_url=avatar_url,
             mention=mention,
         )
-        view = IdentityView()
+        view = IdentityView(is_own_card=is_own_card)
         await interaction.followup.send(embed=embed, view=view)
 
     @app_commands.command(name="wealth", description="Check your current balance.")

@@ -45,8 +45,12 @@ main.py                  # Entry point
 
 | Command | Description |
 |---|---|
-| `/identity [user]` | Kingdom Identity Card — rank, wealth, risk score, stats |
+| `/identity [user]` | Premium Kingdom Identity Card — skin-aware, rank, title, wealth, stats |
 | `/wealth` | Quick wallet balance with flavor quote |
+| `/skins` | Browse all card skins and ownership status |
+| `/equip-skin <skin_id>` | Equip an owned card skin |
+| `/titles` | Browse all titles and ownership status |
+| `/equip-title <title>` | Equip an owned title |
 | `/grind` | Mine DevilCoins (5-tier outcome, perk-aware, Cerberus trigger) |
 | `/tribute` | Daily realm tribute (24h cooldown, +200 DC bonus for 5+ grinds) |
 | `/transfer @user amount` | Transfer DC with 2% treasury levy |
