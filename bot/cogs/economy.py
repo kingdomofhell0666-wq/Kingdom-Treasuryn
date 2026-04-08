@@ -2,11 +2,12 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from ..services import EconomyService, CooldownService, AuditService, TreasuryService
+from ..services import EconomyService, CooldownService, AuditService, TreasuryService, BadgeService
 from ..services.rank_service import RankService
 from ..services.transaction_service import TransactionService
 from ..services.cerberus_service import CerberusService
 from ..utils.embeds import EmbedFactory
+from ..utils.badges import BADGES_CATALOG
 from ..ui import MarketView, AscendConfirmView
 
 
@@ -42,6 +43,29 @@ class EconomyCog(commands.Cog):
     def cerberus(self) -> CerberusService:
         return self.bot.cerberus_service
 
+    @property
+    def badge_service(self) -> BadgeService:
+        return self.bot.badge_service
+
+    # ─── Badge announce helper ────────────────────────────────
+    async def _announce_badges(
+        self,
+        interaction: discord.Interaction,
+        new_badges: list,
+    ):
+        if not new_badges:
+            return
+        lines = []
+        for b in new_badges:
+            lines.append(f"{b.icon}  **{b.name}**  ·  *{b.description}*")
+        embed = discord.Embed(
+            title="🏅  Badge Unlocked",
+            description="\n".join(lines),
+            color=0xFFD700,
+        )
+        embed.set_footer(text="Earned — not purchased.  ·  Kingdom Treasury")
+        await interaction.followup.send(embed=embed)
+
     # ─── /grind ───────────────────────────────────────────────
 
     @app_commands.command(name="grind", description="Descend into the Infernal Mines.")
@@ -70,7 +94,14 @@ class EconomyCog(commands.Cog):
         embed = EmbedFactory.grind_result(result)
         await interaction.followup.send(embed=embed)
 
-        # Cerberus audit check (fires silently after the main response)
+        # ── Badge hooks ──
+        # Jackpot grants the high_roller badge explicitly
+        if result.get("outcome_label") == "jackpot":
+            await self.badge_service.grant_badge(discord_id, "high_roller")
+        new_badges = await self.badge_service.check_and_award(discord_id)
+        await self._announce_badges(interaction, new_badges)
+
+        # ── Cerberus audit check (fires silently after the main response) ──
         audit = await self.cerberus.check_and_run_audit(discord_id)
         if audit and audit["triggered"]:
             outcome = audit["outcome"]
@@ -81,6 +112,8 @@ class EconomyCog(commands.Cog):
             elif outcome == "immune":
                 audit_embed = EmbedFactory.cerberus_immune()
             else:
+                # Grant cerberus_guard badge on audit clearance
+                await self.badge_service.grant_badge(discord_id, "cerberus_guard")
                 audit_embed = EmbedFactory.cerberus_cleared(audit["risk_delta"])
             await interaction.followup.send(embed=audit_embed)
 
@@ -112,7 +145,12 @@ class EconomyCog(commands.Cog):
         embed = EmbedFactory.tribute_result(result)
         await interaction.followup.send(embed=embed)
 
-        # Cerberus audit check
+        # ── Badge hooks ──
+        await self.db.increment_tribute_count(discord_id)
+        new_badges = await self.badge_service.check_and_award(discord_id)
+        await self._announce_badges(interaction, new_badges)
+
+        # ── Cerberus audit check ──
         audit = await self.cerberus.check_and_run_audit(discord_id)
         if audit and audit["triggered"]:
             outcome = audit["outcome"]
@@ -123,6 +161,7 @@ class EconomyCog(commands.Cog):
             elif outcome == "immune":
                 audit_embed = EmbedFactory.cerberus_immune()
             else:
+                await self.badge_service.grant_badge(discord_id, "cerberus_guard")
                 audit_embed = EmbedFactory.cerberus_cleared(audit["risk_delta"])
             await interaction.followup.send(embed=audit_embed)
 
@@ -238,6 +277,9 @@ class EconomyCog(commands.Cog):
             new_balance = updated_user["balance"] if updated_user else 0
             success_embed = EmbedFactory.ascend_success(rank_name, cost, new_balance)
             await inter.followup.send(embed=success_embed)
+            # ── Badge hooks (rank-gated badges check after ascension) ──
+            new_badges = await self.badge_service.check_and_award(discord_id)
+            await self._announce_badges(inter, new_badges)
 
         view = AscendConfirmView(rank_name, cost, do_ascend)
         await interaction.followup.send(embed=confirm_embed, view=view)

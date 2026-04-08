@@ -94,6 +94,8 @@ class Database:
             "ALTER TABLE users ADD COLUMN owned_skins TEXT NOT NULL DEFAULT '[]'",
             "ALTER TABLE users ADD COLUMN equipped_skin TEXT",
             "ALTER TABLE users ADD COLUMN owned_badges TEXT NOT NULL DEFAULT '[]'",
+            "ALTER TABLE users ADD COLUMN grind_count INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE users ADD COLUMN tribute_count INTEGER NOT NULL DEFAULT 0",
         ]
         for sql in migrations:
             try:
@@ -175,14 +177,28 @@ class Database:
                 reset_needed = False
         if reset_needed:
             await self._db.execute(
-                "UPDATE users SET grind_count_24h = 1, last_grind_reset = ? WHERE discord_id = ?",
+                """UPDATE users
+                   SET grind_count_24h = 1,
+                       last_grind_reset = ?,
+                       grind_count = grind_count + 1
+                   WHERE discord_id = ?""",
                 (now_str, discord_id),
             )
         else:
             await self._db.execute(
-                "UPDATE users SET grind_count_24h = grind_count_24h + 1 WHERE discord_id = ?",
+                """UPDATE users
+                   SET grind_count_24h = grind_count_24h + 1,
+                       grind_count = grind_count + 1
+                   WHERE discord_id = ?""",
                 (discord_id,),
             )
+        await self._db.commit()
+
+    async def increment_tribute_count(self, discord_id: str):
+        await self._db.execute(
+            "UPDATE users SET tribute_count = tribute_count + 1 WHERE discord_id = ?",
+            (discord_id,),
+        )
         await self._db.commit()
 
     async def get_grind_count_24h(self, discord_id: str) -> int:
@@ -365,6 +381,13 @@ class Database:
         await self._db.execute(
             "UPDATE users SET owned_titles = ? WHERE discord_id = ?",
             (titles_json, discord_id),
+        )
+        await self._db.commit()
+
+    async def set_owned_badges(self, discord_id: str, badges_json: str):
+        await self._db.execute(
+            "UPDATE users SET owned_badges = ? WHERE discord_id = ?",
+            (badges_json, discord_id),
         )
         await self._db.commit()
 

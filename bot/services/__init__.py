@@ -8,6 +8,7 @@ from .cerberus_service import CerberusService
 from .blackmarket_service import BlackMarketService
 from .investment_service import InvestmentService
 from .cosmetic_service import CosmeticService
+from .badge_service import BadgeService
 
 __all__ = [
     "EconomyService",
@@ -20,4 +21,5 @@ __all__ = [
     "BlackMarketService",
     "InvestmentService",
     "CosmeticService",
+    "BadgeService",
 ]

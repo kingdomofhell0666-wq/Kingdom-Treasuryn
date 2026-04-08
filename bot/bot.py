@@ -14,6 +14,7 @@ from .services import (
     BlackMarketService,
     InvestmentService,
     CosmeticService,
+    BadgeService,
 )
 
 logger = logging.getLogger("kingdom_treasury")
@@ -42,6 +43,7 @@ class KingdomTreasuryBot(commands.Bot):
         self.blackmarket_service: BlackMarketService = None
         self.investment_service: InvestmentService = None
         self.cosmetic_service: CosmeticService = None
+        self.badge_service: BadgeService = None
 
     async def setup_hook(self):
         await self.db.connect()
@@ -55,6 +57,7 @@ class KingdomTreasuryBot(commands.Bot):
         self.blackmarket_service = BlackMarketService(self.db)
         self.investment_service = InvestmentService(self.db)
         self.cosmetic_service = CosmeticService(self.db)
+        self.badge_service = BadgeService(self.db)
 
         from .cogs.economy import EconomyCog
         from .cogs.profile import ProfileCog
