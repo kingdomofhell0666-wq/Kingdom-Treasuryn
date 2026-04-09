@@ -1,6 +1,6 @@
 """
 Command Channel Routing — Hard-locked defaults with dashboard override.
-Integrated with the Cerberus Aggression System.
+Integrated with the Cerberus Aggression System + auto-delete enforcement.
 
 Priority
 ─────────
@@ -10,14 +10,14 @@ Priority
 
 Violation behavior
 ───────────────────
-- Immediately return immersive ephemeral Cerberus denial embed
-- Log the violation (with full context) + record aggression escalation
-- At Level 4 → execute punitive financial seizure (rank-scaled)
-- Never execute any command logic
-- Never redirect automatically
-- Never allow partial execution
+- Cerberus denial embed sent NON-EPHEMERALLY (so it can be deleted)
+- Violation recorded → aggression level escalates
+- Level 4 → punitive financial seizure (rank + rage scaled)
+- Denial message auto-deleted after 45 seconds
+- Never executes command logic after a denial
 """
 
+import asyncio
 import logging
 from typing import Optional
 
@@ -27,10 +27,10 @@ from ..utils.embeds import EmbedFactory
 
 logger = logging.getLogger("kingdom_treasury")
 
+DELETE_DELAY = 45   # seconds before denial messages are auto-deleted
+
 
 # ── Hard-locked default channel assignments ────────────────────────────────────
-# These are the ONLY channels where each command may run by default.
-# The dashboard may override per guild via the command_routing table.
 
 DEFAULT_CHANNEL_ROUTING: dict[str, str] = {
     # Identity
@@ -55,22 +55,68 @@ DEFAULT_CHANNEL_ROUTING: dict[str, str] = {
 }
 
 
+# ── Auto-delete helper ─────────────────────────────────────────────────────────
+
+async def _delete_after(message: discord.Message, delay: int):
+    """Wait `delay` seconds then silently delete `message`."""
+    await asyncio.sleep(delay)
+    try:
+        await message.delete()
+    except discord.NotFound:
+        pass    # already gone
+    except discord.Forbidden:
+        logger.debug("[Routing] auto-delete: missing Manage Messages permission.")
+    except Exception as exc:
+        logger.warning(f"[Routing] auto-delete failed: {exc}")
+
+
+async def _send_denial(
+    interaction: discord.Interaction,
+    embed: discord.Embed,
+) -> Optional[discord.Message]:
+    """
+    Send the denial embed as a non-ephemeral, deletable message.
+
+    If the interaction was already deferred, we:
+      1. Silently delete the original "Bot is thinking…" response.
+      2. Send a fresh non-ephemeral followup — visible to the channel.
+
+    If not yet deferred we send a regular non-ephemeral response.
+
+    Returns the Message object so the caller can schedule deletion.
+    Returns None if sending failed entirely.
+    """
+    try:
+        if interaction.response.is_done():
+            # Remove the ephemeral/non-ephemeral "thinking" placeholder.
+            try:
+                await interaction.delete_original_response()
+            except Exception:
+                pass
+            # Send a fresh, deletable message.
+            msg = await interaction.followup.send(embed=embed, wait=True)
+        else:
+            await interaction.response.send_message(embed=embed)
+            msg = await interaction.original_response()
+        return msg
+    except Exception as exc:
+        logger.error(f"[Routing] failed to send denial embed: {exc}")
+        return None
+
+
 # ── Public helper ──────────────────────────────────────────────────────────────
 
 async def check_routing(
-    interaction:    discord.Interaction,
-    command_name:   str,
-    config_service  = None,     # ConfigService — for dashboard override lookup
+    interaction:   discord.Interaction,
+    command_name:  str,
+    config_service = None,
 ) -> bool:
     """
     Enforce channel routing for `command_name`.
 
-    Returns True  → command is allowed in this channel, proceed normally.
-    Returns False → command is denied; a Cerberus embed has already been sent
-                    to the user (ephemeral).  Caller must return immediately.
-
-    Sends via followup if the interaction is already deferred,
-    otherwise via response.send_message.
+    Returns True  → command is allowed, proceed normally.
+    Returns False → command denied; Cerberus embed sent + 45-second auto-delete
+                    scheduled. Caller must return immediately.
     """
     guild_id   = str(interaction.guild_id)
     channel_id = str(interaction.channel_id)
@@ -84,7 +130,7 @@ async def check_routing(
         except Exception as exc:
             logger.warning(f"[Routing] failed to fetch dashboard routing: {exc}")
 
-    # ── 2. Fall back to hardcoded default ──────────────────────────────────
+    # ── 2. Hardcoded default ───────────────────────────────────────────────
     if not allowed_channel:
         allowed_channel = DEFAULT_CHANNEL_ROUTING.get(command_name)
 
@@ -92,7 +138,7 @@ async def check_routing(
     if not allowed_channel:
         return True
 
-    # ── 4. Channel match → allowed ─────────────────────────────────────────
+    # ── 4. Correct channel → allowed ───────────────────────────────────────
     if channel_id == str(allowed_channel):
         return True
 
@@ -106,8 +152,8 @@ async def check_routing(
         f"expected_channel={allowed_channel}"
     )
 
-    # Grab Cerberus aggression service from the bot (zero extra parameters)
-    bot = interaction.client
+    # Grab Cerberus aggression service
+    bot      = interaction.client
     cerberus = getattr(bot, "cerberus_aggression", None)
 
     level      = 1
@@ -117,7 +163,7 @@ async def check_routing(
     if cerberus is not None:
         level = cerberus.record_violation(guild_id, discord_id)
 
-        # ── Level 4: punitive tax with rage scaling ───────────────────────
+        # Level 4: punitive tax with rage scaling
         if level >= 4 and cerberus.should_tax(guild_id, discord_id):
             rage_level = cerberus.get_rage_level(guild_id, discord_id)
             db = getattr(bot, "db", None)
@@ -128,22 +174,19 @@ async def check_routing(
                     rank = user.get("rank", "Forsaken") if user else "Forsaken"
                 except Exception:
                     pass
-
                 result  = await cerberus.execute_seizure(db, guild_id, discord_id, rank)
                 seizure = result["seizure"]
         elif level >= 4:
-            # L4 but click-spam guard active — still show the rage level
             rage_level = cerberus.get_rage_level(guild_id, discord_id)
 
-    # ── Build and send the immersive embed ─────────────────────────────────
+    # ── Build embed ─────────────────────────────────────────────────────────
     embed = EmbedFactory.cerberus_routing_deny(level, seizure, rage_level)
 
-    try:
-        if interaction.response.is_done():
-            await interaction.followup.send(embed=embed, ephemeral=True)
-        else:
-            await interaction.response.send_message(embed=embed, ephemeral=True)
-    except Exception as exc:
-        logger.error(f"[Routing] failed to send denial embed: {exc}")
+    # ── Send non-ephemeral so we can delete it ──────────────────────────────
+    msg = await _send_denial(interaction, embed)
+
+    # ── Schedule auto-delete after 45 seconds ──────────────────────────────
+    if msg is not None:
+        asyncio.create_task(_delete_after(msg, DELETE_DELAY))
 
     return False
