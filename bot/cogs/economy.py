@@ -1,6 +1,8 @@
 import asyncio
 import random as _random
 import os
+from typing import List, Optional
+
 import discord
 from discord import app_commands
 from discord.ext import commands
@@ -14,7 +16,7 @@ from ..utils.badges import BADGES_CATALOG
 from ..utils.grind_card import generate_grind_card
 from ..utils.result_cards import generate_tribute_card, generate_transfer_card, generate_ascend_card
 from ..utils.card_generator import fetch_avatar
-from ..ui import MarketView, AscendConfirmView, MineEntryView
+from ..ui import AscendView, MineEntryView
 
 
 # ── Infernal Mines copy ────────────────────────────────────────────────────────
@@ -371,52 +373,23 @@ class EconomyCog(commands.Cog):
 
     # /vault removed — replaced by /treasury in AdminCog
 
-    # ─── /market ──────────────────────────────────────────────
-
-    @app_commands.command(name="market", description="Browse all purchasable ranks.")
-    async def market(self, interaction: discord.Interaction):
-        purchasable = self.rank_service.get_purchasable_ranks()
-        view  = MarketView(purchasable)
-        embed = view.build_embed()
-        await interaction.response.send_message(embed=embed, view=view)
-
     # ─── /ascend ──────────────────────────────────────────────
 
-    @app_commands.command(name="ascend", description="Purchase a rank and ascend the hierarchy.")
-    @app_commands.describe(rank_name="The rank you wish to ascend to (must be the next rank).")
-    async def ascend(self, interaction: discord.Interaction, rank_name: str):
-        await interaction.response.defer(ephemeral=False)
+    @app_commands.command(name="ascend", description="Ascend your rank in the Kingdom hierarchy.")
+    @app_commands.describe(buy="Rank to ascend to directly (must be the next rank).")
+    async def ascend(self, interaction: discord.Interaction, buy: Optional[str] = None):
+        await interaction.response.defer(ephemeral=True)
 
         guild_id   = str(interaction.guild_id)
         discord_id = str(interaction.user.id)
         username   = interaction.user.display_name
 
-        if not self.rank_service.rank_exists(rank_name):
-            await interaction.followup.send(embed=EmbedFactory.error(f"The rank **{rank_name}** does not exist."), ephemeral=True)
-            return
-
-        if not self.rank_service.is_purchasable(rank_name):
-            await interaction.followup.send(embed=EmbedFactory.error("That rank cannot be purchased."), ephemeral=True)
-            return
-
-        user = await self.db.upsert_user(guild_id, discord_id, username)
+        user         = await self.db.upsert_user(guild_id, discord_id, username)
         current_rank = user.get("rank", "Forsaken")
+        next_rank    = self.rank_service.get_next_rank(current_rank)
 
-        if not self.rank_service.can_ascend_to(current_rank, rank_name):
-            next_rank = self.rank_service.get_next_rank(current_rank)
-            msg = f"You must ascend in order. Your next rank is **{next_rank}**." if next_rank else "No further ascension is possible."
-            await interaction.followup.send(embed=EmbedFactory.error(msg), ephemeral=True)
-            return
-
-        cost = self.rank_service.get_rank_cost(rank_name)
-        if user["balance"] < cost:
-            needed = cost - user["balance"]
-            await interaction.followup.send(embed=EmbedFactory.error(f"Your coffers fall short by **{needed:,} DC**.\nAscension to **{rank_name}** costs **{cost:,} DC**."), ephemeral=True)
-            return
-
-        confirm_embed = EmbedFactory.ascend_confirm(rank_name, cost, user["balance"])
-
-        async def do_ascend(inter: discord.Interaction):
+        # ── shared ascend logic (used by both UI button and direct buy) ────────
+        async def _execute_ascend(inter: discord.Interaction, rank_name: str, cost: int):
             tx_service = TransactionService(self.db)
             await tx_service.ascension_payment(guild_id, discord_id, rank_name, cost)
             updated     = await self.db.get_user(guild_id, discord_id)
@@ -424,28 +397,96 @@ class EconomyCog(commands.Cog):
             skin_id     = updated.get("equipped_skin") if updated else None
 
             try:
-                av_url   = inter.user.display_avatar.with_size(128).url
+                av_url = inter.user.display_avatar.with_size(128).url
             except Exception:
-                av_url   = None
+                av_url = None
             av_bytes = await fetch_avatar(av_url)
 
-            _loop    = asyncio.get_event_loop()
-            card_buf = await _loop.run_in_executor(None, lambda: generate_ascend_card(
-                username  = username,
-                old_rank  = current_rank,
-                new_rank  = rank_name,
-                cost      = cost,
-                balance   = new_balance,
+            loop     = asyncio.get_event_loop()
+            card_buf = await loop.run_in_executor(None, lambda: generate_ascend_card(
+                username     = username,
+                old_rank     = current_rank,
+                new_rank     = rank_name,
+                cost         = cost,
+                balance      = new_balance,
                 avatar_bytes = av_bytes,
-                skin_id   = skin_id,
+                skin_id      = skin_id,
             ))
             card_embed = discord.Embed(color=0xFFD700)
             card_embed.set_image(url="attachment://ascend_result.png")
             await inter.followup.send(
-                embed=card_embed, file=discord.File(card_buf, filename="ascend_result.png")
+                embed=card_embed,
+                file=discord.File(card_buf, filename="ascend_result.png"),
+                ephemeral=False,
             )
             new_badges = await self.badge_service.check_and_award(guild_id, discord_id)
             await self._announce_badges(inter, new_badges)
 
-        view = AscendConfirmView(rank_name, cost, do_ascend)
-        await interaction.followup.send(embed=confirm_embed, view=view)
+        # ── Direct buy path ────────────────────────────────────────────────────
+        if buy:
+            rank_name = buy.strip()
+
+            if not self.rank_service.rank_exists(rank_name):
+                await interaction.followup.send(
+                    embed=EmbedFactory.error(f"The rank **{rank_name}** does not exist."),
+                    ephemeral=True,
+                )
+                return
+
+            if not self.rank_service.is_purchasable(rank_name):
+                await interaction.followup.send(
+                    embed=EmbedFactory.error("That rank cannot be purchased."),
+                    ephemeral=True,
+                )
+                return
+
+            if not self.rank_service.can_ascend_to(current_rank, rank_name):
+                msg = (
+                    f"You must ascend in order. Your next rank is **{next_rank}**."
+                    if next_rank else "No further ascension is possible."
+                )
+                await interaction.followup.send(embed=EmbedFactory.error(msg), ephemeral=True)
+                return
+
+            cost = self.rank_service.get_rank_cost(rank_name)
+            if user["balance"] < cost:
+                needed = cost - user["balance"]
+                await interaction.followup.send(
+                    embed=EmbedFactory.error(
+                        f"Your coffers fall short by **{needed:,} DC**.\n"
+                        f"Ascension to **{rank_name}** costs **{cost:,} DC**."
+                    ),
+                    ephemeral=True,
+                )
+                return
+
+            await _execute_ascend(interaction, rank_name, cost)
+            return
+
+        # ── UI browse path ─────────────────────────────────────────────────────
+        purchasable = self.rank_service.get_purchasable_ranks()  # [(name, cost, rate)]
+
+        view = AscendView(
+            ranks        = purchasable,
+            owner_id     = interaction.user.id,
+            current_rank = current_rank,
+            next_rank    = next_rank,
+            ascend_cb    = _execute_ascend,
+        )
+        await interaction.followup.send(embed=view.build_embed(), view=view, ephemeral=True)
+
+    @ascend.autocomplete("buy")
+    async def ascend_autocomplete(
+        self, interaction: discord.Interaction, current: str
+    ) -> List[app_commands.Choice[str]]:
+        q = current.lower()
+        choices = []
+        for name, cost, rate in self.rank_service.get_purchasable_ranks():
+            if q in name.lower():
+                choices.append(app_commands.Choice(
+                    name  = f"{name} — {cost:,} DC  (Tax {int(rate * 100)}%)",
+                    value = name,
+                ))
+            if len(choices) >= 25:
+                break
+        return choices
