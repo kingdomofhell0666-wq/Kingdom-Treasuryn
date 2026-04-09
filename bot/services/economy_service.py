@@ -85,8 +85,9 @@ class EconomyService:
             "gross": gross, "flat_bonus": flat_bonus,
             "base_tax_rate": base_tax_rate, "effective_tax_rate": effective_tax_rate,
             "tax_amount": tax_amount, "net": net,
-            "new_balance": updated["balance"] if updated else 0,
-            "rank": updated["rank"] if updated else "Forsaken",
+            "new_balance":  updated["balance"]       if updated else 0,
+            "rank":         updated["rank"]           if updated else "Forsaken",
+            "equipped_skin": updated.get("equipped_skin") if updated else None,
         }
 
     async def tribute(self, guild_id: str, discord_id: str, username: str) -> Dict[str, Any]:

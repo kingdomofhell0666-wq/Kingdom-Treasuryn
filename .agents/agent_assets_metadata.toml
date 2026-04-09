@@ -167,3 +167,45 @@ id = "0UL1g_z4Ubp-PQgocRCxd"
 uri = "file://bot/assets/previews/grind_jackpot.png"
 type = "image"
 title = "Jackpot — Abyss Strike"
+
+[[outputs]]
+id = "UniG_Ia70mJbCsinfhPt1"
+uri = "file://bot/assets/previews/grind_skin_default.png"
+type = "image"
+title = "Infernal Standard (default)"
+
+[[outputs]]
+id = "pgfnbec-9OITd3rjQlI6Z"
+uri = "file://bot/assets/previews/grind_skin_blood_crown.png"
+type = "image"
+title = "Blood Crown"
+
+[[outputs]]
+id = "DaKEgL_fqOrSz3vqHFmYx"
+uri = "file://bot/assets/previews/grind_skin_abyss_smoke.png"
+type = "image"
+title = "Abyss Smoke"
+
+[[outputs]]
+id = "cDB3SpPbAS3Eyc6fIwB-Q"
+uri = "file://bot/assets/previews/grind_skin_infernal_gold.png"
+type = "image"
+title = "Infernal Gold"
+
+[[outputs]]
+id = "0TQzs8jzE6nBLJdbKDbul"
+uri = "file://bot/assets/previews/grind_skin_royal_dark.png"
+type = "image"
+title = "Royal Dark"
+
+[[outputs]]
+id = "RldU_wzhbkruTwxGLtanF"
+uri = "file://bot/assets/previews/grind_skin_black_throne.png"
+type = "image"
+title = "Black Throne"
+
+[[outputs]]
+id = "QRbhFiC1yaKNPQgQzo_oI"
+uri = "file://bot/assets/previews/grind_skin_crimson_sigil.png"
+type = "image"
+title = "Crimson Sigil"

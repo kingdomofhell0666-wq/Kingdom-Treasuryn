@@ -233,6 +233,7 @@ class EconomyCog(commands.Cog):
                 net          = result["net"],
                 balance      = result["new_balance"],
                 avatar_bytes = avatar_bytes,
+                skin_id      = result.get("equipped_skin"),
             ))
 
             # Minimal embed — image is the entire reward display
