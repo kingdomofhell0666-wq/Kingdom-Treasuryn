@@ -557,8 +557,17 @@ class EconomyCog(commands.Cog):
                         message  = template.replace("{user}", f"<@{discord_id}>").replace("{rank}", rank_name)
                         ann_embed = discord.Embed(description=message, color=0xFFD700)
                         ann_embed.set_footer(text="Kingdom Treasury  ·  Kingdom of Hell")
-                        await ann_channel.send(embed=ann_embed)
-                        _log.info(f"[Announce] ✅ announcement sent to #{ann_channel.name} ({raw_ch_id})")
+                        _log.info(
+                            f"[Announce] SEND → guild={guild_id} "
+                            f"channel_id={raw_ch_id} channel_name=#{ann_channel.name} "
+                            f"channel_type={type(ann_channel).__name__} "
+                            f"embed_description={repr(message)}"
+                        )
+                        sent_msg = await ann_channel.send(embed=ann_embed)
+                        _log.info(
+                            f"[Announce] ✅ SUCCESS — message_id={sent_msg.id} "
+                            f"guild={guild_id} channel={raw_ch_id} (#{ann_channel.name})"
+                        )
             except Exception as ann_err:
                 import logging as _logmod
                 _logmod.getLogger("kingdom_treasury").warning(f"[Announce] ❌ exception: {ann_err}", exc_info=True)

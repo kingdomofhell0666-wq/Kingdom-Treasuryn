@@ -29,7 +29,7 @@ class BadgeService:
 
     def _check_condition(self, badge: Badge, user: dict) -> bool:
         ut = badge.unlock_type
-        uv = badge.unlock_value
+        uv = badge.unlock_threshold   # field is unlock_threshold, not unlock_value
         if ut == "balance_gte":
             return user.get("balance", 0) >= uv
         if ut == "taxes_gte":
