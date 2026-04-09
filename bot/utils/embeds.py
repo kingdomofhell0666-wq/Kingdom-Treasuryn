@@ -45,10 +45,10 @@ OUTCOME_ICONS = {
 }
 
 OUTCOME_FLAVOR = {
-    "failure": "*The rock gives nothing. Return when it is ready.*",
-    "meager":  "*The veins run thin. The descent yields little today.*",
-    "common":  "*The stone answers your effort. The Kingdom takes its share.*",
-    "rich":    "*A rich vein is struck. The haul is considerable.*",
+    "failure": "*The seam yields nothing. No reward is recorded.*",
+    "meager":  "*The haul is thin. The veins ran sparse today.*",
+    "common":  "*Standard extraction complete. The Kingdom takes its share.*",
+    "rich":    "*A strong vein struck. The haul is well above standard.*",
     "jackpot": "*The Abyss tears open. Wealth beyond measure flows forth.*",
 }
 
@@ -170,18 +170,6 @@ class EmbedFactory:
 
     # ─── Grind ────────────────────────────────────────────────────────────────
 
-    # Immersion lines appended below the main flavor text on each grind result
-    _GRIND_IMMERSION = [
-        "*The stone yielded… reluctantly.*",
-        "*You struck something deeper than expected.*",
-        "*The mine did not resist you.*",
-        "*The Kingdom watches your progress.*",
-        "*The rock remembers every strike.*",
-        "*Something ancient stirred as you dug.*",
-        "*The heat rises. The reward is yours.*",
-        "*The Abyss measured your worth today.*",
-    ]
-
     @staticmethod
     def grind_result(result: dict) -> discord.Embed:
         outcome    = result.get("outcome_label", "common")
@@ -195,45 +183,44 @@ class EmbedFactory:
         icon   = OUTCOME_ICONS.get(outcome, "⛏")
         color  = OUTCOME_COLORS.get(outcome, CRIMSON)
         flavor = OUTCOME_FLAVOR.get(outcome, OUTCOME_FLAVOR["common"])
-        immersion = random.choice(EmbedFactory._GRIND_IMMERSION)
 
         embed = discord.Embed(
             title=f"{icon}  Infernal Mines — Extraction Complete",
-            description=f"{flavor}\n{immersion}",
+            description=flavor,
             color=color,
         )
-        embed.add_field(name=BLANK, value=SEP, inline=False)
 
+        # ── Failure: minimal panel ────────────────────────────────────────────
         if outcome == "failure":
-            embed.add_field(name="💼  Wallet", value=f"**{format_dc(balance)}**", inline=True)
-            embed.set_footer(text='"The Kingdom does not reward failure."  ·  Kingdom Treasury')
+            embed.add_field(name=BLANK,        value=BLANK,                       inline=False)
+            embed.add_field(name="💼  Wallet", value=f"**{format_dc(balance)}**", inline=False)
+            embed.set_footer(text="Recorded by the Kingdom Treasury  ·  Kingdom of Hell")
             return embed
 
-        # ── Main stats ───────────────────────────────────────────────────────
+        # ── Extraction value (with optional bonus line) ───────────────────────
         raw = gross - flat_bonus
-        embed.add_field(name="🪨  Extraction",   value=f"**+{format_dc(raw)}**",                   inline=True)
         if flat_bonus:
-            embed.add_field(name="⚡  Bonus",    value=f"**+{format_dc(flat_bonus)}**",             inline=True)
+            extraction_val = f"**+{format_dc(raw)}**\n*+{format_dc(flat_bonus)} bonus*"
         else:
-            embed.add_field(name=BLANK,          value=BLANK,                                       inline=True)
+            extraction_val = f"**+{format_dc(raw)}**"
 
-        tax_label = "Exempt" if eff_rate == 0 else format_tax_rate(eff_rate)
-        if tax > 0:
-            embed.add_field(name="⚖  Tax",      value=f"**−{format_dc(tax)}** `({tax_label})`",    inline=True)
+        # ── Tax value ─────────────────────────────────────────────────────────
+        if tax == 0 or eff_rate == 0:
+            tax_val = "**Exempt**"
         else:
-            embed.add_field(name="⚖  Tax",      value="**Exempt**",                                inline=True)
+            tax_val = f"**−{format_dc(tax)}**\n*{format_tax_rate(eff_rate)} rate*"
 
-        embed.add_field(name=BLANK, value=SEP_THIN, inline=False)
-        embed.add_field(name="🔥  Net Gain",     value=f"## +{format_dc(net)}",                     inline=True)
-        embed.add_field(name=BLANK,              value=BLANK,                                       inline=True)
-        embed.add_field(name="💼  Wallet",       value=f"**{format_dc(balance)}**",                 inline=True)
+        # ── Row 1: Extraction | Tax ───────────────────────────────────────────
+        embed.add_field(name=BLANK,             value=BLANK,           inline=False)
+        embed.add_field(name="🪨  Extraction",  value=extraction_val,  inline=True)
+        embed.add_field(name="⚖  Tax Applied", value=tax_val,          inline=True)
 
-        if outcome == "jackpot":
-            embed.set_footer(text='"The Abyss opens its veins for the worthy."  ·  Kingdom Treasury')
-        elif outcome == "rich":
-            embed.set_footer(text='"A strong haul from the deep."  ·  Kingdom Treasury')
-        else:
-            embed.set_footer(text='"The Kingdom takes what is due."  ·  Kingdom Treasury')
+        # ── Row 2: Net Gain | Wallet ──────────────────────────────────────────
+        embed.add_field(name=BLANK,             value=BLANK,                       inline=False)
+        embed.add_field(name="🔥  Net Gain",    value=f"**+{format_dc(net)}**",    inline=True)
+        embed.add_field(name="💼  Wallet",      value=f"**{format_dc(balance)}**", inline=True)
+
+        embed.set_footer(text="Recorded by the Kingdom Treasury  ·  Kingdom of Hell")
         return embed
 
     # ─── Tribute ──────────────────────────────────────────────────────────────
