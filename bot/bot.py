@@ -60,8 +60,8 @@ class KingdomTreasuryBot(commands.Bot):
         await self.db.set_meta("token_fingerprint", current_fp)
 
         # ── Services ─────────────────────────────────────────────────────────
-        self.economy_service     = EconomyService(self.db)
-        self.cooldown_service    = CooldownService(self.db)
+        self.economy_service     = EconomyService(self.db, config_service=self.config_service)
+        self.cooldown_service    = CooldownService(self.db, config_service=self.config_service)
         self.transaction_service = TransactionService(self.db)
         self.treasury_service    = TreasuryService(self.db)
         self.audit_service       = AuditService(self.db)
