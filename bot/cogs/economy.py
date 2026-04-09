@@ -11,6 +11,8 @@ from ..services.transaction_service import TransactionService
 from ..services.cerberus_service import CerberusService
 from ..utils.embeds import EmbedFactory
 from ..utils.badges import BADGES_CATALOG
+from ..utils.grind_card import generate_grind_card
+from ..utils.card_generator import fetch_avatar
 from ..ui import MarketView, AscendConfirmView, MineEntryView
 
 
@@ -206,13 +208,46 @@ class EconomyCog(commands.Cog):
             p2.set_footer(text="Kingdom Treasury  ·  Kingdom of Hell")
             await inter.message.edit(embed=p2)
 
-            # ── Phase 3: result reveal ────────────────────────
+            # ── Phase 3: generate + reveal result card ────────
             await asyncio.sleep(1.5)
-            result_embed = EmbedFactory.grind_result(result)
-            await inter.message.edit(embed=result_embed, attachments=[])
+
+            outcome = result.get("outcome_label", "common")
+
+            # Fetch avatar (async HTTP, fast)
+            try:
+                avatar_url = inter.user.display_avatar.with_size(128).url
+            except Exception:
+                avatar_url = None
+            avatar_bytes = await fetch_avatar(avatar_url)
+
+            # Generate card in thread pool — keeps event loop free
+            loop = asyncio.get_event_loop()
+            card_buf = await loop.run_in_executor(None, lambda: generate_grind_card(
+                username     = username,
+                rank         = result.get("rank", "Forsaken"),
+                outcome      = outcome,
+                extraction   = result["gross"],
+                flat_bonus   = result.get("flat_bonus", 0),
+                tax          = result["tax_amount"],
+                eff_rate     = result["effective_tax_rate"],
+                net          = result["net"],
+                balance      = result["new_balance"],
+                avatar_bytes = avatar_bytes,
+            ))
+
+            # Minimal embed — image is the entire reward display
+            _CARD_COLORS = {
+                "failure": 0x0A0A0A, "meager": 0x6B0000,
+                "common":  0xB22222, "rich":   0xCC7700, "jackpot": 0xFFD700,
+            }
+            card_embed = discord.Embed(color=_CARD_COLORS.get(outcome, 0xB22222))
+            card_embed.set_image(url="attachment://grind_result.png")
+
+            card_file = discord.File(card_buf, filename="grind_result.png")
+            await inter.edit_original_response(embed=card_embed, file=card_file, attachments=[])
 
             # ── Post-result: badges + audit ───────────────────
-            if result.get("outcome_label") == "jackpot":
+            if outcome == "jackpot":
                 await self.badge_service.grant_badge(guild_id, discord_id, "high_roller")
             new_badges = await self.badge_service.check_and_award(guild_id, discord_id)
             await self._announce_badges(inter, new_badges)

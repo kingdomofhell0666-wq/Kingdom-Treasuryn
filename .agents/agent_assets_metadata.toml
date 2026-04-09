@@ -143,3 +143,27 @@ id = "OV1IH8toWfuNfwv_iJYvP"
 uri = "file://bot/assets/previews/tier_critical.png"
 type = "image"
 title = "Risk: CRITICAL (81-100) — Aggressive overlay, danger state"
+
+[[outputs]]
+id = "fL_rdBACQHOCQYU7b410J"
+uri = "file://bot/assets/previews/grind_failure.png"
+type = "image"
+title = "Grind Card — Failure (No Yield)"
+
+[[outputs]]
+id = "2rswjqCT0bFdllzsxsV-P"
+uri = "file://bot/assets/previews/grind_common.png"
+type = "image"
+title = "Grind Card — Common (Standard Yield)"
+
+[[outputs]]
+id = "V-fMJz0qQyy5ExhYYlK1X"
+uri = "file://bot/assets/previews/grind_rich.png"
+type = "image"
+title = "Grind Card — Rich Vein"
+
+[[outputs]]
+id = "0UL1g_z4Ubp-PQgocRCxd"
+uri = "file://bot/assets/previews/grind_jackpot.png"
+type = "image"
+title = "Grind Card — Jackpot (Abyss Strike)"

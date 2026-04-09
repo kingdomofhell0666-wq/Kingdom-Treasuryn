@@ -86,6 +86,7 @@ class EconomyService:
             "base_tax_rate": base_tax_rate, "effective_tax_rate": effective_tax_rate,
             "tax_amount": tax_amount, "net": net,
             "new_balance": updated["balance"] if updated else 0,
+            "rank": updated["rank"] if updated else "Forsaken",
         }
 
     async def tribute(self, guild_id: str, discord_id: str, username: str) -> Dict[str, Any]:
