@@ -114,7 +114,9 @@ class EconomyCog(commands.Cog):
     @property
     def badge_service(self):  return self.bot.badge_service
     @property
-    def config_service(self): return self.bot.config_service
+    def config_service(self):       return self.bot.config_service
+    @property
+    def ascension_announce(self):   return self.bot.ascension_announcement_service
 
     # ─── Command access check ──────────────────────────────────────────────────
 
@@ -516,61 +518,14 @@ class EconomyCog(commands.Cog):
             await self._announce_badges(inter, new_badges)
 
             # ── Ascension announcement ────────────────────────────────────────
-            try:
-                _log = logging.getLogger("kingdom_treasury")
-                _log.info(f"[Announce] /ascend success — fetching announcement settings for guild={guild_id}")
-                # Invalidate cache so we always get the latest saved settings from DB
-                self.config_service.invalidate_guild(guild_id)
-                ann = await self.config_service.get_ascension_announcement_settings(guild_id)
-                _log.info(f"[Announce] loaded settings: enabled={ann.get('enabled') if ann else 'NO ROW'} "
-                          f"channel_id={ann.get('channel_id') if ann else 'N/A'} "
-                          f"template={repr(ann.get('message_template','')) if ann else 'N/A'}")
-
-                if not ann:
-                    _log.info("[Announce] skipped — no settings row in DB")
-                elif not ann.get("enabled"):
-                    _log.info("[Announce] skipped — enabled=false")
-                elif not ann.get("channel_id"):
-                    _log.info("[Announce] skipped — channel_id is null/empty")
-                elif not inter.guild:
-                    _log.info("[Announce] skipped — inter.guild is None")
-                else:
-                    raw_ch_id = int(ann["channel_id"])
-                    _log.info(f"[Announce] resolving channel id={raw_ch_id}")
-
-                    # Try cache first; fall back to API fetch if not in cache
-                    ann_channel = inter.guild.get_channel(raw_ch_id)
-                    if ann_channel is None:
-                        _log.info("[Announce] channel not in guild cache — fetching from API")
-                        try:
-                            ann_channel = await inter.guild.fetch_channel(raw_ch_id)
-                        except Exception as fetch_err:
-                            _log.warning(f"[Announce] fetch_channel failed: {fetch_err}")
-                            ann_channel = None
-
-                    if ann_channel is None:
-                        _log.warning(f"[Announce] channel {raw_ch_id} not found in guild")
-                    elif not hasattr(ann_channel, "send"):
-                        _log.warning(f"[Announce] channel type {type(ann_channel)} does not support send()")
-                    else:
-                        template = ann.get("message_template") or "{user} has ascended to {rank}!"
-                        message  = template.replace("{user}", f"<@{discord_id}>").replace("{rank}", rank_name)
-                        ann_embed = discord.Embed(description=message, color=0xFFD700)
-                        ann_embed.set_footer(text="Kingdom Treasury  ·  Kingdom of Hell")
-                        _log.info(
-                            f"[Announce] SEND → guild={guild_id} "
-                            f"channel_id={raw_ch_id} channel_name=#{ann_channel.name} "
-                            f"channel_type={type(ann_channel).__name__} "
-                            f"embed_description={repr(message)}"
-                        )
-                        sent_msg = await ann_channel.send(embed=ann_embed)
-                        _log.info(
-                            f"[Announce] ✅ SUCCESS — message_id={sent_msg.id} "
-                            f"guild={guild_id} channel={raw_ch_id} (#{ann_channel.name})"
-                        )
-            except Exception as ann_err:
-                import logging as _logmod
-                _logmod.getLogger("kingdom_treasury").warning(f"[Announce] ❌ exception: {ann_err}", exc_info=True)
+            await self.ascension_announce.announce(
+                inter             = inter,
+                guild_id          = guild_id,
+                discord_id        = discord_id,
+                rank_name         = rank_name,
+                origin_channel_id = str(inter.channel_id),
+                config_service    = self.config_service,
+            )
 
         # ── Direct buy path ────────────────────────────────────────────────────
         if buy:

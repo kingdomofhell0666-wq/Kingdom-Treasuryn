@@ -9,7 +9,7 @@ from .database import Database
 from .services import (
     EconomyService, RankService, CooldownService, TransactionService,
     TreasuryService, AuditService, CerberusService, BlackMarketService,
-    InvestmentService, CosmeticService, BadgeService,
+    InvestmentService, CosmeticService, BadgeService, AscensionAnnouncementService,
 )
 from .services.config_service import ConfigService
 from .services.guild_sync_service import GuildSyncService
@@ -28,17 +28,18 @@ class KingdomTreasuryBot(commands.Bot):
         self.config_service: ConfigService = ConfigService()
         self.guild_sync_service: GuildSyncService = GuildSyncService()
 
-        self.rank_service         = RankService()
-        self.economy_service      = None
-        self.cooldown_service     = None
-        self.transaction_service  = None
-        self.treasury_service     = None
-        self.audit_service        = None
-        self.cerberus_service     = None
-        self.blackmarket_service  = None
-        self.investment_service   = None
-        self.cosmetic_service     = None
-        self.badge_service        = None
+        self.rank_service                    = RankService()
+        self.ascension_announcement_service  = AscensionAnnouncementService()
+        self.economy_service                 = None
+        self.cooldown_service                = None
+        self.transaction_service             = None
+        self.treasury_service                = None
+        self.audit_service                   = None
+        self.cerberus_service                = None
+        self.blackmarket_service             = None
+        self.investment_service              = None
+        self.cosmetic_service                = None
+        self.badge_service                   = None
 
     async def setup_hook(self):
         await self.db.connect()
