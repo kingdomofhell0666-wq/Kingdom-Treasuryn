@@ -8,7 +8,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
 import { apiGet, apiPatch } from "@/lib/api";
-import { useGetGuild } from "@workspace/api-client-react";
 import { Flame, Save, AlertCircle } from "lucide-react";
 import { Spinner } from "@/components/ui/spinner";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -59,26 +58,34 @@ export default function AscensionPage() {
 
 function AscensionForm({ guildId }: { guildId: string }) {
   const { toast } = useToast();
-  const { data: guild } = useGetGuild(guildId);
 
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [loadError, setLoadError] = useState<string | null>(null);
   const [settings, setSettings] = useState<AscensionSettings>(DEFAULT_SETTINGS);
   const [saving, setSaving] = useState(false);
+  const [channels, setChannels] = useState<{ id: string; name: string }[]>([]);
+  const [lastSaved, setLastSaved] = useState<AscensionSettings | null>(null);
 
-  const textChannels = (guild as { channels?: { id: string; name: string }[] })?.channels ?? [];
   const endpoint = ENDPOINT(guildId);
 
   const fetchSettings = useCallback(async () => {
     setLoadState("loading");
     setLoadError(null);
     try {
-      const data = await apiGet<AscensionSettings>(endpoint);
+      const [data, chData] = await Promise.all([
+        apiGet<AscensionSettings>(endpoint),
+        apiGet<{ id: string; name: string; type: string }[]>(`/api/guilds/${guildId}/channels`).catch(() => []),
+      ]);
       setSettings({
         enabled: data.enabled ?? DEFAULT_SETTINGS.enabled,
         channelId: data.channelId ?? DEFAULT_SETTINGS.channelId,
         messageTemplate: data.messageTemplate || DEFAULT_SETTINGS.messageTemplate,
       });
+      // Only text/announcement channels can receive messages
+      setChannels(
+        (chData as { id: string; name: string; type: string }[])
+          .filter(c => c.type === "text" || c.type === "announcement")
+      );
       setLoadState("ok");
     } catch (e: unknown) {
       const msg = (e as Error).message;
@@ -87,21 +94,30 @@ function AscensionForm({ guildId }: { guildId: string }) {
       setSettings(DEFAULT_SETTINGS);
       setLoadState("error");
     }
-  }, [endpoint]);
+  }, [endpoint, guildId]);
 
   useEffect(() => { fetchSettings(); }, [fetchSettings]);
 
   const save = async () => {
     setSaving(true);
     try {
-      const data = await apiPatch<AscensionSettings>(endpoint, settings);
-      setSettings({
+      const payload = {
+        enabled: settings.enabled,
+        channelId: settings.channelId,
+        messageTemplate: settings.messageTemplate,
+      };
+      console.log("[AscensionPage] Saving payload →", JSON.stringify(payload));
+      const data = await apiPatch<AscensionSettings>(endpoint, payload);
+      const saved = {
         enabled: data.enabled ?? DEFAULT_SETTINGS.enabled,
         channelId: data.channelId ?? DEFAULT_SETTINGS.channelId,
         messageTemplate: data.messageTemplate || DEFAULT_SETTINGS.messageTemplate,
-      });
+      };
+      setSettings(saved);
+      setLastSaved(saved);
       setLoadState("ok");
       setLoadError(null);
+      console.log("[AscensionPage] Server confirmed →", JSON.stringify(saved));
       toast({ title: "Saved", description: "Ascension announcement settings updated." });
     } catch (e: unknown) {
       toast({ title: "Save failed", description: (e as Error).message, variant: "destructive" });
@@ -120,7 +136,7 @@ function AscensionForm({ guildId }: { guildId: string }) {
     );
   }
 
-  const selectedChannel = textChannels.find(c => c.id === settings.channelId);
+  const selectedChannel = channels.find(c => c.id === settings.channelId);
   const preview = settings.messageTemplate
     .replace("{user}", "@Darkblade")
     .replace("{rank}", "**Duke**");
@@ -178,9 +194,9 @@ function AscensionForm({ guildId }: { guildId: string }) {
                 <SelectValue placeholder="Select a channel…" />
               </SelectTrigger>
               <SelectContent>
-                {textChannels.length > 0
-                  ? textChannels.map(c => <SelectItem key={c.id} value={c.id}>#{c.name}</SelectItem>)
-                  : <SelectItem value="" disabled>No channels available (log in to Discord first)</SelectItem>
+                {channels.length > 0
+                  ? channels.map(c => <SelectItem key={c.id} value={c.id}>#{c.name}</SelectItem>)
+                  : <SelectItem value="" disabled>No channels synced yet — bot may still be starting</SelectItem>
                 }
               </SelectContent>
             </Select>
@@ -245,6 +261,26 @@ function AscensionForm({ guildId }: { guildId: string }) {
           </Button>
         </CardFooter>
       </Card>
+
+      {lastSaved && (
+        <Card className="bg-green-950/30 border-green-700/40">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm text-green-400 flex items-center gap-2">
+              ✅ Saved — server confirmed these values
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="font-mono text-xs space-y-1 text-green-300">
+              <p><span className="text-muted-foreground">enabled:</span> {String(lastSaved.enabled)}</p>
+              <p><span className="text-muted-foreground">channel_id:</span> {lastSaved.channelId ?? "null"}</p>
+              <p><span className="text-muted-foreground">template:</span> {lastSaved.messageTemplate}</p>
+            </div>
+            <p className="text-xs text-muted-foreground mt-3">
+              The bot will pick these up on the next <strong>/ascend</strong> — no restart needed.
+            </p>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

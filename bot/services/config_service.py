@@ -263,6 +263,10 @@ class ConfigService:
         except Exception as e:
             logger.warning(f"ConfigService update_last_posted_at error: {e}")
 
+    def invalidate_guild(self, guild_id: str):
+        """Immediately drop all cached entries for a guild so the next query hits the DB."""
+        _cache.invalidate_guild(guild_id)
+
     async def close(self):
         if self._pool:
             await self._pool.close()
