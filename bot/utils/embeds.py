@@ -170,6 +170,18 @@ class EmbedFactory:
 
     # ─── Grind ────────────────────────────────────────────────────────────────
 
+    # Immersion lines appended below the main flavor text on each grind result
+    _GRIND_IMMERSION = [
+        "*The stone yielded… reluctantly.*",
+        "*You struck something deeper than expected.*",
+        "*The mine did not resist you.*",
+        "*The Kingdom watches your progress.*",
+        "*The rock remembers every strike.*",
+        "*Something ancient stirred as you dug.*",
+        "*The heat rises. The reward is yours.*",
+        "*The Abyss measured your worth today.*",
+    ]
+
     @staticmethod
     def grind_result(result: dict) -> discord.Embed:
         outcome    = result.get("outcome_label", "common")
@@ -183,22 +195,23 @@ class EmbedFactory:
         icon   = OUTCOME_ICONS.get(outcome, "⛏")
         color  = OUTCOME_COLORS.get(outcome, CRIMSON)
         flavor = OUTCOME_FLAVOR.get(outcome, OUTCOME_FLAVOR["common"])
+        immersion = random.choice(EmbedFactory._GRIND_IMMERSION)
 
         embed = discord.Embed(
-            title=f"{icon}  Infernal Mines",
-            description=flavor,
+            title=f"{icon}  Infernal Mines — Extraction Complete",
+            description=f"{flavor}\n{immersion}",
             color=color,
         )
         embed.add_field(name=BLANK, value=SEP, inline=False)
 
         if outcome == "failure":
-            embed.add_field(name="💰  Wallet", value=f"**{format_dc(balance)}**", inline=True)
+            embed.add_field(name="💼  Wallet", value=f"**{format_dc(balance)}**", inline=True)
             embed.set_footer(text='"The Kingdom does not reward failure."  ·  Kingdom Treasury')
             return embed
 
         # ── Main stats ───────────────────────────────────────────────────────
         raw = gross - flat_bonus
-        embed.add_field(name="💰  Extraction",   value=f"**+{format_dc(raw)}**",                   inline=True)
+        embed.add_field(name="🪨  Extraction",   value=f"**+{format_dc(raw)}**",                   inline=True)
         if flat_bonus:
             embed.add_field(name="⚡  Bonus",    value=f"**+{format_dc(flat_bonus)}**",             inline=True)
         else:
@@ -213,7 +226,7 @@ class EmbedFactory:
         embed.add_field(name=BLANK, value=SEP_THIN, inline=False)
         embed.add_field(name="🔥  Net Gain",     value=f"## +{format_dc(net)}",                     inline=True)
         embed.add_field(name=BLANK,              value=BLANK,                                       inline=True)
-        embed.add_field(name="💳  Wallet",       value=f"**{format_dc(balance)}**",                 inline=True)
+        embed.add_field(name="💼  Wallet",       value=f"**{format_dc(balance)}**",                 inline=True)
 
         if outcome == "jackpot":
             embed.set_footer(text='"The Abyss opens its veins for the worthy."  ·  Kingdom Treasury')

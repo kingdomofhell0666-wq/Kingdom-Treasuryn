@@ -11,35 +11,81 @@ from ..services.transaction_service import TransactionService
 from ..services.cerberus_service import CerberusService
 from ..utils.embeds import EmbedFactory
 from ..utils.badges import BADGES_CATALOG
-from ..ui import MarketView, AscendConfirmView
+from ..ui import MarketView, AscendConfirmView, MineEntryView
 
 
-# ── Infernal Mines animation copy ─────────────────────────────────────────────
+# ── Infernal Mines copy ────────────────────────────────────────────────────────
 
-_ASSETS = os.path.join(os.path.dirname(__file__), "..", "assets")
-
-MINE_ENTRY_TEXTS = [
-    "*Descending into the depths...*",
-    "*The darkness pulls you downward...*",
-    "*The gates of the Infernal Mines creak open...*",
-    "*You step past the threshold into the abyss...*",
-    "*The heat rises as you descend...*",
-    "*The mine swallows you whole...*",
-]
-
-MINE_SEARCH_TEXTS = [
-    "*The veins are being tested...*",
-    "*The stone trembles underfoot...*",
-    "*A deeper vein calls from below...*",
-    "*The darkness responds to your strike...*",
-    "*Your pickaxe rings against ancient rock...*",
-    "*Shadows shift in the hellfire light...*",
-    "*The ore whispers of its worth...*",
-    "*Something stirs deep within the seam...*",
-]
-
+_ASSETS     = os.path.join(os.path.dirname(__file__), "..", "assets")
 ENTRY_COLOR  = 0x1A0000
 SEARCH_COLOR = 0x3D0000
+WALK_COLOR   = 0x0D0D0D
+
+# Entry screen — atmospheric descriptions
+_MINE_DESCRIPTIONS = [
+    (
+        "*The entrance breathes heat.*\n\n"
+        "*The deeper you go, the less returns.*\n"
+        "*Some return richer. Some return empty.*\n"
+        "*Some… do not return the same.*"
+    ),
+    (
+        "*The gates to the Infernal Mines stand open.*\n\n"
+        "*The stone walls pulse with ancient heat.*\n"
+        "*The Kingdom expects its share.*\n"
+        "*Whatever you find below — it will take its cut.*"
+    ),
+    (
+        "*The mine demands a decision.*\n\n"
+        "*Beyond this threshold, the rules of the surface no longer apply.*\n"
+        "*Wealth lies in the dark.*\n"
+        "*So does risk.*"
+    ),
+    (
+        "*A foul wind carries the scent of sulfur.*\n\n"
+        "*The pickaxe is yours. The mine is old.*\n"
+        "*It has swallowed many who entered confident.*\n"
+        "*Do you step forward?*"
+    ),
+]
+
+# Phase 1 — "entering" animation text
+_ENTER_TEXTS = [
+    "*You step into the abyss…*",
+    "*The mine closes behind you…*",
+    "*The darkness swallows your silhouette…*",
+    "*The heat intensifies with each step…*",
+    "*You descend past the threshold…*",
+]
+
+# Phase 2 — "searching" animation text
+_SEARCH_TEXTS = [
+    "*The darkness responds to your presence…*",
+    "*The veins are being tested…*",
+    "*The stone trembles underfoot…*",
+    "*Your pickaxe strikes ancient rock…*",
+    "*Something stirs deep within the seam…*",
+    "*The ore whispers of its worth…*",
+    "*Shadows shift in the hellfire light…*",
+]
+
+# Walk away
+_WALKAWAY_DESCRIPTIONS = [
+    (
+        "*You turn your back on the mine.*\n\n"
+        "*The Kingdom remembers cowardice… and restraint.*"
+    ),
+    (
+        "*The gates remain open — but you do not enter.*\n\n"
+        "*Perhaps wisdom. Perhaps fear.*\n"
+        "*The mine will be here.*"
+    ),
+    (
+        "*You step back.*\n\n"
+        "*The mine watches you leave.*\n"
+        "*It always watches.*"
+    ),
+]
 
 
 class EconomyCog(commands.Cog):
@@ -47,46 +93,46 @@ class EconomyCog(commands.Cog):
         self.bot = bot
 
     @property
-    def db(self):              return self.bot.db
+    def db(self):            return self.bot.db
     @property
-    def economy(self):         return self.bot.economy_service
+    def economy(self):       return self.bot.economy_service
     @property
-    def cooldown(self):        return self.bot.cooldown_service
+    def cooldown(self):      return self.bot.cooldown_service
     @property
-    def audit(self):           return self.bot.audit_service
+    def audit(self):         return self.bot.audit_service
     @property
-    def treasury(self):        return self.bot.treasury_service
+    def treasury(self):      return self.bot.treasury_service
     @property
-    def rank_service(self):    return self.bot.rank_service
+    def rank_service(self):  return self.bot.rank_service
     @property
-    def cerberus(self):        return self.bot.cerberus_service
+    def cerberus(self):      return self.bot.cerberus_service
     @property
-    def badge_service(self):   return self.bot.badge_service
+    def badge_service(self): return self.bot.badge_service
 
     # ─── Badge announce helper ────────────────────────────────
 
-    async def _announce_badges(self, interaction: discord.Interaction, new_badges: list):
+    async def _announce_badges(self, inter: discord.Interaction, new_badges: list):
         if not new_badges:
             return
         lines = [f"{b.icon}  **{b.name}**  ·  *{b.description}*" for b in new_badges]
         embed = discord.Embed(title="🏅  Badge Unlocked", description="\n".join(lines), color=0xFFD700)
         embed.set_footer(text="Earned — not purchased.  ·  Kingdom Treasury")
-        await interaction.followup.send(embed=embed)
+        await inter.followup.send(embed=embed)
 
-    # ─── Cerberus follow-up helper ────────────────────────────
+    # ─── Cerberus helper ──────────────────────────────────────
 
-    async def _run_cerberus(self, interaction: discord.Interaction, guild_id: str, discord_id: str):
+    async def _run_cerberus(self, inter: discord.Interaction, guild_id: str, discord_id: str):
         audit = await self.cerberus.check_and_run_audit(guild_id, discord_id)
         if audit and audit["triggered"]:
             outcome = audit["outcome"]
             if outcome == "penalized":
-                audit_embed = EmbedFactory.cerberus_penalty(audit["penalty"], audit["penalty_pct"], audit["risk_delta"])
+                embed = EmbedFactory.cerberus_penalty(audit["penalty"], audit["penalty_pct"], audit["risk_delta"])
             elif outcome == "immune":
-                audit_embed = EmbedFactory.cerberus_immune()
+                embed = EmbedFactory.cerberus_immune()
             else:
                 await self.badge_service.grant_badge(guild_id, discord_id, "cerberus_guard")
-                audit_embed = EmbedFactory.cerberus_cleared(audit["risk_delta"])
-            await interaction.followup.send(embed=audit_embed)
+                embed = EmbedFactory.cerberus_cleared(audit["risk_delta"])
+            await inter.followup.send(embed=embed)
 
     # ─── /grind ───────────────────────────────────────────────
 
@@ -98,61 +144,95 @@ class EconomyCog(commands.Cog):
         discord_id = str(interaction.user.id)
         username   = interaction.user.display_name
 
-        # ── Cooldown gate ──────────────────────────────────────
+        # ── Cooldown gate (checked before entry screen) ───────
         ready, remaining = await self.cooldown.check_cooldown(guild_id, discord_id, "grind")
         if not ready:
             embed = EmbedFactory.cooldown_error("grind", self.cooldown.format_remaining(remaining))
             await interaction.followup.send(embed=embed, ephemeral=True)
             return
 
-        await self.cooldown.set_cooldown(guild_id, discord_id, "grind")
+        # ── Build entry screen ────────────────────────────────
+        view = MineEntryView(owner_id=interaction.user.id)
 
-        # ── Compute result immediately ─────────────────────────
-        try:
-            result = await self.economy.grind(guild_id, discord_id, username)
-        except Exception as e:
-            await interaction.followup.send(embed=EmbedFactory.error(str(e)), ephemeral=True)
-            return
-
-        # ── Phase 1 — ENTRY ───────────────────────────────────
         entry_embed = discord.Embed(
             title="⛏  Infernal Mines",
-            description=_random.choice(MINE_ENTRY_TEXTS),
+            description=_random.choice(_MINE_DESCRIPTIONS),
             color=ENTRY_COLOR,
         )
         entry_embed.set_image(url="attachment://mine_entry.png")
-        entry_embed.set_footer(text="Kingdom Treasury  ·  Kingdom of Hell")
+        entry_embed.set_footer(text="Choose wisely.  ·  Kingdom Treasury  ·  Kingdom of Hell")
 
         entry_path = os.path.join(_ASSETS, "mine_entry.png")
         entry_file = discord.File(entry_path, filename="mine_entry.png")
-        msg = await interaction.followup.send(embed=entry_embed, file=entry_file)
+        msg = await interaction.followup.send(embed=entry_embed, file=entry_file, view=view)
+        view.message = msg
 
-        # ── Phase 2 — SEARCH ──────────────────────────────────
-        await asyncio.sleep(2.0)
+        # ── Enter callback ────────────────────────────────────
 
-        search_embed = discord.Embed(
-            title="⛏  Infernal Mines",
-            description=_random.choice(MINE_SEARCH_TEXTS),
-            color=SEARCH_COLOR,
-        )
-        # Preserve the uploaded image URL from the first message
-        if msg.attachments:
-            search_embed.set_image(url=msg.attachments[0].url)
-        search_embed.set_footer(text="Kingdom Treasury  ·  Kingdom of Hell")
-        await msg.edit(embed=search_embed)
+        async def on_enter(inter: discord.Interaction):
+            # Cooldown is set NOW — the commitment is made
+            await self.cooldown.set_cooldown(guild_id, discord_id, "grind")
 
-        # ── Phase 3 — RESULT REVEAL ───────────────────────────
-        await asyncio.sleep(1.5)
+            # Compute result before animation begins
+            try:
+                result = await self.economy.grind(guild_id, discord_id, username)
+            except Exception as e:
+                await inter.response.edit_message(
+                    embed=EmbedFactory.error(str(e)), view=None, attachments=[]
+                )
+                return
 
-        result_embed = EmbedFactory.grind_result(result)
-        await msg.edit(embed=result_embed, attachments=[])
+            # ── Phase 1: entering ─────────────────────────────
+            p1 = discord.Embed(
+                title="⛏  Infernal Mines",
+                description=_random.choice(_ENTER_TEXTS),
+                color=ENTRY_COLOR,
+            )
+            # Preserve the uploaded image via its CDN URL
+            if msg.attachments:
+                p1.set_image(url=msg.attachments[0].url)
+            p1.set_footer(text="Kingdom Treasury  ·  Kingdom of Hell")
+            await inter.response.edit_message(embed=p1, view=None)
 
-        # ── Post-result: badges + audit ────────────────────────
-        if result.get("outcome_label") == "jackpot":
-            await self.badge_service.grant_badge(guild_id, discord_id, "high_roller")
-        new_badges = await self.badge_service.check_and_award(guild_id, discord_id)
-        await self._announce_badges(interaction, new_badges)
-        await self._run_cerberus(interaction, guild_id, discord_id)
+            # ── Phase 2: searching ────────────────────────────
+            await asyncio.sleep(2.0)
+            p2 = discord.Embed(
+                title="⛏  Infernal Mines",
+                description=_random.choice(_SEARCH_TEXTS),
+                color=SEARCH_COLOR,
+            )
+            if msg.attachments:
+                p2.set_image(url=msg.attachments[0].url)
+            p2.set_footer(text="Kingdom Treasury  ·  Kingdom of Hell")
+            await inter.message.edit(embed=p2)
+
+            # ── Phase 3: result reveal ────────────────────────
+            await asyncio.sleep(1.5)
+            result_embed = EmbedFactory.grind_result(result)
+            await inter.message.edit(embed=result_embed, attachments=[])
+
+            # ── Post-result: badges + audit ───────────────────
+            if result.get("outcome_label") == "jackpot":
+                await self.badge_service.grant_badge(guild_id, discord_id, "high_roller")
+            new_badges = await self.badge_service.check_and_award(guild_id, discord_id)
+            await self._announce_badges(inter, new_badges)
+            await self._run_cerberus(inter, guild_id, discord_id)
+
+        # ── Walk away callback ────────────────────────────────
+
+        async def on_walk_away(inter: discord.Interaction):
+            walk_embed = discord.Embed(
+                title="⛏  Infernal Mines",
+                description=_random.choice(_WALKAWAY_DESCRIPTIONS),
+                color=WALK_COLOR,
+            )
+            walk_embed.set_footer(
+                text="No coins lost. None gained.  ·  Kingdom Treasury  ·  Kingdom of Hell"
+            )
+            await inter.response.edit_message(embed=walk_embed, view=None, attachments=[])
+
+        view.set_enter_callback(on_enter)
+        view.set_walk_callback(on_walk_away)
 
     # ─── /tribute ─────────────────────────────────────────────
 
@@ -179,7 +259,6 @@ class EconomyCog(commands.Cog):
             return
 
         await interaction.followup.send(embed=EmbedFactory.tribute_result(result))
-
         await self.db.increment_tribute_count(guild_id, discord_id)
         new_badges = await self.badge_service.check_and_award(guild_id, discord_id)
         await self._announce_badges(interaction, new_badges)
