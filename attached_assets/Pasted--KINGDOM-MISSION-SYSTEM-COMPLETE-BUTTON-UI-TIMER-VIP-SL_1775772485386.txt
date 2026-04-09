@@ -1,0 +1,305 @@
+━━━━━━━━━━━━━━━━━━━
+📜 KINGDOM MISSION SYSTEM — COMPLETE (BUTTON UI + TIMER + VIP + SLOTS + PAID ENTRY)
+━━━━━━━━━━━━━━━━━━━
+
+You are a senior backend engineer and Discord systems architect.
+
+Build a full premium mission system for the Kingdom Treasury bot.
+
+━━━━━━━━━━━━━━━━━━━
+🧠 CORE IDEA
+━━━━━━━━━━━━━━━━━━━
+
+Admins create missions.
+
+Missions are posted automatically in a fixed channel.
+
+Users interact ONLY through buttons.
+
+Missions can include:
+- time limits (expiration)
+- participant limits (slots)
+- rank restrictions (VIP)
+- paid entry (DC cost)
+
+Admins validate completion.
+
+Users are paid automatically from Treasury.
+
+━━━━━━━━━━━━━━━━━━━
+📡 MISSION CHANNEL
+━━━━━━━━━━━━━━━━━━━
+
+All missions must be posted in:
+
+#📋┃missions  
+channel_id = 1488258105216209016
+
+━━━━━━━━━━━━━━━━━━━
+⚙️ COMMANDS
+━━━━━━━━━━━━━━━━━━━
+
+ADMIN ONLY:
+
+/mission create 
+  title:<text> 
+  reward:<DC> 
+  duration:<time> 
+  max_participants:<number_optional> 
+  required_rank:<rank_optional> 
+  entry_cost:<DC_optional>
+
+/mission complete user:<@user> id:<mission_id>
+/mission delete id:<mission_id>
+/mission list
+
+USERS:
+
+No slash commands.
+Users interact only via buttons.
+
+━━━━━━━━━━━━━━━━━━━
+⏱️ TIMER / EXPIRATION
+━━━━━━━━━━━━━━━━━━━
+
+Support durations:
+- 10m, 1h, 24h, 3d
+
+Store:
+expires_at
+
+Rules:
+- expired missions cannot be accepted
+- expired missions cannot be completed
+- buttons must be disabled after expiration
+
+When expired:
+- update message:
+"This mission has expired."
+
+━━━━━━━━━━━━━━━━━━━
+👥 SLOTS SYSTEM (LIMITED MISSIONS)
+━━━━━━━━━━━━━━━━━━━
+
+If max_participants is defined:
+
+- track accepted users
+- once limit reached:
+  → block new accept
+  → message:
+  "This mission is no longer available."
+
+━━━━━━━━━━━━━━━━━━━
+👑 VIP SYSTEM (RANK RESTRICTION)
+━━━━━━━━━━━━━━━━━━━
+
+If required_rank is defined:
+
+On Accept:
+- check user rank
+- if user rank < required_rank:
+  → deny
+  → message:
+  "You are not worthy of this task."
+
+━━━━━━━━━━━━━━━━━━━
+💰 PAID ENTRY SYSTEM
+━━━━━━━━━━━━━━━━━━━
+
+If entry_cost is defined (>0):
+
+On Accept:
+- check wallet ≥ entry_cost
+- subtract DC from user wallet (REAL DB)
+- add DC to Treasury (REAL DB)
+- log transaction
+
+If insufficient funds:
+→ deny
+
+━━━━━━━━━━━━━━━━━━━
+📦 MISSION CREATION
+━━━━━━━━━━━━━━━━━━━
+
+On /mission create:
+
+- generate mission_id
+- store all parameters
+- store expires_at
+- store max_participants
+- store required_rank
+- store entry_cost
+- send mission post
+
+━━━━━━━━━━━━━━━━━━━
+🎨 MISSION POST UI
+━━━━━━━━━━━━━━━━━━━
+
+Each mission post must show:
+
+- Title
+- Reward
+- Mission ID
+- Remaining time
+- Slots (if limited)
+- Required rank (if VIP)
+- Entry cost (if paid)
+
+Example:
+
+"Reward: 50,000 DC"
+"Entry Cost: 5,000 DC"
+"Slots: 2/3"
+"Required Rank: Knight"
+"Expires in: 2h 10m"
+
+Buttons:
+[Accept Mission]
+[Decline Mission]
+
+━━━━━━━━━━━━━━━━━━━
+🔘 BUTTON LOGIC
+━━━━━━━━━━━━━━━━━━━
+
+On Accept:
+
+Check in order:
+
+1. mission exists
+2. not expired
+3. slots available
+4. rank requirement satisfied
+5. user not already accepted
+6. if entry_cost:
+   - verify funds
+   - deduct
+   - transfer to Treasury
+
+If all pass:
+→ register user
+
+If any fail:
+→ deny with appropriate message
+
+━━━━━━━━━━━━━━━━━━━
+👑 ADMIN VALIDATION
+━━━━━━━━━━━━━━━━━━━
+
+/mission complete user:<@user> id:<mission_id>
+
+Must:
+
+- verify mission exists
+- verify mission active
+- verify not expired
+- verify user accepted mission
+- mark completed
+- trigger payment
+
+━━━━━━━━━━━━━━━━━━━
+💰 REWARD PAYMENT
+━━━━━━━━━━━━━━━━━━━
+
+On completion:
+
+- remove DC from Treasury (REAL)
+- add DC to user wallet (REAL)
+- commit DB changes
+
+If Treasury insufficient:
+→ reject
+
+━━━━━━━━━━━━━━━━━━━
+📦 LOGGING
+━━━━━━━━━━━━━━━━━━━
+
+For BOTH entry and reward:
+
+- mission_id
+- user_id
+- amount
+- wallet_before / after
+- treasury_before / after
+- timestamp
+- reason:
+  - mission_entry_fee
+  - mission_reward
+
+━━━━━━━━━━━━━━━━━━━
+⚡ AUTOCOMPLETE (ADMIN UX)
+━━━━━━━━━━━━━━━━━━━
+
+/mission complete id:
+
+Must show ACTIVE missions only.
+
+Format:
+001 — Invite 3 members  
+002 — VIP Duel  
+
+━━━━━━━━━━━━━━━━━━━
+📋 /MISSION LIST (ADMIN)
+━━━━━━━━━━━━━━━━━━━
+
+Shows:
+
+- all missions
+- status
+- expiration
+- slots
+- VIP requirement
+- entry cost
+
+━━━━━━━━━━━━━━━━━━━
+🗃️ DATABASE STRUCTURE
+━━━━━━━━━━━━━━━━━━━
+
+TABLE: missions
+- id
+- guild_id
+- title
+- reward
+- expires_at
+- max_participants
+- required_rank
+- entry_cost
+- status
+- message_id
+- channel_id
+- created_at
+
+TABLE: mission_participants
+- mission_id
+- user_id
+- status (accepted / completed)
+- accepted_at
+- completed_at
+
+━━━━━━━━━━━━━━━━━━━
+🔒 RULES
+━━━━━━━━━━━━━━━━━━━
+
+- no duplicate acceptance
+- no acceptance after expiration
+- no completion if expired
+- no payment without validation
+- all DC movements must be REAL
+- no fake economy
+
+━━━━━━━━━━━━━━━━━━━
+🎯 FINAL GOAL
+━━━━━━━━━━━━━━━━━━━
+
+Build a mission system that is:
+
+- dynamic (timers)
+- competitive (slots)
+- exclusive (VIP)
+- risky (paid entry)
+- rewarding (real DC)
+
+The Kingdom does not give freely.
+
+It tests.
+It selects.
+It rewards.

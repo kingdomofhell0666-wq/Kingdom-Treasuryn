@@ -14,6 +14,7 @@ from .services import (
 from .services.config_service import ConfigService
 from .services.guild_sync_service import GuildSyncService
 from .services.cerberus_aggression import CerberusAggression
+from .services.mission_service import MissionService
 
 logger = logging.getLogger("kingdom_treasury")
 
@@ -41,6 +42,7 @@ class KingdomTreasuryBot(commands.Bot):
         self.blackmarket_service             = None
         self.investment_service              = None
         self.cosmetic_service                = None
+        self.mission_service                 = None
 
     async def setup_hook(self):
         await self.db.connect()
@@ -73,6 +75,7 @@ class KingdomTreasuryBot(commands.Bot):
         self.blackmarket_service = BlackMarketService(self.db)
         self.investment_service  = InvestmentService(self.db)
         self.cosmetic_service    = CosmeticService(self.db)
+        self.mission_service     = MissionService(self.db)
 
         # ── Cogs ─────────────────────────────────────────────────────────────
         from .cogs.economy     import EconomyCog
@@ -82,6 +85,7 @@ class KingdomTreasuryBot(commands.Bot):
         from .cogs.cosmetics   import CosmeticsCog
         from .cogs.admin       import AdminCog
         from .cogs.leaderboard import LeaderboardCog
+        from .cogs.missions    import MissionsCog
 
         await self.add_cog(EconomyCog(self))
         await self.add_cog(ProfileCog(self))
@@ -90,6 +94,7 @@ class KingdomTreasuryBot(commands.Bot):
         await self.add_cog(CosmeticsCog(self))
         await self.add_cog(AdminCog(self))
         await self.add_cog(LeaderboardCog(self))
+        await self.add_cog(MissionsCog(self))
 
         await self.tree.sync()
         logger.info("Command tree synchronized.")

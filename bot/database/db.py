@@ -157,6 +157,32 @@ class Database:
                 rank         TEXT NOT NULL,
                 ascended_at  TEXT NOT NULL DEFAULT (datetime('now'))
             );
+
+            CREATE TABLE IF NOT EXISTS missions (
+                id               INTEGER PRIMARY KEY AUTOINCREMENT,
+                guild_id         TEXT NOT NULL,
+                title            TEXT NOT NULL,
+                reward           INTEGER NOT NULL,
+                expires_at       TEXT,
+                max_participants INTEGER,
+                required_rank    TEXT,
+                entry_cost       INTEGER NOT NULL DEFAULT 0,
+                status           TEXT NOT NULL DEFAULT 'active',
+                message_id       TEXT,
+                channel_id       TEXT NOT NULL DEFAULT '1488258105216209016',
+                created_at       TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+
+            CREATE TABLE IF NOT EXISTS mission_participants (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                mission_id   INTEGER NOT NULL,
+                guild_id     TEXT NOT NULL,
+                discord_id   TEXT NOT NULL,
+                status       TEXT NOT NULL DEFAULT 'accepted',
+                accepted_at  TEXT NOT NULL DEFAULT (datetime('now')),
+                completed_at TEXT,
+                UNIQUE(mission_id, discord_id)
+            );
         """)
         await self._db.commit()
 
@@ -164,7 +190,10 @@ class Database:
 
     async def reset_guild_data(self, guild_id: str):
         """Hard-delete ALL economy data for a specific guild."""
-        tables = ["users", "transactions", "treasury", "cooldowns", "investments", "user_perks", "ascension_history"]
+        tables = [
+            "users", "transactions", "treasury", "cooldowns", "investments",
+            "user_perks", "ascension_history", "missions", "mission_participants",
+        ]
         for tbl in tables:
             await self._db.execute(f"DELETE FROM {tbl} WHERE guild_id = ?", (guild_id,))
         await self._db.commit()
@@ -172,7 +201,10 @@ class Database:
 
     async def reset_all_data(self):
         """Hard-delete ALL economy data across every guild."""
-        tables = ["users", "transactions", "treasury", "cooldowns", "investments", "user_perks", "ascension_history"]
+        tables = [
+            "users", "transactions", "treasury", "cooldowns", "investments",
+            "user_perks", "ascension_history", "missions", "mission_participants",
+        ]
         for tbl in tables:
             await self._db.execute(f"DELETE FROM {tbl}")
         await self._db.commit()
@@ -629,3 +661,102 @@ class Database:
                 return datetime.fromisoformat(row["ascended_at"]).replace(tzinfo=timezone.utc)
             except Exception:
                 return None
+
+    # ─── Missions ─────────────────────────────────────────────────────────────
+
+    async def create_mission(
+        self,
+        guild_id:        str,
+        title:           str,
+        reward:          int,
+        expires_at:      Optional[str],
+        max_participants: Optional[int],
+        required_rank:   Optional[str],
+        entry_cost:      int,
+        channel_id:      str = "1488258105216209016",
+    ) -> dict:
+        cur = await self._db.execute(
+            """INSERT INTO missions
+               (guild_id, title, reward, expires_at, max_participants, required_rank, entry_cost, channel_id)
+               VALUES (?,?,?,?,?,?,?,?)""",
+            (guild_id, title, reward, expires_at, max_participants, required_rank, entry_cost, channel_id),
+        )
+        await self._db.commit()
+        return await self.get_mission(cur.lastrowid)
+
+    async def get_mission(self, mission_id: int) -> Optional[dict]:
+        async with self._db.execute(
+            "SELECT * FROM missions WHERE id = ?", (mission_id,)
+        ) as cur:
+            row = await cur.fetchone()
+            return dict(row) if row else None
+
+    async def get_active_missions(self, guild_id: str) -> List[dict]:
+        async with self._db.execute(
+            "SELECT * FROM missions WHERE guild_id = ? AND status = 'active' ORDER BY created_at DESC",
+            (guild_id,),
+        ) as cur:
+            rows = await cur.fetchall()
+            return [dict(r) for r in rows]
+
+    async def get_all_missions(self, guild_id: str) -> List[dict]:
+        async with self._db.execute(
+            "SELECT * FROM missions WHERE guild_id = ? ORDER BY created_at DESC",
+            (guild_id,),
+        ) as cur:
+            rows = await cur.fetchall()
+            return [dict(r) for r in rows]
+
+    async def set_mission_message(self, mission_id: int, message_id: str):
+        await self._db.execute(
+            "UPDATE missions SET message_id = ? WHERE id = ?", (message_id, mission_id)
+        )
+        await self._db.commit()
+
+    async def set_mission_status(self, mission_id: int, status: str):
+        await self._db.execute(
+            "UPDATE missions SET status = ? WHERE id = ?", (status, mission_id)
+        )
+        await self._db.commit()
+
+    async def get_mission_participant(self, mission_id: int, discord_id: str) -> Optional[dict]:
+        async with self._db.execute(
+            "SELECT * FROM mission_participants WHERE mission_id = ? AND discord_id = ?",
+            (mission_id, discord_id),
+        ) as cur:
+            row = await cur.fetchone()
+            return dict(row) if row else None
+
+    async def get_mission_participants(self, mission_id: int) -> List[dict]:
+        async with self._db.execute(
+            "SELECT * FROM mission_participants WHERE mission_id = ? ORDER BY accepted_at ASC",
+            (mission_id,),
+        ) as cur:
+            rows = await cur.fetchall()
+            return [dict(r) for r in rows]
+
+    async def count_mission_participants(self, mission_id: int) -> int:
+        async with self._db.execute(
+            "SELECT COUNT(*) AS cnt FROM mission_participants WHERE mission_id = ?",
+            (mission_id,),
+        ) as cur:
+            row = await cur.fetchone()
+            return row["cnt"] if row else 0
+
+    async def add_mission_participant(self, mission_id: int, guild_id: str, discord_id: str):
+        await self._db.execute(
+            """INSERT OR IGNORE INTO mission_participants (mission_id, guild_id, discord_id)
+               VALUES (?,?,?)""",
+            (mission_id, guild_id, discord_id),
+        )
+        await self._db.commit()
+
+    async def complete_mission_participant(self, mission_id: int, discord_id: str):
+        now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+        await self._db.execute(
+            """UPDATE mission_participants
+               SET status = 'completed', completed_at = ?
+               WHERE mission_id = ? AND discord_id = ?""",
+            (now_str, mission_id, discord_id),
+        )
+        await self._db.commit()
