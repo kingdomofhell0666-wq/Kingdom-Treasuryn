@@ -1,0 +1,300 @@
+━━━━━━━━━━━━━━━━━━━
+🛠️ SYSTEM CRITICAL FIX — LEADERBOARD + ASCENSION ANNOUNCEMENTS (FULL TECH SPEC)
+━━━━━━━━━━━━━━━━━━━
+
+You are a senior full-stack engineer.
+
+You must fix and implement the leaderboard + ascension announcements system with production-grade architecture.
+
+This includes:
+- fixing 429 rate limit issues
+- correcting frontend fetch logic
+- implementing proper backend APIs
+- ensuring correct Discord bot behavior
+- ensuring strict per-guild configuration
+
+━━━━━━━━━━━━━━━━━━━
+🚨 1. ROOT ISSUE — 429 TOO MANY REQUESTS
+━━━━━━━━━━━━━━━━━━━
+
+The following endpoints are failing:
+
+- GET /api/guilds/{guild_id}/leaderboard
+- GET /api/guilds/{guild_id}/ascension-announcements
+
+Error:
+429 Too Many Requests
+
+━━━━━━━━━━━━━━━━━━━
+🔍 REQUIRED DEBUG ANALYSIS
+━━━━━━━━━━━━━━━━━━━
+
+You MUST identify the exact cause:
+
+Check frontend:
+- repeated useEffect calls
+- missing dependency arrays
+- state-triggered infinite re-renders
+- retry loops without backoff
+- multiple components fetching same endpoint
+
+Check backend:
+- endpoints calling Discord API repeatedly
+- no caching layer
+- no request throttling
+- duplicate queries per request
+
+Check network:
+- number of requests per page load
+- repeated identical requests within milliseconds
+
+━━━━━━━━━━━━━━━━━━━
+🛠️ 2. FIX — FRONTEND REQUEST ARCHITECTURE
+━━━━━━━━━━━━━━━━━━━
+
+STRICT RULES:
+
+1. Each page must fetch data ONLY ONCE on mount:
+- leaderboard page
+- ascension announcements page
+
+2. useEffect must:
+- have correct dependency array []
+- not depend on state updated inside itself
+
+3. NO polling unless explicitly needed
+
+4. NO immediate retry loops
+
+5. If request fails:
+- set error state
+- STOP further requests
+
+6. Implement request deduplication:
+- do not allow same request to run multiple times in parallel
+
+7. Optional (recommended):
+- use SWR or React Query with:
+  - staleTime
+  - cache
+  - dedupingInterval
+
+━━━━━━━━━━━━━━━━━━━
+🧠 3. BACKEND — RATE LIMIT + CACHE LAYER
+━━━━━━━━━━━━━━━━━━━
+
+Implement caching for ALL guild config endpoints.
+
+Example:
+
+Cache key:
+guild:{guild_id}:leaderboard
+guild:{guild_id}:ascension
+
+Cache TTL:
+30–60 seconds minimum
+
+Behavior:
+- if cached → return immediately
+- if not cached → query DB → store → return
+
+DO NOT:
+- call Discord API inside these endpoints
+- these endpoints must be DB-only
+
+━━━━━━━━━━━━━━━━━━━
+🗃️ 4. DATABASE STRUCTURE (FINAL)
+━━━━━━━━━━━━━━━━━━━
+
+TABLE: leaderboard_settings
+- id (PK)
+- guild_id (FK, indexed)
+- enabled (boolean default false)
+- leaderboard_type (text default 'kingdom_rank_top_10')
+- post_frequency (text: daily / weekly / monthly)
+- post_channel_id (text nullable)
+- post_hour (int)
+- post_minute (int)
+- post_day_of_week (int nullable)
+- post_day_of_month (int nullable)
+- timezone (text default 'UTC')
+- last_posted_at (timestamp nullable)
+
+TABLE: ascension_announcement_settings
+- id (PK)
+- guild_id (FK, indexed)
+- enabled (boolean default false)
+- channel_id (text nullable)
+- message_template (text nullable)
+
+TABLE: user_economy
+- user_id
+- guild_id
+- balance
+- rank
+- last_ascension_at (timestamp)
+
+━━━━━━━━━━━━━━━━━━━
+📡 5. API ENDPOINTS (STRICT)
+━━━━━━━━━━━━━━━━━━━
+
+GET /api/guilds/{guild_id}/leaderboard
+→ return config OR default
+
+POST /api/guilds/{guild_id}/leaderboard
+→ update config
+
+GET /api/guilds/{guild_id}/ascension-announcements
+→ return config OR default
+
+POST /api/guilds/{guild_id}/ascension-announcements
+→ update config
+
+IMPORTANT:
+- ALWAYS return valid JSON
+- NEVER return empty response
+- NEVER trigger retry loop
+
+━━━━━━━━━━━━━━━━━━━
+🧱 6. DEFAULT FALLBACK LOGIC (MANDATORY)
+━━━━━━━━━━━━━━━━━━━
+
+If no DB row exists:
+
+Leaderboard:
+{
+  enabled: false,
+  leaderboard_type: "kingdom_rank_top_10",
+  post_frequency: "weekly",
+  post_channel_id: null,
+  post_hour: 20,
+  post_minute: 0,
+  post_day_of_week: 0,
+  post_day_of_month: 1,
+  timezone: "UTC"
+}
+
+Ascension:
+{
+  enabled: false,
+  channel_id: null,
+  message_template: "{user} has ascended to {rank}."
+}
+
+━━━━━━━━━━━━━━━━━━━
+🏆 7. LEADERBOARD — CORE LOGIC
+━━━━━━━━━━━━━━━━━━━
+
+Leaderboard must use EXACT SAME logic as /identity.
+
+Query:
+
+SELECT user_id, balance, rank
+FROM user_economy
+WHERE guild_id = ?
+ORDER BY balance DESC
+LIMIT 10
+
+Rules:
+- ONLY top 10 users
+- based on balance
+- ranking must match /identity ranking
+
+NO alternative leaderboards allowed.
+
+━━━━━━━━━━━━━━━━━━━
+📅 8. LEADERBOARD — SCHEDULER
+━━━━━━━━━━━━━━━━━━━
+
+Use scheduler (cron or async loop):
+
+- read leaderboard_settings per guild
+- check timezone-adjusted current time
+- match schedule
+- prevent duplicate posting (use last_posted_at)
+
+On trigger:
+- generate leaderboard
+- send to post_channel_id ONLY
+
+━━━━━━━━━━━━━━━━━━━
+📢 9. ASCENSION ANNOUNCEMENTS — BOT LOGIC
+━━━━━━━━━━━━━━━━━━━
+
+On /ascend success:
+
+1. update user rank
+2. fetch ascension_announcement_settings
+3. if enabled AND channel_id exists:
+   → send message
+
+Message:
+- replace {user} and {rank}
+- mention user
+
+Example:
+@user has ascended to Archdemon.
+
+━━━━━━━━━━━━━━━━━━━
+🔒 10. CHANNEL CONTROL (STRICT)
+━━━━━━━━━━━━━━━━━━━
+
+Both systems MUST:
+
+- use ONLY configured channel_id
+- NEVER fallback to random/default channel
+- NEVER broadcast globally
+
+If channel_id is null:
+→ DO NOTHING
+
+If channel invalid:
+→ log error, do not crash
+
+━━━━━━━━━━━━━━━━━━━
+🎨 11. FRONTEND UI REQUIREMENTS
+━━━━━━━━━━━━━━━━━━━
+
+Leaderboard page:
+- toggle enable
+- channel selector
+- frequency dropdown
+- time picker
+- timezone display
+
+Ascension page:
+- toggle enable
+- channel selector
+- message template input
+
+Both:
+- must load instantly with default or DB data
+- must NOT stay in loading loop
+- must show error state if API fails
+
+━━━━━━━━━━━━━━━━━━━
+🎯 FINAL OBJECTIVE
+━━━━━━━━━━━━━━━━━━━
+
+Fix 429 globally AND deliver:
+
+LEADERBOARD:
+- Top 10 Kingdom Rank (balance-based)
+- synced with /identity
+- configurable channel
+- scheduled posting
+- no duplicates
+- no spam
+
+ASCENSION:
+- auto message on /ascend
+- configurable channel
+- immersive message
+- per guild
+
+SYSTEM:
+- no infinite requests
+- no retry spam
+- no 429
+- proper caching
+- production ready

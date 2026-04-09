@@ -15,6 +15,7 @@ import {
   fetchBotGuild,
   guildIconUrl,
   hasAdminPermission,
+  assertGuildAdmin,
 } from "../lib/discord";
 import { requireAuth } from "../lib/session";
 import { db, guildConfigsTable } from "@workspace/db";
@@ -24,23 +25,6 @@ const BOT_BASE = "https://discord.com/api/v10";
 const botToken = () => process.env["DISCORD_BOT_TOKEN"] ?? "";
 
 const router = Router();
-
-// ── Helper: assert user is admin of a guild ──────────────────────────────────
-
-async function assertGuildAdmin(req: import("express").Request, res: import("express").Response, guildId: string): Promise<boolean> {
-  const accessToken = req.session.accessToken!;
-  const userGuilds = await fetchUserGuilds(accessToken);
-  const guild = userGuilds.find((g) => g.id === guildId);
-  if (!guild) {
-    res.status(403).json({ error: "You are not a member of this guild." });
-    return false;
-  }
-  if (!hasAdminPermission(guild.permissions, guild.owner)) {
-    res.status(403).json({ error: "Administrator permission required." });
-    return false;
-  }
-  return true;
-}
 
 // ── GET /guilds ───────────────────────────────────────────────────────────────
 
@@ -265,39 +249,6 @@ router.get("/guilds/:guildId/stats", requireAuth, async (req, res) => {
   } catch (err) {
     req.log.error({ err }, "Failed to fetch guild stats");
     res.status(500).json({ error: "Failed to fetch stats." });
-  }
-});
-
-// ── GET /guilds/:guildId/bot-status ──────────────────────────────────────────
-
-const BOT_START_TIME = Date.now();
-
-router.get("/guilds/:guildId/bot-status", requireAuth, async (req, res) => {
-  const { guildId } = req.params;
-  const ok = await assertGuildAdmin(req, res, guildId);
-  if (!ok) return;
-
-  try {
-    const botGuild = await fetchBotGuild(guildId);
-    const uptimeSeconds = Math.floor((Date.now() - BOT_START_TIME) / 1000);
-
-    let guildCount = 0;
-    try {
-      const guildsRes = await axios.get(`${BOT_BASE}/users/@me/guilds`, {
-        headers: { Authorization: `Bot ${botToken()}` },
-      });
-      guildCount = (guildsRes.data as unknown[]).length;
-    } catch { /* ignore */ }
-
-    res.json({
-      online:         !!botGuild,
-      guildCount,
-      uptimeSeconds,
-      lastHeartbeat:  new Date().toISOString(),
-    });
-  } catch (err) {
-    req.log.error({ err }, "Failed to fetch bot status");
-    res.status(500).json({ error: "Failed to fetch bot status." });
   }
 });
 

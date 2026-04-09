@@ -50,34 +50,9 @@ import {
   rankCooldownSettingsTable,
 } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
-import {
-  fetchUserGuilds,
-  fetchBotGuildIds,
-  hasAdminPermission,
-} from "../lib/discord";
+import { assertGuildAdmin } from "../lib/discord";
 
 const router = Router();
-
-// ── Auth helper ───────────────────────────────────────────────────────────────
-
-async function assertGuildAdmin(
-  req: import("express").Request,
-  res: import("express").Response,
-  guildId: string
-): Promise<boolean> {
-  const accessToken = req.session.accessToken!;
-  const userGuilds  = await fetchUserGuilds(accessToken);
-  const guild       = userGuilds.find((g) => g.id === guildId);
-  if (!guild) {
-    res.status(403).json({ error: "You are not a member of this guild." });
-    return false;
-  }
-  if (!hasAdminPermission(guild.permissions, guild.owner)) {
-    res.status(403).json({ error: "Administrator permission required." });
-    return false;
-  }
-  return true;
-}
 
 // ═══════════════════════════════════════════════════════════════
 // COMMAND ROUTING
