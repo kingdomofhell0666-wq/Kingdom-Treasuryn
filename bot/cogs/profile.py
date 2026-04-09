@@ -9,6 +9,7 @@ from ..utils.embeds import EmbedFactory
 from ..utils.card_generator import generate_card, fetch_avatar
 from ..utils.result_cards import generate_wealth_card
 from ..utils.skins import get_skin
+from ..utils.identity_variant import resolve_identity_card_variant
 from ..ui import IdentityView
 
 
@@ -41,14 +42,12 @@ class ProfileCog(commands.Cog):
         skin           = get_skin(skin_id)
         equipped_title = user_data.get("equipped_title") or "Unmarked"
 
-        import json as _json
-        try:
-            badges = _json.loads(user_data.get("owned_badges") or "[]")
-        except Exception:
-            badges = []
+        public_rank = user_data.get("rank", "Forsaken")
+        member_role_ids = [str(r.id) for r in target.roles]
+        card_variant = resolve_identity_card_variant(member_role_ids, public_rank)
 
-        risk       = user_data.get("risk_score", 0)
-        taxes      = user_data.get("taxes_paid", 0)
+        risk  = user_data.get("risk_score", 0)
+        taxes = user_data.get("taxes_paid", 0)
         if risk >= 51:
             audit_state = "flagged"
         elif risk <= 20 and taxes > 0:
@@ -68,7 +67,7 @@ class ProfileCog(commands.Cog):
                 username=target.name,
                 display_name=target.display_name,
                 equipped_title=equipped_title,
-                rank=user_data.get("rank", "Forsaken"),
+                rank=public_rank,
                 balance=user_data.get("balance", 0),
                 kingdom_rank=kingdom_rank,
                 taxes_paid=user_data.get("taxes_paid", 0),
@@ -76,8 +75,8 @@ class ProfileCog(commands.Cog):
                 skin_id=skin_id,
                 avatar_bytes=avatar_bytes,
                 footer_flavor=skin.footer_flavor.strip('"'),
-                badges=badges,
                 audit_state=audit_state,
+                card_variant=card_variant,
             )
             card_file = discord.File(card_buf, filename="identity.png")
             embed     = discord.Embed(color=skin.color)

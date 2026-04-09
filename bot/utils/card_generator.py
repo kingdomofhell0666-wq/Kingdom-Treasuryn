@@ -1,13 +1,15 @@
 """
 Kingdom Treasury — Infernal Identity Card Generator
 900 × 1100 px  |  Vertical AAA Layout  |  Pillow
-Zones: Header · Identity · Wealth · Stats · Badges · Audit · Footer
+Zones: Header · Identity · Wealth · Stats · Audit · Footer
 """
 
 import io
 import math
 from typing import Optional, List, Tuple
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
+
+from .identity_variant import EffectiveCardVariant
 
 # ─── Asset paths ──────────────────────────────────────────────────────────────
 _CINZEL = "bot/assets/fonts/Cinzel.ttf"
@@ -33,10 +35,8 @@ WEALTH_Y  = 284
 DIV3      = 508
 STATS_Y   = 514
 DIV4      = 656
-BADGE_Y   = 662
-DIV5      = 832
-AUDIT_Y   = 838
-DIV6      = 1008
+AUDIT_Y   = 662     # audit zone starts immediately after stats
+DIV5      = 1008    # audit zone ends / footer divider
 FOOTER_Y  = 1014
 
 # ─── Skin themes ──────────────────────────────────────────────────────────────
@@ -96,18 +96,6 @@ THEMES = {
 def _t(skin_id: Optional[str]) -> dict:
     return THEMES.get(skin_id or "default", THEMES["default"])
 
-
-# ─── Badge registry ───────────────────────────────────────────────────────────
-BADGE_REGISTRY = {
-    "duel_champion":   ("Duel\nChampion",   "swords",  (205, 42, 42)),
-    "high_roller":     ("High\nRoller",     "coin",    (215, 172, 42)),
-    "mine_veteran":    ("Mine\nVeteran",    "pick",    (130, 90, 65)),
-    "treasury_patron": ("Treasury\nPatron", "shield",  (52, 132, 215)),
-    "abyss_loyalist":  ("Abyss\nLoyalist",  "eye",     (118, 42, 215)),
-    "branded_soul":    ("Branded\nSoul",    "flame",   (225, 68, 0)),
-    "cerberus_guard":  ("Cerberus\nGuard",  "paw",     (148, 148, 155)),
-    "void_walker":     ("Void\nWalker",     "star",    (38, 38, 78)),
-}
 
 # ─── Font helpers ─────────────────────────────────────────────────────────────
 
@@ -413,89 +401,6 @@ def _sig_cross(draw, cx, cy, r, col):
                  outline=(*col[:3], col[3] // 3), width=2)
 
 
-# ─── Badge icon drawing ───────────────────────────────────────────────────────
-
-def _draw_badge_icon(draw: ImageDraw.ImageDraw, cx: int, cy: int, symbol: str, col: tuple):
-    """Draw a small geometric icon centered at (cx, cy) in a ~36px bounding box."""
-    r = 18
-    c = (*col[:3], 220)
-    co = (*col[:3], 160)
-
-    if symbol == "swords":
-        for ang in [45, -45]:
-            rad = math.radians(ang)
-            x1 = cx - r * math.cos(rad)
-            y1 = cy + r * math.sin(rad)
-            x2 = cx + r * math.cos(rad)
-            y2 = cy - r * math.sin(rad)
-            draw.line([(x1, y1), (x2, y2)], fill=c, width=3)
-        draw.ellipse([(cx - 4, cy - 4), (cx + 4, cy + 4)], fill=c)
-
-    elif symbol == "coin":
-        draw.ellipse([(cx - r, cy - r), (cx + r, cy + r)], outline=c, width=2)
-        draw.ellipse([(cx - r + 4, cy - r + 4), (cx + r - 4, cy + r - 4)], outline=co, width=1)
-        sf = ImageFont.truetype(_DEJA_B, 18) if True else None
-        try:
-            sf = ImageFont.truetype(_DEJA_B, 18)
-            draw.text((cx - 6, cy - 11), "D", font=sf, fill=c)
-        except Exception:
-            pass
-
-    elif symbol == "pick":
-        # pickaxe: angled line with head
-        draw.line([(cx - r, cy + r - 2), (cx + r - 2, cy - r)], fill=c, width=3)
-        draw.polygon([(cx + r - 2, cy - r), (cx + r - 8, cy - r + 8),
-                      (cx + r + 6, cy - r - 4)], fill=c)
-
-    elif symbol == "shield":
-        pts = [
-            (cx, cy - r), (cx + r, cy - r // 2),
-            (cx + r, cy + 2), (cx, cy + r),
-            (cx - r, cy + 2), (cx - r, cy - r // 2),
-        ]
-        draw.polygon(pts, outline=c, width=2)
-        draw.line([(cx, cy - r + 4), (cx, cy + r - 6)], fill=co, width=1)
-        draw.line([(cx - r + 4, cy - 2), (cx + r - 4, cy - 2)], fill=co, width=1)
-
-    elif symbol == "eye":
-        # almond
-        pts_top = [(cx + r * math.cos(math.pi - math.pi * i / 8),
-                    cy - r * 0.45 * math.sin(math.pi * i / 8)) for i in range(9)]
-        pts_bot = [(cx + r * math.cos(math.pi * i / 8),
-                    cy + r * 0.45 * math.sin(math.pi * i / 8)) for i in range(9)]
-        draw.polygon(pts_top + pts_bot, outline=c, width=2)
-        draw.ellipse([(cx - 7, cy - 7), (cx + 7, cy + 7)], fill=c)
-
-    elif symbol == "flame":
-        pts = [
-            (cx, cy - r),
-            (cx + 10, cy - 6),
-            (cx + 8, cy + 4),
-            (cx + 14, cy - 2),
-            (cx + 6, cy + r),
-            (cx, cy + r - 4),
-            (cx - 6, cy + r),
-            (cx - 14, cy - 2),
-            (cx - 8, cy + 4),
-            (cx - 10, cy - 6),
-        ]
-        draw.polygon(pts, outline=c, width=2)
-        draw.ellipse([(cx - 5, cy + 4), (cx + 5, cy + 14)], fill=c)
-
-    elif symbol == "paw":
-        draw.ellipse([(cx - 9, cy), (cx + 9, cy + 16)], fill=c)
-        for ox, oy in [(-14, -4), (-6, -12), (6, -12), (14, -4)]:
-            draw.ellipse([(cx + ox - 5, cy + oy - 5), (cx + ox + 5, cy + oy + 5)], fill=c)
-
-    elif symbol == "star":
-        pts = []
-        for i in range(10):
-            ang = math.pi * i / 5 - math.pi / 2
-            rad = r if i % 2 == 0 else r * 0.42
-            pts.append((cx + rad * math.cos(ang), cy + rad * math.sin(ang)))
-        draw.polygon(pts, fill=c)
-
-
 # ─── Avatar ───────────────────────────────────────────────────────────────────
 
 def _paste_avatar(card: Image.Image, av_bytes: Optional[bytes], theme: dict):
@@ -578,13 +483,16 @@ def generate_card(
     skin_id: Optional[str],
     avatar_bytes: Optional[bytes],
     footer_flavor: str,
-    badges: Optional[List[str]] = None,
-    audit_state: str = "neutral",          # "flagged" | "cleared" | "neutral"
+    audit_state: str = "neutral",
+    card_variant: Optional[EffectiveCardVariant] = None,
 ) -> io.BytesIO:
 
-    t = _t(skin_id)
-    badges = badges or []
+    t    = _t(skin_id)
     tier = get_risk_tier(risk_score)
+
+    is_special   = bool(card_variant and card_variant.variant_type == "special")
+    display_role = card_variant.primary_display_role if card_variant else rank
+    economy_rank = card_variant.public_rank if card_variant else rank
 
     # ── Canvas ──────────────────────────────────────────────────────────────
     card = _gradient(W, H, t["bg1"], t["bg2"])
@@ -616,17 +524,29 @@ def generate_card(
     draw.text(((W - _tw(draw, htxt, hf)) // 2, 14), htxt,
               font=hf, fill=(*t["text2"][:3], 155))
 
-    # Kingdom Rank badge — top right (larger, dominant)
-    kr_str = f"#{kingdom_rank}"
-    krf = _font(36, bold=True, cinzel=True)
-    krw = _tw(draw, kr_str, krf)
-    _glow(card, (W - PAD - krw, 6), kr_str, krf,
-          (*t["gold"][:3], 252), t["glow"], blur=16, spread=4)
-    draw = ImageDraw.Draw(card)
-    krl = _font(9, cinzel=True)
-    krlw = _tw(draw, "KINGDOM RANK", krl)
-    draw.text((W - PAD - krlw, 44), "KINGDOM RANK",
-              font=krl, fill=(*t["text2"][:3], 140))
+    # Top-right badge — special role name OR kingdom rank #
+    if is_special:
+        role_upper = display_role.upper()
+        krf = _fit_font(draw, role_upper, 210, 28, 14, bold=True, cinzel=True)
+        krw = _tw(draw, role_upper, krf)
+        _glow(card, (W - PAD - krw, 6), role_upper, krf,
+              (*t["gold"][:3], 252), t["glow"], blur=16, spread=4)
+        draw = ImageDraw.Draw(card)
+        krl = _font(9, cinzel=True)
+        krlw = _tw(draw, "HIERARCHY ROLE", krl)
+        draw.text((W - PAD - krlw, 44), "HIERARCHY ROLE",
+                  font=krl, fill=(*t["text2"][:3], 140))
+    else:
+        kr_str = f"#{kingdom_rank}"
+        krf = _font(36, bold=True, cinzel=True)
+        krw = _tw(draw, kr_str, krf)
+        _glow(card, (W - PAD - krw, 6), kr_str, krf,
+              (*t["gold"][:3], 252), t["glow"], blur=16, spread=4)
+        draw = ImageDraw.Draw(card)
+        krl = _font(9, cinzel=True)
+        krlw = _tw(draw, "KINGDOM RANK", krl)
+        draw.text((W - PAD - krlw, 44), "KINGDOM RANK",
+                  font=krl, fill=(*t["text2"][:3], 140))
 
     _double_line(draw, DIV1, t)
 
@@ -648,14 +568,14 @@ def generate_card(
           t["text1"], t["glow"], blur=10, spread=3)
     draw = ImageDraw.Draw(card)
 
-    # Secondary line: Rank — Title
+    # Secondary line: Role — Title
     has_title = equipped_title and equipped_title.lower() not in ("unmarked", "")
     title_text = equipped_title if has_title else "Kingdom of Hell"
     rp_font = _font(19, bold=True)
     sec_font = _font(19)
     name_h = getattr(name_font, "size", 52)
     sec_y = name_y + name_h + 6
-    rank_part = f"{rank}  —  "
+    rank_part = f"{display_role}  —  "
     rpw = _tw(draw, rank_part, rp_font)
     _glow(card, (name_x, sec_y), rank_part, rp_font,
           (*t["gold"][:3], 236), t["glow"], blur=5, spread=1)
@@ -663,16 +583,22 @@ def generate_card(
     draw.text((name_x + rpw, sec_y), title_text,
               font=sec_font, fill=(*t["accent"][:3], 220))
 
-    # Tax bracket tag
-    RANK_TAX = {
-        "Forsaken": 0.12, "Condemned": 0.09, "Hellbound": 0.06,
-        "Archdemon": 0.03, "Duke": 0.01,
-    }
-    tax_rate = RANK_TAX.get(rank, 0.12)
-    tax_str = "TAX EXEMPT" if tax_rate == 0 else f"TAX BRACKET  {int(tax_rate * 100)}%"
-    tbf = _font(12)
-    draw.text((name_x, sec_y + 26), tax_str,
-              font=tbf, fill=(*t["text2"][:3], 158))
+    # Sub-label: hierarchy indicator (special roles) or tax bracket (public ranks)
+    if is_special:
+        hier_f = _font(12)
+        hier_str = "✦  INFERNAL  HIERARCHY  ROLE"
+        draw.text((name_x, sec_y + 26), hier_str,
+                  font=hier_f, fill=(*t["accent"][:3], 168))
+    else:
+        RANK_TAX = {
+            "Forsaken": 0.12, "Condemned": 0.09, "Hellbound": 0.06,
+            "Archdemon": 0.03, "Duke": 0.01,
+        }
+        tax_rate = RANK_TAX.get(economy_rank, 0.12)
+        tax_str = "TAX EXEMPT" if tax_rate == 0 else f"TAX BRACKET  {int(tax_rate * 100)}%"
+        tbf = _font(12)
+        draw.text((name_x, sec_y + 26), tax_str,
+                  font=tbf, fill=(*t["text2"][:3], 158))
 
     # Username (subtle)
     if username and username.lower() != dn.lower():
@@ -758,68 +684,12 @@ def generate_card(
     _double_line(draw, DIV4, t)
 
     # ────────────────────────────────────────────────────────────────────────
-    # ZONE 5 — BADGES
-    # ────────────────────────────────────────────────────────────────────────
-
-    badge_section_y = BADGE_Y
-    blbl_f = _font(11, cinzel=True)
-    blw = _tw(draw, "EARNED COMMENDATIONS", blbl_f)
-    draw.text(((W - blw) // 2, badge_section_y + 6), "EARNED COMMENDATIONS",
-              font=blbl_f, fill=(*t["text2"][:3], 160))
-
-    badge_icon_y = badge_section_y + 26
-
-    visible_badges = [b for b in badges if b in BADGE_REGISTRY][:6]
-
-    if visible_badges:
-        bsz = 58          # badge square size
-        gap = 18 if len(visible_badges) <= 5 else 12
-        total_bw = len(visible_badges) * bsz + (len(visible_badges) - 1) * gap
-        start_bx = (W - total_bw) // 2
-
-        for i, badge_id in enumerate(visible_badges):
-            label_str, symbol, badge_col = BADGE_REGISTRY[badge_id]
-            bx = start_bx + i * (bsz + gap)
-            by = badge_icon_y
-
-            # Badge background square
-            badge_bg = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-            bd = ImageDraw.Draw(badge_bg)
-            bd.rounded_rectangle(
-                [(bx, by), (bx + bsz, by + bsz)],
-                radius=10,
-                fill=(*badge_col[:3], 40),
-                outline=(*badge_col[:3], 130), width=1
-            )
-            card.alpha_composite(badge_bg)
-            draw = ImageDraw.Draw(card)
-
-            # Badge icon
-            _draw_badge_icon(draw, bx + bsz // 2, by + bsz // 2 - 1, symbol, badge_col)
-
-            # Badge label
-            name_lines = label_str.split("\n")
-            bf = _font(8)
-            for li, line in enumerate(name_lines):
-                lw_ = _tw(draw, line, bf)
-                draw.text((bx + (bsz - lw_) // 2, by + bsz + 4 + li * 11),
-                          line, font=bf, fill=(*badge_col[:3], 185))
-    else:
-        nob_f = _font(12)
-        nob = "No commendations on record."
-        nob_w = _tw(draw, nob, nob_f)
-        draw.text(((W - nob_w) // 2, badge_icon_y + 30), nob,
-                  font=nob_f, fill=(*t["text2"][:3], 110))
-
-    _double_line(draw, DIV5, t)
-
-    # ────────────────────────────────────────────────────────────────────────
-    # ZONE 6 — CERBERUS AUDIT STATE
+    # ZONE 5 — CERBERUS AUDIT STATE
     # ────────────────────────────────────────────────────────────────────────
 
     draw = ImageDraw.Draw(card)
     az = AUDIT_Y
-    az_h = DIV6 - az
+    az_h = DIV5 - az
 
     if audit_state == "flagged":
         # Red warning overlay
@@ -953,10 +823,10 @@ def generate_card(
         draw.text(((W - sk_w) // 2, az + 108), sk_str,
                   font=sk_f, fill=(*t["text2"][:3], 105))
 
-    _double_line(draw, DIV6, t)
+    _double_line(draw, DIV5, t)
 
     # ────────────────────────────────────────────────────────────────────────
-    # ZONE 7 — FOOTER
+    # ZONE 6 — FOOTER
     # ────────────────────────────────────────────────────────────────────────
 
     # Footer: show Cerberus warning if risk is elevated, else flavor text

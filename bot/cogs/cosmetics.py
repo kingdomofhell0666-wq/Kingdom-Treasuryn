@@ -1,6 +1,7 @@
 """
-CosmeticsCog — /market, /equip-skin, /equip-title, /badges
+CosmeticsCog — /market, /equip-skin, /equip-title
 Removed: /skins, /buy-skin, /titles, /buy-title (replaced by /market)
+Removed: /badges (badges no longer displayed)
 """
 from __future__ import annotations
 
@@ -11,12 +12,10 @@ from discord import app_commands
 from discord.ext import commands
 
 from ..services.cosmetic_service import CosmeticService
-from ..services.badge_service import BadgeService
 from ..utils.skins import (
     get_skin, get_all_skins, SKINS, TITLES_CATALOG,
     RARITY_COLORS as SKIN_RARITY_COLORS, DEFAULT_SKIN_ID,
 )
-from ..utils.badges import BADGES_CATALOG, RARITY_COLORS as BADGE_RARITY_COLORS
 from ..utils.formatting import format_dc
 from ..ui import MarketView, MarketItem
 
@@ -33,35 +32,6 @@ RARITY_EMBED_COLORS = {
     "Epic":      0x4B0082,   "Legendary": 0x8B6914,
     "Special":   0x8B0000,
 }
-
-
-# ── helpers ────────────────────────────────────────────────────────────────────
-
-def _badges_embed(owned_ids: list) -> discord.Embed:
-    owned_set = set(owned_ids)
-    embed = discord.Embed(
-        title="🏅  Kingdom Badges — Achievement Record",
-        description=(
-            "*Badges are earned through real actions in the Kingdom — never purchased.*\n"
-            "*They represent achievement, loyalty, status, and history.*"
-        ),
-        color=DARK_RED,
-    )
-    embed.add_field(name="\u200b", value=SEP, inline=False)
-    for badge_id, badge in BADGES_CATALOG.items():
-        dot    = BADGE_RARITY_COLORS.get(badge.rarity, "⬜")
-        earned = badge_id in owned_set
-        status = "✅ **EARNED**" if earned else f"🔒 *{badge.unlock_label}*"
-        embed.add_field(
-            name=f"{dot} {badge.icon}  {badge.name}  ·  {badge.rarity}",
-            value=f"*{badge.description}*\n{status}",
-            inline=True,
-        )
-    embed.add_field(name="\u200b", value=SEP, inline=False)
-    embed.set_footer(
-        text=f"Earned: {len(owned_set)} / {len(BADGES_CATALOG)}  ·  Badges cannot be purchased  ·  Kingdom Treasury"
-    )
-    return embed
 
 
 def _build_market_items() -> List[MarketItem]:
@@ -103,8 +73,6 @@ class CosmeticsCog(commands.Cog):
 
     @property
     def cosmetics(self) -> CosmeticService: return self.bot.cosmetic_service
-    @property
-    def badges(self) -> BadgeService:       return self.bot.badge_service
     @property
     def db(self):                           return self.bot.db
 
@@ -264,17 +232,6 @@ class CosmeticsCog(commands.Cog):
         )
         embed.set_footer(text="Kingdom Treasury  ·  Kingdom of Hell")
         await interaction.followup.send(embed=embed, ephemeral=True)
-
-    # ─── /badges ──────────────────────────────────────────────────────────────
-
-    @app_commands.command(name="badges", description="View all Kingdom badges and your earned achievements.")
-    async def badges_cmd(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True)
-        guild_id   = str(interaction.guild_id)
-        discord_id = str(interaction.user.id)
-        await self.db.upsert_user(guild_id, discord_id, interaction.user.display_name)
-        owned = await self.badges.get_owned_badges(guild_id, discord_id)
-        await interaction.followup.send(embed=_badges_embed(owned), ephemeral=True)
 
 
 # ── item resolution helper ────────────────────────────────────────────────────
