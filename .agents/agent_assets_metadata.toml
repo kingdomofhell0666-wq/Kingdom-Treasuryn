@@ -1,5 +1,16 @@
 uploads = []
-generated = []
+
+[[generated]]
+id = "IMHudmG83Q_IREG62JeZU"
+uri = "file://bot/assets/mine_entry.png"
+type = "image"
+title = "infernal mine entry"
+
+[[generated]]
+id = "zA-nt6hQlis1EKx4uGyVL"
+uri = "file://bot/assets/mine_veins.png"
+type = "image"
+title = "infernal mine veins"
 
 [[outputs]]
 id = "BZZs0zfLLb-qGT_EhEzYI"

@@ -1,3 +1,6 @@
+import asyncio
+import random as _random
+import os
 import discord
 from discord import app_commands
 from discord.ext import commands
@@ -9,6 +12,34 @@ from ..services.cerberus_service import CerberusService
 from ..utils.embeds import EmbedFactory
 from ..utils.badges import BADGES_CATALOG
 from ..ui import MarketView, AscendConfirmView
+
+
+# ── Infernal Mines animation copy ─────────────────────────────────────────────
+
+_ASSETS = os.path.join(os.path.dirname(__file__), "..", "assets")
+
+MINE_ENTRY_TEXTS = [
+    "*Descending into the depths...*",
+    "*The darkness pulls you downward...*",
+    "*The gates of the Infernal Mines creak open...*",
+    "*You step past the threshold into the abyss...*",
+    "*The heat rises as you descend...*",
+    "*The mine swallows you whole...*",
+]
+
+MINE_SEARCH_TEXTS = [
+    "*The veins are being tested...*",
+    "*The stone trembles underfoot...*",
+    "*A deeper vein calls from below...*",
+    "*The darkness responds to your strike...*",
+    "*Your pickaxe rings against ancient rock...*",
+    "*Shadows shift in the hellfire light...*",
+    "*The ore whispers of its worth...*",
+    "*Something stirs deep within the seam...*",
+]
+
+ENTRY_COLOR  = 0x1A0000
+SEARCH_COLOR = 0x3D0000
 
 
 class EconomyCog(commands.Cog):
@@ -42,37 +73,9 @@ class EconomyCog(commands.Cog):
         embed.set_footer(text="Earned — not purchased.  ·  Kingdom Treasury")
         await interaction.followup.send(embed=embed)
 
-    # ─── /grind ───────────────────────────────────────────────
+    # ─── Cerberus follow-up helper ────────────────────────────
 
-    @app_commands.command(name="grind", description="Descend into the Infernal Mines.")
-    async def grind(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=False)
-
-        guild_id   = str(interaction.guild_id)
-        discord_id = str(interaction.user.id)
-        username   = interaction.user.display_name
-
-        ready, remaining = await self.cooldown.check_cooldown(guild_id, discord_id, "grind")
-        if not ready:
-            embed = EmbedFactory.cooldown_error("grind", self.cooldown.format_remaining(remaining))
-            await interaction.followup.send(embed=embed, ephemeral=True)
-            return
-
-        await self.cooldown.set_cooldown(guild_id, discord_id, "grind")
-
-        try:
-            result = await self.economy.grind(guild_id, discord_id, username)
-        except Exception as e:
-            await interaction.followup.send(embed=EmbedFactory.error(str(e)), ephemeral=True)
-            return
-
-        await interaction.followup.send(embed=EmbedFactory.grind_result(result))
-
-        if result.get("outcome_label") == "jackpot":
-            await self.badge_service.grant_badge(guild_id, discord_id, "high_roller")
-        new_badges = await self.badge_service.check_and_award(guild_id, discord_id)
-        await self._announce_badges(interaction, new_badges)
-
+    async def _run_cerberus(self, interaction: discord.Interaction, guild_id: str, discord_id: str):
         audit = await self.cerberus.check_and_run_audit(guild_id, discord_id)
         if audit and audit["triggered"]:
             outcome = audit["outcome"]
@@ -84,6 +87,72 @@ class EconomyCog(commands.Cog):
                 await self.badge_service.grant_badge(guild_id, discord_id, "cerberus_guard")
                 audit_embed = EmbedFactory.cerberus_cleared(audit["risk_delta"])
             await interaction.followup.send(embed=audit_embed)
+
+    # ─── /grind ───────────────────────────────────────────────
+
+    @app_commands.command(name="grind", description="Descend into the Infernal Mines.")
+    async def grind(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=False)
+
+        guild_id   = str(interaction.guild_id)
+        discord_id = str(interaction.user.id)
+        username   = interaction.user.display_name
+
+        # ── Cooldown gate ──────────────────────────────────────
+        ready, remaining = await self.cooldown.check_cooldown(guild_id, discord_id, "grind")
+        if not ready:
+            embed = EmbedFactory.cooldown_error("grind", self.cooldown.format_remaining(remaining))
+            await interaction.followup.send(embed=embed, ephemeral=True)
+            return
+
+        await self.cooldown.set_cooldown(guild_id, discord_id, "grind")
+
+        # ── Compute result immediately ─────────────────────────
+        try:
+            result = await self.economy.grind(guild_id, discord_id, username)
+        except Exception as e:
+            await interaction.followup.send(embed=EmbedFactory.error(str(e)), ephemeral=True)
+            return
+
+        # ── Phase 1 — ENTRY ───────────────────────────────────
+        entry_embed = discord.Embed(
+            title="⛏  Infernal Mines",
+            description=_random.choice(MINE_ENTRY_TEXTS),
+            color=ENTRY_COLOR,
+        )
+        entry_embed.set_image(url="attachment://mine_entry.png")
+        entry_embed.set_footer(text="Kingdom Treasury  ·  Kingdom of Hell")
+
+        entry_path = os.path.join(_ASSETS, "mine_entry.png")
+        entry_file = discord.File(entry_path, filename="mine_entry.png")
+        msg = await interaction.followup.send(embed=entry_embed, file=entry_file)
+
+        # ── Phase 2 — SEARCH ──────────────────────────────────
+        await asyncio.sleep(2.0)
+
+        search_embed = discord.Embed(
+            title="⛏  Infernal Mines",
+            description=_random.choice(MINE_SEARCH_TEXTS),
+            color=SEARCH_COLOR,
+        )
+        # Preserve the uploaded image URL from the first message
+        if msg.attachments:
+            search_embed.set_image(url=msg.attachments[0].url)
+        search_embed.set_footer(text="Kingdom Treasury  ·  Kingdom of Hell")
+        await msg.edit(embed=search_embed)
+
+        # ── Phase 3 — RESULT REVEAL ───────────────────────────
+        await asyncio.sleep(1.5)
+
+        result_embed = EmbedFactory.grind_result(result)
+        await msg.edit(embed=result_embed, attachments=[])
+
+        # ── Post-result: badges + audit ────────────────────────
+        if result.get("outcome_label") == "jackpot":
+            await self.badge_service.grant_badge(guild_id, discord_id, "high_roller")
+        new_badges = await self.badge_service.check_and_award(guild_id, discord_id)
+        await self._announce_badges(interaction, new_badges)
+        await self._run_cerberus(interaction, guild_id, discord_id)
 
     # ─── /tribute ─────────────────────────────────────────────
 
@@ -114,18 +183,7 @@ class EconomyCog(commands.Cog):
         await self.db.increment_tribute_count(guild_id, discord_id)
         new_badges = await self.badge_service.check_and_award(guild_id, discord_id)
         await self._announce_badges(interaction, new_badges)
-
-        audit = await self.cerberus.check_and_run_audit(guild_id, discord_id)
-        if audit and audit["triggered"]:
-            outcome = audit["outcome"]
-            if outcome == "penalized":
-                audit_embed = EmbedFactory.cerberus_penalty(audit["penalty"], audit["penalty_pct"], audit["risk_delta"])
-            elif outcome == "immune":
-                audit_embed = EmbedFactory.cerberus_immune()
-            else:
-                await self.badge_service.grant_badge(guild_id, discord_id, "cerberus_guard")
-                audit_embed = EmbedFactory.cerberus_cleared(audit["risk_delta"])
-            await interaction.followup.send(embed=audit_embed)
+        await self._run_cerberus(interaction, guild_id, discord_id)
 
     # ─── /transfer ────────────────────────────────────────────
 
