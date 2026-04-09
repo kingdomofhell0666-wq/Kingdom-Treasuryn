@@ -14,101 +14,57 @@ class InvestmentCog(commands.Cog):
     def investments(self) -> InvestmentService:
         return self.bot.investment_service
 
-    # ─── /invest ──────────────────────────────────────────────
-
-    @app_commands.command(
-        name="invest",
-        description="Commit DevilCoins to the infernal markets. Choose your risk.",
-    )
-    @app_commands.describe(
-        inv_type="Investment type: safe, medium, or risky.",
-        amount="Amount of DevilCoins to invest.",
-    )
+    @app_commands.command(name="invest", description="Commit DevilCoins to the infernal markets.")
+    @app_commands.describe(inv_type="Investment type: safe, medium, or risky.", amount="Amount of DevilCoins to invest.")
     @app_commands.choices(inv_type=[
-        app_commands.Choice(name="Safe (1h, 5-10% guaranteed)", value="safe"),
+        app_commands.Choice(name="Safe (1h, 5-10% guaranteed)",      value="safe"),
         app_commands.Choice(name="Medium (6h, 20-35% / 75% success)", value="medium"),
         app_commands.Choice(name="Risky (24h, 50-80% / 50% success)", value="risky"),
     ])
-    async def invest(
-        self,
-        interaction: discord.Interaction,
-        inv_type: str,
-        amount: int,
-    ):
+    async def invest(self, interaction: discord.Interaction, inv_type: str, amount: int):
         await interaction.response.defer(ephemeral=False)
-
+        guild_id   = str(interaction.guild_id)
         discord_id = str(interaction.user.id)
-        username = interaction.user.display_name
-
+        username   = interaction.user.display_name
         try:
-            result = await self.investments.invest(discord_id, username, inv_type, amount)
+            result = await self.investments.invest(guild_id, discord_id, username, inv_type, amount)
         except ValueError as e:
-            embed = EmbedFactory.error(str(e))
-            await interaction.followup.send(embed=embed, ephemeral=True)
+            await interaction.followup.send(embed=EmbedFactory.error(str(e)), ephemeral=True)
             return
+        await interaction.followup.send(embed=EmbedFactory.investment_opened(result))
 
-        embed = EmbedFactory.investment_opened(result)
-        await interaction.followup.send(embed=embed)
-
-    # ─── /portfolio ───────────────────────────────────────────
-
-    @app_commands.command(
-        name="portfolio",
-        description="View your active and matured investments.",
-    )
+    @app_commands.command(name="portfolio", description="View your active and matured investments.")
     async def portfolio(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
-
+        guild_id   = str(interaction.guild_id)
         discord_id = str(interaction.user.id)
-
         try:
-            investments = await self.investments.get_portfolio(discord_id)
+            investments = await self.investments.get_portfolio(guild_id, discord_id)
         except Exception as e:
-            embed = EmbedFactory.error(str(e))
-            await interaction.followup.send(embed=embed, ephemeral=True)
+            await interaction.followup.send(embed=EmbedFactory.error(str(e)), ephemeral=True)
             return
+        await interaction.followup.send(embed=EmbedFactory.portfolio(investments), ephemeral=True)
 
-        embed = EmbedFactory.portfolio(investments)
-        await interaction.followup.send(embed=embed, ephemeral=True)
-
-    # ─── /collect ─────────────────────────────────────────────
-
-    @app_commands.command(
-        name="collect",
-        description="Collect all matured investments. The Kingdom renders its verdict.",
-    )
+    @app_commands.command(name="collect", description="Collect all matured investments.")
     async def collect(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=False)
-
+        guild_id   = str(interaction.guild_id)
         discord_id = str(interaction.user.id)
-
         try:
-            result = await self.investments.collect(discord_id)
+            result = await self.investments.collect(guild_id, discord_id)
         except ValueError as e:
-            embed = EmbedFactory.error(str(e))
-            await interaction.followup.send(embed=embed, ephemeral=True)
+            await interaction.followup.send(embed=EmbedFactory.error(str(e)), ephemeral=True)
             return
+        await interaction.followup.send(embed=EmbedFactory.investment_collected(result))
 
-        embed = EmbedFactory.investment_collected(result)
-        await interaction.followup.send(embed=embed)
-
-    # ─── /withdraw ────────────────────────────────────────────
-
-    @app_commands.command(
-        name="withdraw",
-        description="Withdraw all active investments early. A 20% penalty applies.",
-    )
+    @app_commands.command(name="withdraw", description="Withdraw all active investments early. A 20% penalty applies.")
     async def withdraw(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=False)
-
+        guild_id   = str(interaction.guild_id)
         discord_id = str(interaction.user.id)
-
         try:
-            result = await self.investments.withdraw_early(discord_id)
+            result = await self.investments.withdraw_early(guild_id, discord_id)
         except ValueError as e:
-            embed = EmbedFactory.error(str(e))
-            await interaction.followup.send(embed=embed, ephemeral=True)
+            await interaction.followup.send(embed=EmbedFactory.error(str(e)), ephemeral=True)
             return
-
-        embed = EmbedFactory.investment_withdrawn(result)
-        await interaction.followup.send(embed=embed)
+        await interaction.followup.send(embed=EmbedFactory.investment_withdrawn(result))

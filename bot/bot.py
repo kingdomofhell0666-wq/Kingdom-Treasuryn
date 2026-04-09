@@ -1,20 +1,13 @@
+import os
 import discord
 from discord.ext import commands
 import logging
 
 from .database import Database
 from .services import (
-    EconomyService,
-    RankService,
-    CooldownService,
-    TransactionService,
-    TreasuryService,
-    AuditService,
-    CerberusService,
-    BlackMarketService,
-    InvestmentService,
-    CosmeticService,
-    BadgeService,
+    EconomyService, RankService, CooldownService, TransactionService,
+    TreasuryService, AuditService, CerberusService, BlackMarketService,
+    InvestmentService, CosmeticService, BadgeService,
 )
 
 logger = logging.getLogger("kingdom_treasury")
@@ -22,48 +15,64 @@ logger = logging.getLogger("kingdom_treasury")
 
 class KingdomTreasuryBot(commands.Bot):
     def __init__(self):
-        intents = discord.Intents.default()
+        intents         = discord.Intents.default()
         intents.members = True
 
-        super().__init__(
-            command_prefix="!kt_",
-            intents=intents,
-            help_command=None,
-        )
+        super().__init__(command_prefix="!kt_", intents=intents, help_command=None)
 
         self.db: Database = Database()
 
-        self.rank_service = RankService()
-        self.economy_service: EconomyService = None
-        self.cooldown_service: CooldownService = None
-        self.transaction_service: TransactionService = None
-        self.treasury_service: TreasuryService = None
-        self.audit_service: AuditService = None
-        self.cerberus_service: CerberusService = None
-        self.blackmarket_service: BlackMarketService = None
-        self.investment_service: InvestmentService = None
-        self.cosmetic_service: CosmeticService = None
-        self.badge_service: BadgeService = None
+        self.rank_service         = RankService()
+        self.economy_service      = None
+        self.cooldown_service     = None
+        self.transaction_service  = None
+        self.treasury_service     = None
+        self.audit_service        = None
+        self.cerberus_service     = None
+        self.blackmarket_service  = None
+        self.investment_service   = None
+        self.cosmetic_service     = None
+        self.badge_service        = None
 
     async def setup_hook(self):
         await self.db.connect()
 
-        self.economy_service = EconomyService(self.db)
-        self.cooldown_service = CooldownService(self.db)
-        self.transaction_service = TransactionService(self.db)
-        self.treasury_service = TreasuryService(self.db)
-        self.audit_service = AuditService(self.db)
-        self.cerberus_service = CerberusService(self.db)
-        self.blackmarket_service = BlackMarketService(self.db)
-        self.investment_service = InvestmentService(self.db)
-        self.cosmetic_service = CosmeticService(self.db)
-        self.badge_service = BadgeService(self.db)
+        # ── Token fingerprint check ──────────────────────────────────────────
+        token = os.environ.get("DISCORD_BOT_TOKEN", "")
+        current_fp = Database.compute_token_fingerprint(token)
+        stored_fp  = await self.db.get_meta("token_fingerprint")
+        force_reset = os.environ.get("FULL_RESET_ON_START", "").lower() in ("1", "true", "yes")
 
-        from .cogs.economy import EconomyCog
-        from .cogs.profile import ProfileCog
+        if force_reset:
+            logger.warning("FULL_RESET_ON_START is set — wiping all economy data.")
+            await self.db.reset_all_data()
+        elif stored_fp and stored_fp != current_fp:
+            logger.warning(
+                f"Token fingerprint mismatch (stored={stored_fp}, current={current_fp}). "
+                "Resetting all economy data."
+            )
+            await self.db.reset_all_data()
+
+        await self.db.set_meta("token_fingerprint", current_fp)
+
+        # ── Services ─────────────────────────────────────────────────────────
+        self.economy_service     = EconomyService(self.db)
+        self.cooldown_service    = CooldownService(self.db)
+        self.transaction_service = TransactionService(self.db)
+        self.treasury_service    = TreasuryService(self.db)
+        self.audit_service       = AuditService(self.db)
+        self.cerberus_service    = CerberusService(self.db)
+        self.blackmarket_service = BlackMarketService(self.db)
+        self.investment_service  = InvestmentService(self.db)
+        self.cosmetic_service    = CosmeticService(self.db)
+        self.badge_service       = BadgeService(self.db)
+
+        # ── Cogs ─────────────────────────────────────────────────────────────
+        from .cogs.economy    import EconomyCog
+        from .cogs.profile    import ProfileCog
         from .cogs.investment import InvestmentCog
         from .cogs.blackmarket import BlackMarketCog
-        from .cogs.cosmetics import CosmeticsCog
+        from .cogs.cosmetics  import CosmeticsCog
 
         await self.add_cog(EconomyCog(self))
         await self.add_cog(ProfileCog(self))
@@ -83,6 +92,12 @@ class KingdomTreasuryBot(commands.Bot):
                 name="every transaction in the Kingdom",
             ),
         )
+
+    async def on_guild_remove(self, guild: discord.Guild):
+        """When the bot is kicked from or leaves a guild, purge that guild's economy data."""
+        guild_id = str(guild.id)
+        await self.db.reset_guild_data(guild_id)
+        logger.info(f"Removed from guild {guild_id} ({guild.name}) — economy data purged.")
 
     async def close(self):
         await self.db.close()

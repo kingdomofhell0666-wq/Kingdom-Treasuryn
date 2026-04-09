@@ -1,9 +1,19 @@
+"""
+Kingdom Treasury — Database Layer
+All live-economy tables are guild-scoped (guild_id + discord_id).
+The `meta` table is global and is NEVER reset.
+"""
+
 import aiosqlite
+import hashlib
+import logging
 from typing import Optional, List
 from datetime import datetime, timezone
 
+logger = logging.getLogger("kingdom_treasury")
 
-DB_PATH = "kingdom_treasury.db"
+DB_PATH       = "kingdom_treasury.db"
+SCHEMA_VERSION = 2   # bumped when schema changes require a migration
 
 
 class Database:
@@ -13,34 +23,94 @@ class Database:
     async def connect(self):
         self._db = await aiosqlite.connect(DB_PATH)
         self._db.row_factory = aiosqlite.Row
-        await self._init_schema()
-        await self._run_migrations()
+        await self._ensure_meta_table()
+        await self._migrate_if_needed()
 
     async def close(self):
         if self._db:
             await self._db.close()
 
-    async def _init_schema(self):
+    # ─── Meta (global, never reset) ───────────────────────────────────────────
+
+    async def _ensure_meta_table(self):
+        await self._db.execute("""
+            CREATE TABLE IF NOT EXISTS meta (
+                key   TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            )
+        """)
+        await self._db.commit()
+
+    async def get_meta(self, key: str) -> Optional[str]:
+        async with self._db.execute(
+            "SELECT value FROM meta WHERE key = ?", (key,)
+        ) as cur:
+            row = await cur.fetchone()
+            return row["value"] if row else None
+
+    async def set_meta(self, key: str, value: str):
+        await self._db.execute(
+            "INSERT INTO meta (key, value) VALUES (?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            (key, value),
+        )
+        await self._db.commit()
+
+    # ─── Schema migration ─────────────────────────────────────────────────────
+
+    async def _migrate_if_needed(self):
+        stored = await self.get_meta("schema_version")
+        current = int(stored) if stored else 0
+
+        if current < SCHEMA_VERSION:
+            logger.info(
+                f"Schema version {current} → {SCHEMA_VERSION}: rebuilding all economy tables."
+            )
+            await self._drop_economy_tables()
+            await self._create_economy_tables()
+            await self.set_meta("schema_version", str(SCHEMA_VERSION))
+            logger.info("Schema migration complete.")
+        else:
+            # Tables already exist at correct version — just ensure they exist
+            await self._create_economy_tables()
+
+    async def _drop_economy_tables(self):
+        """Drop all live-economy tables so they can be recreated with guild_id."""
+        for tbl in ("users", "transactions", "treasury", "cooldowns", "investments", "user_perks"):
+            await self._db.execute(f"DROP TABLE IF EXISTS {tbl}")
+        await self._db.commit()
+
+    async def _create_economy_tables(self):
         await self._db.executescript("""
             CREATE TABLE IF NOT EXISTS users (
-                discord_id       TEXT PRIMARY KEY,
+                guild_id         TEXT NOT NULL,
+                discord_id       TEXT NOT NULL,
                 username         TEXT NOT NULL,
                 balance          INTEGER NOT NULL DEFAULT 0,
                 rank             TEXT NOT NULL DEFAULT 'Forsaken',
-                title            TEXT NOT NULL DEFAULT 'Unmarked',
                 taxes_paid       INTEGER NOT NULL DEFAULT 0,
                 risk_score       INTEGER NOT NULL DEFAULT 0,
                 owned_titles     TEXT NOT NULL DEFAULT '[]',
                 equipped_title   TEXT,
                 owned_skins      TEXT NOT NULL DEFAULT '[]',
                 equipped_skin    TEXT,
+                owned_badges     TEXT NOT NULL DEFAULT '[]',
+                grind_count      INTEGER NOT NULL DEFAULT 0,
                 grind_count_24h  INTEGER NOT NULL DEFAULT 0,
                 last_grind_reset TEXT,
-                created_at       TEXT NOT NULL DEFAULT (datetime('now'))
+                tribute_count    INTEGER NOT NULL DEFAULT 0,
+                created_at       TEXT NOT NULL DEFAULT (datetime('now')),
+                PRIMARY KEY (guild_id, discord_id)
+            );
+
+            CREATE TABLE IF NOT EXISTS treasury (
+                guild_id TEXT PRIMARY KEY,
+                balance  INTEGER NOT NULL DEFAULT 0
             );
 
             CREATE TABLE IF NOT EXISTS transactions (
                 id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                guild_id     TEXT NOT NULL,
                 tx_type      TEXT NOT NULL,
                 from_account TEXT NOT NULL,
                 to_account   TEXT NOT NULL,
@@ -49,20 +119,17 @@ class Database:
                 created_at   TEXT NOT NULL DEFAULT (datetime('now'))
             );
 
-            CREATE TABLE IF NOT EXISTS treasury (
-                id      INTEGER PRIMARY KEY CHECK (id = 1),
-                balance INTEGER NOT NULL DEFAULT 0
-            );
-
             CREATE TABLE IF NOT EXISTS cooldowns (
+                guild_id   TEXT NOT NULL,
                 discord_id TEXT NOT NULL,
                 action     TEXT NOT NULL,
                 last_used  TEXT NOT NULL,
-                PRIMARY KEY (discord_id, action)
+                PRIMARY KEY (guild_id, discord_id, action)
             );
 
             CREATE TABLE IF NOT EXISTS investments (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                guild_id    TEXT NOT NULL,
                 discord_id  TEXT NOT NULL,
                 inv_type    TEXT NOT NULL,
                 principal   INTEGER NOT NULL,
@@ -74,99 +141,104 @@ class Database:
 
             CREATE TABLE IF NOT EXISTS user_perks (
                 id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                guild_id       TEXT NOT NULL,
                 discord_id     TEXT NOT NULL,
                 perk_type      TEXT NOT NULL,
                 perk_value     REAL NOT NULL DEFAULT 0,
                 uses_remaining INTEGER NOT NULL DEFAULT 1,
                 created_at     TEXT NOT NULL DEFAULT (datetime('now'))
             );
-
-            INSERT OR IGNORE INTO treasury (id, balance) VALUES (1, 0);
         """)
         await self._db.commit()
 
-    async def _run_migrations(self):
-        """Safely add new columns to existing tables."""
-        migrations = [
-            "ALTER TABLE users ADD COLUMN risk_score INTEGER NOT NULL DEFAULT 0",
-            "ALTER TABLE users ADD COLUMN owned_titles TEXT NOT NULL DEFAULT '[]'",
-            "ALTER TABLE users ADD COLUMN equipped_title TEXT",
-            "ALTER TABLE users ADD COLUMN owned_skins TEXT NOT NULL DEFAULT '[]'",
-            "ALTER TABLE users ADD COLUMN equipped_skin TEXT",
-            "ALTER TABLE users ADD COLUMN owned_badges TEXT NOT NULL DEFAULT '[]'",
-            "ALTER TABLE users ADD COLUMN grind_count INTEGER NOT NULL DEFAULT 0",
-            "ALTER TABLE users ADD COLUMN tribute_count INTEGER NOT NULL DEFAULT 0",
-        ]
-        for sql in migrations:
-            try:
-                await self._db.execute(sql)
-            except Exception:
-                pass
+    # ─── Reset ────────────────────────────────────────────────────────────────
+
+    async def reset_guild_data(self, guild_id: str):
+        """Hard-delete ALL economy data for a specific guild."""
+        tables = ["users", "transactions", "treasury", "cooldowns", "investments", "user_perks"]
+        for tbl in tables:
+            await self._db.execute(f"DELETE FROM {tbl} WHERE guild_id = ?", (guild_id,))
         await self._db.commit()
+        logger.info(f"Guild {guild_id} — all economy data purged.")
 
-    # ─── Users ───────────────────────────────────────────────
+    async def reset_all_data(self):
+        """Hard-delete ALL economy data across every guild."""
+        tables = ["users", "transactions", "treasury", "cooldowns", "investments", "user_perks"]
+        for tbl in tables:
+            await self._db.execute(f"DELETE FROM {tbl}")
+        await self._db.commit()
+        logger.info("Global reset complete — all economy data purged.")
 
-    async def get_user(self, discord_id: str) -> Optional[dict]:
+    # ─── Token fingerprint ────────────────────────────────────────────────────
+
+    @staticmethod
+    def compute_token_fingerprint(token: str) -> str:
+        return hashlib.sha256(token.encode()).hexdigest()[:24]
+
+    # ─── Users ────────────────────────────────────────────────────────────────
+
+    async def get_user(self, guild_id: str, discord_id: str) -> Optional[dict]:
         async with self._db.execute(
-            "SELECT * FROM users WHERE discord_id = ?", (discord_id,)
-        ) as cursor:
-            row = await cursor.fetchone()
+            "SELECT * FROM users WHERE guild_id = ? AND discord_id = ?",
+            (guild_id, discord_id),
+        ) as cur:
+            row = await cur.fetchone()
             return dict(row) if row else None
 
-    async def upsert_user(self, discord_id: str, username: str) -> dict:
+    async def upsert_user(self, guild_id: str, discord_id: str, username: str) -> dict:
         await self._db.execute(
             """
-            INSERT INTO users (discord_id, username)
-            VALUES (?, ?)
-            ON CONFLICT(discord_id) DO UPDATE SET username = excluded.username
+            INSERT INTO users (guild_id, discord_id, username)
+            VALUES (?, ?, ?)
+            ON CONFLICT(guild_id, discord_id) DO UPDATE SET username = excluded.username
             """,
-            (discord_id, username),
+            (guild_id, discord_id, username),
         )
         await self._db.commit()
-        return await self.get_user(discord_id)
+        return await self.get_user(guild_id, discord_id)
 
-    async def update_balance(self, discord_id: str, amount: int):
+    async def update_balance(self, guild_id: str, discord_id: str, amount: int):
         await self._db.execute(
-            "UPDATE users SET balance = balance + ? WHERE discord_id = ?",
-            (amount, discord_id),
+            "UPDATE users SET balance = balance + ? WHERE guild_id = ? AND discord_id = ?",
+            (amount, guild_id, discord_id),
         )
         await self._db.commit()
 
-    async def set_balance(self, discord_id: str, amount: int):
+    async def set_balance(self, guild_id: str, discord_id: str, amount: int):
         await self._db.execute(
-            "UPDATE users SET balance = ? WHERE discord_id = ?",
-            (amount, discord_id),
+            "UPDATE users SET balance = ? WHERE guild_id = ? AND discord_id = ?",
+            (amount, guild_id, discord_id),
         )
         await self._db.commit()
 
-    async def set_rank(self, discord_id: str, rank: str):
+    async def set_rank(self, guild_id: str, discord_id: str, rank: str):
         await self._db.execute(
-            "UPDATE users SET rank = ? WHERE discord_id = ?",
-            (rank, discord_id),
+            "UPDATE users SET rank = ? WHERE guild_id = ? AND discord_id = ?",
+            (rank, guild_id, discord_id),
         )
         await self._db.commit()
 
-    async def add_taxes_paid(self, discord_id: str, amount: int):
+    async def add_taxes_paid(self, guild_id: str, discord_id: str, amount: int):
         await self._db.execute(
-            "UPDATE users SET taxes_paid = taxes_paid + ? WHERE discord_id = ?",
-            (amount, discord_id),
+            "UPDATE users SET taxes_paid = taxes_paid + ? WHERE guild_id = ? AND discord_id = ?",
+            (amount, guild_id, discord_id),
         )
         await self._db.commit()
 
-    async def adjust_risk_score(self, discord_id: str, delta: int):
+    async def adjust_risk_score(self, guild_id: str, discord_id: str, delta: int):
         await self._db.execute(
             """
             UPDATE users
             SET risk_score = MAX(0, MIN(100, risk_score + ?))
-            WHERE discord_id = ?
+            WHERE guild_id = ? AND discord_id = ?
             """,
-            (delta, discord_id),
+            (delta, guild_id, discord_id),
         )
         await self._db.commit()
 
-    async def increment_grind_count(self, discord_id: str):
+    async def increment_grind_count(self, guild_id: str, discord_id: str):
         now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
-        user = await self.get_user(discord_id)
+        user = await self.get_user(guild_id, discord_id)
         if not user:
             return
         last_reset = user.get("last_grind_reset")
@@ -181,28 +253,28 @@ class Database:
                    SET grind_count_24h = 1,
                        last_grind_reset = ?,
                        grind_count = grind_count + 1
-                   WHERE discord_id = ?""",
-                (now_str, discord_id),
+                   WHERE guild_id = ? AND discord_id = ?""",
+                (now_str, guild_id, discord_id),
             )
         else:
             await self._db.execute(
                 """UPDATE users
                    SET grind_count_24h = grind_count_24h + 1,
                        grind_count = grind_count + 1
-                   WHERE discord_id = ?""",
-                (discord_id,),
+                   WHERE guild_id = ? AND discord_id = ?""",
+                (guild_id, discord_id),
             )
         await self._db.commit()
 
-    async def increment_tribute_count(self, discord_id: str):
+    async def increment_tribute_count(self, guild_id: str, discord_id: str):
         await self._db.execute(
-            "UPDATE users SET tribute_count = tribute_count + 1 WHERE discord_id = ?",
-            (discord_id,),
+            "UPDATE users SET tribute_count = tribute_count + 1 WHERE guild_id = ? AND discord_id = ?",
+            (guild_id, discord_id),
         )
         await self._db.commit()
 
-    async def get_grind_count_24h(self, discord_id: str) -> int:
-        user = await self.get_user(discord_id)
+    async def get_grind_count_24h(self, guild_id: str, discord_id: str) -> int:
+        user = await self.get_user(guild_id, discord_id)
         if not user:
             return 0
         last_reset = user.get("last_grind_reset")
@@ -213,23 +285,53 @@ class Database:
             return 0
         return user["grind_count_24h"]
 
-    # ─── Treasury ─────────────────────────────────────────────
+    async def get_leaderboard(self, guild_id: str, limit: int = 10) -> List[dict]:
+        async with self._db.execute(
+            """SELECT discord_id, username, balance, rank
+               FROM users WHERE guild_id = ?
+               ORDER BY balance DESC LIMIT ?""",
+            (guild_id, limit),
+        ) as cur:
+            rows = await cur.fetchall()
+            return [dict(r) for r in rows]
 
-    async def get_treasury_balance(self) -> int:
-        async with self._db.execute("SELECT balance FROM treasury WHERE id = 1") as cursor:
-            row = await cursor.fetchone()
+    async def get_kingdom_rank(self, guild_id: str, discord_id: str) -> int:
+        async with self._db.execute(
+            """
+            SELECT COUNT(*) + 1 AS kingdom_rank
+            FROM users
+            WHERE guild_id = ?
+              AND balance > (SELECT balance FROM users WHERE guild_id = ? AND discord_id = ?)
+            """,
+            (guild_id, guild_id, discord_id),
+        ) as cur:
+            row = await cur.fetchone()
+            return row["kingdom_rank"] if row else 1
+
+    # ─── Treasury ─────────────────────────────────────────────────────────────
+
+    async def get_treasury_balance(self, guild_id: str) -> int:
+        async with self._db.execute(
+            "SELECT balance FROM treasury WHERE guild_id = ?", (guild_id,)
+        ) as cur:
+            row = await cur.fetchone()
             return row["balance"] if row else 0
 
-    async def update_treasury(self, amount: int):
+    async def update_treasury(self, guild_id: str, amount: int):
         await self._db.execute(
-            "UPDATE treasury SET balance = balance + ? WHERE id = 1", (amount,)
+            """
+            INSERT INTO treasury (guild_id, balance) VALUES (?, ?)
+            ON CONFLICT(guild_id) DO UPDATE SET balance = balance + excluded.balance
+            """,
+            (guild_id, amount),
         )
         await self._db.commit()
 
-    # ─── Transactions ─────────────────────────────────────────
+    # ─── Transactions ─────────────────────────────────────────────────────────
 
     async def log_transaction(
         self,
+        guild_id: str,
         tx_type: str,
         from_account: str,
         to_account: str,
@@ -237,86 +339,98 @@ class Database:
         note: Optional[str] = None,
     ):
         await self._db.execute(
-            "INSERT INTO transactions (tx_type, from_account, to_account, amount, note) VALUES (?,?,?,?,?)",
-            (tx_type, from_account, to_account, amount, note),
+            """INSERT INTO transactions
+               (guild_id, tx_type, from_account, to_account, amount, note)
+               VALUES (?,?,?,?,?,?)""",
+            (guild_id, tx_type, from_account, to_account, amount, note),
         )
         await self._db.commit()
 
-    async def get_user_transactions(self, discord_id: str, limit: int = 10) -> List[dict]:
+    async def get_user_transactions(
+        self, guild_id: str, discord_id: str, limit: int = 10
+    ) -> List[dict]:
         account = f"user:{discord_id}"
         async with self._db.execute(
             """
             SELECT * FROM transactions
-            WHERE from_account = ? OR to_account = ?
+            WHERE guild_id = ? AND (from_account = ? OR to_account = ?)
             ORDER BY created_at DESC LIMIT ?
             """,
-            (account, account, limit),
-        ) as cursor:
-            rows = await cursor.fetchall()
+            (guild_id, account, account, limit),
+        ) as cur:
+            rows = await cur.fetchall()
             return [dict(r) for r in rows]
 
-    # ─── Cooldowns ────────────────────────────────────────────
+    # alias used by audit_service
+    async def get_all_transactions(
+        self, guild_id: str, discord_id: str, limit: int = 10
+    ) -> List[dict]:
+        return await self.get_user_transactions(guild_id, discord_id, limit)
 
-    async def get_cooldown(self, discord_id: str, action: str) -> Optional[datetime]:
+    # ─── Cooldowns ────────────────────────────────────────────────────────────
+
+    async def get_cooldown(
+        self, guild_id: str, discord_id: str, action: str
+    ) -> Optional[datetime]:
         async with self._db.execute(
-            "SELECT last_used FROM cooldowns WHERE discord_id = ? AND action = ?",
-            (discord_id, action),
-        ) as cursor:
-            row = await cursor.fetchone()
+            "SELECT last_used FROM cooldowns WHERE guild_id = ? AND discord_id = ? AND action = ?",
+            (guild_id, discord_id, action),
+        ) as cur:
+            row = await cur.fetchone()
             if row:
                 return datetime.fromisoformat(row["last_used"]).replace(tzinfo=timezone.utc)
             return None
 
-    async def set_cooldown(self, discord_id: str, action: str):
+    async def set_cooldown(self, guild_id: str, discord_id: str, action: str):
         now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
         await self._db.execute(
             """
-            INSERT INTO cooldowns (discord_id, action, last_used)
-            VALUES (?, ?, ?)
-            ON CONFLICT(discord_id, action) DO UPDATE SET last_used = excluded.last_used
+            INSERT INTO cooldowns (guild_id, discord_id, action, last_used)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(guild_id, discord_id, action)
+            DO UPDATE SET last_used = excluded.last_used
             """,
-            (discord_id, action, now_str),
+            (guild_id, discord_id, action, now_str),
         )
         await self._db.commit()
 
-    # ─── Investments ──────────────────────────────────────────
+    # ─── Investments ──────────────────────────────────────────────────────────
 
     async def create_investment(
         self,
+        guild_id: str,
         discord_id: str,
         inv_type: str,
         principal: int,
         matures_at: str,
     ) -> int:
-        cursor = await self._db.execute(
-            """
-            INSERT INTO investments (discord_id, inv_type, principal, matures_at)
-            VALUES (?, ?, ?, ?)
-            """,
-            (discord_id, inv_type, principal, matures_at),
+        cur = await self._db.execute(
+            """INSERT INTO investments (guild_id, discord_id, inv_type, principal, matures_at)
+               VALUES (?, ?, ?, ?, ?)""",
+            (guild_id, discord_id, inv_type, principal, matures_at),
         )
         await self._db.commit()
-        return cursor.lastrowid
+        return cur.lastrowid
 
-    async def get_active_investments(self, discord_id: str) -> List[dict]:
+    async def get_active_investments(self, guild_id: str, discord_id: str) -> List[dict]:
         async with self._db.execute(
-            "SELECT * FROM investments WHERE discord_id = ? AND status = 'active' ORDER BY created_at ASC",
-            (discord_id,),
-        ) as cursor:
-            rows = await cursor.fetchall()
+            """SELECT * FROM investments
+               WHERE guild_id = ? AND discord_id = ? AND status = 'active'
+               ORDER BY created_at ASC""",
+            (guild_id, discord_id),
+        ) as cur:
+            rows = await cur.fetchall()
             return [dict(r) for r in rows]
 
-    async def get_matured_investments(self, discord_id: str) -> List[dict]:
+    async def get_matured_investments(self, guild_id: str, discord_id: str) -> List[dict]:
         now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
         async with self._db.execute(
-            """
-            SELECT * FROM investments
-            WHERE discord_id = ? AND status = 'active' AND matures_at <= ?
-            ORDER BY matures_at ASC
-            """,
-            (discord_id, now_str),
-        ) as cursor:
-            rows = await cursor.fetchall()
+            """SELECT * FROM investments
+               WHERE guild_id = ? AND discord_id = ? AND status = 'active' AND matures_at <= ?
+               ORDER BY matures_at ASC""",
+            (guild_id, discord_id, now_str),
+        ) as cur:
+            rows = await cur.fetchall()
             return [dict(r) for r in rows]
 
     async def settle_investment(self, investment_id: int, payout: int, status: str = "collected"):
@@ -326,21 +440,31 @@ class Database:
         )
         await self._db.commit()
 
-    # ─── User Perks ───────────────────────────────────────────
+    # ─── User Perks ───────────────────────────────────────────────────────────
 
-    async def add_perk(self, discord_id: str, perk_type: str, perk_value: float, uses: int):
+    async def add_perk(
+        self,
+        guild_id: str,
+        discord_id: str,
+        perk_type: str,
+        perk_value: float,
+        uses: int,
+    ):
         await self._db.execute(
-            "INSERT INTO user_perks (discord_id, perk_type, perk_value, uses_remaining) VALUES (?,?,?,?)",
-            (discord_id, perk_type, perk_value, uses),
+            """INSERT INTO user_perks (guild_id, discord_id, perk_type, perk_value, uses_remaining)
+               VALUES (?,?,?,?,?)""",
+            (guild_id, discord_id, perk_type, perk_value, uses),
         )
         await self._db.commit()
 
-    async def get_active_perks(self, discord_id: str) -> List[dict]:
+    async def get_active_perks(self, guild_id: str, discord_id: str) -> List[dict]:
         async with self._db.execute(
-            "SELECT * FROM user_perks WHERE discord_id = ? AND uses_remaining > 0 ORDER BY created_at ASC",
-            (discord_id,),
-        ) as cursor:
-            rows = await cursor.fetchall()
+            """SELECT * FROM user_perks
+               WHERE guild_id = ? AND discord_id = ? AND uses_remaining > 0
+               ORDER BY created_at ASC""",
+            (guild_id, discord_id),
+        ) as cur:
+            rows = await cur.fetchall()
             return [dict(r) for r in rows]
 
     async def consume_perk(self, perk_id: int):
@@ -354,61 +478,39 @@ class Database:
         await self._db.execute("DELETE FROM user_perks WHERE id = ?", (perk_id,))
         await self._db.commit()
 
-    # ─── Cosmetics ────────────────────────────────────────────
+    # ─── Cosmetics ────────────────────────────────────────────────────────────
 
-    async def set_equipped_skin(self, discord_id: str, skin_id: str):
+    async def set_equipped_skin(self, guild_id: str, discord_id: str, skin_id: str):
         await self._db.execute(
-            "UPDATE users SET equipped_skin = ? WHERE discord_id = ?",
-            (skin_id, discord_id),
+            "UPDATE users SET equipped_skin = ? WHERE guild_id = ? AND discord_id = ?",
+            (skin_id, guild_id, discord_id),
         )
         await self._db.commit()
 
-    async def set_owned_skins(self, discord_id: str, skins_json: str):
+    async def set_owned_skins(self, guild_id: str, discord_id: str, skins_json: str):
         await self._db.execute(
-            "UPDATE users SET owned_skins = ? WHERE discord_id = ?",
-            (skins_json, discord_id),
+            "UPDATE users SET owned_skins = ? WHERE guild_id = ? AND discord_id = ?",
+            (skins_json, guild_id, discord_id),
         )
         await self._db.commit()
 
-    async def set_equipped_title(self, discord_id: str, title: str):
+    async def set_equipped_title(self, guild_id: str, discord_id: str, title: str):
         await self._db.execute(
-            "UPDATE users SET equipped_title = ? WHERE discord_id = ?",
-            (title, discord_id),
+            "UPDATE users SET equipped_title = ? WHERE guild_id = ? AND discord_id = ?",
+            (title, guild_id, discord_id),
         )
         await self._db.commit()
 
-    async def set_owned_titles(self, discord_id: str, titles_json: str):
+    async def set_owned_titles(self, guild_id: str, discord_id: str, titles_json: str):
         await self._db.execute(
-            "UPDATE users SET owned_titles = ? WHERE discord_id = ?",
-            (titles_json, discord_id),
+            "UPDATE users SET owned_titles = ? WHERE guild_id = ? AND discord_id = ?",
+            (titles_json, guild_id, discord_id),
         )
         await self._db.commit()
 
-    async def set_owned_badges(self, discord_id: str, badges_json: str):
+    async def set_owned_badges(self, guild_id: str, discord_id: str, badges_json: str):
         await self._db.execute(
-            "UPDATE users SET owned_badges = ? WHERE discord_id = ?",
-            (badges_json, discord_id),
+            "UPDATE users SET owned_badges = ? WHERE guild_id = ? AND discord_id = ?",
+            (badges_json, guild_id, discord_id),
         )
         await self._db.commit()
-
-    # ─── Leaderboard ──────────────────────────────────────────
-
-    async def get_leaderboard(self, limit: int = 10) -> List[dict]:
-        async with self._db.execute(
-            "SELECT discord_id, username, balance, rank FROM users ORDER BY balance DESC LIMIT ?",
-            (limit,),
-        ) as cursor:
-            rows = await cursor.fetchall()
-            return [dict(r) for r in rows]
-
-    async def get_kingdom_rank(self, discord_id: str) -> int:
-        async with self._db.execute(
-            """
-            SELECT COUNT(*) + 1 AS kingdom_rank
-            FROM users
-            WHERE balance > (SELECT balance FROM users WHERE discord_id = ?)
-            """,
-            (discord_id,),
-        ) as cursor:
-            row = await cursor.fetchone()
-            return row["kingdom_rank"] if row else 1
