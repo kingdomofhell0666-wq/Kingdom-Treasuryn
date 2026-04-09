@@ -6,3 +6,5 @@ export * from "./rank_role_mapping";
 export * from "./leaderboard_settings";
 export * from "./ascension_settings";
 export * from "./currency_assets";
+export * from "./guild_channels";
+export * from "./guild_roles";

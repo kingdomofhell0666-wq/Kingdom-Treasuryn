@@ -12,6 +12,7 @@ from .services import (
     InvestmentService, CosmeticService, BadgeService,
 )
 from .services.config_service import ConfigService
+from .services.guild_sync_service import GuildSyncService
 
 logger = logging.getLogger("kingdom_treasury")
 
@@ -25,6 +26,7 @@ class KingdomTreasuryBot(commands.Bot):
 
         self.db: Database = Database()
         self.config_service: ConfigService = ConfigService()
+        self.guild_sync_service: GuildSyncService = GuildSyncService()
 
         self.rank_service         = RankService()
         self.economy_service      = None
@@ -103,6 +105,18 @@ class KingdomTreasuryBot(commands.Bot):
         await self.db.set_meta("start_time", datetime.now(timezone.utc).isoformat())
         if not self._heartbeat_loop.is_running():
             self._heartbeat_loop.start()
+        # Sync all guild structures into PostgreSQL so the dashboard
+        # always has up-to-date channel/role data.
+        asyncio.create_task(self.guild_sync_service.sync_all(list(self.guilds)))
+
+    async def on_guild_join(self, guild: discord.Guild):
+        """Immediately sync a newly joined guild's channels and roles."""
+        logger.info(f"Joined guild {guild.id} ({guild.name}) — syncing channels+roles.")
+        asyncio.create_task(self.guild_sync_service.sync_guild(guild))
+
+    async def on_guild_available(self, guild: discord.Guild):
+        """Called when a guild becomes available after a reconnect — re-sync."""
+        asyncio.create_task(self.guild_sync_service.sync_guild(guild))
 
     @tasks.loop(seconds=30)
     async def _heartbeat_loop(self):
@@ -117,4 +131,5 @@ class KingdomTreasuryBot(commands.Bot):
     async def close(self):
         await self.db.close()
         await self.config_service.close()
+        await self.guild_sync_service.close()
         await super().close()

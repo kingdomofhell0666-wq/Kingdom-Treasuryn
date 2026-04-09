@@ -48,6 +48,8 @@ import {
   leaderboardSettingsTable,
   ascensionAnnouncementSettingsTable,
   rankCooldownSettingsTable,
+  guildChannelsTable,
+  guildRolesTable,
 } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { assertGuildAdmin } from "../lib/discord";
@@ -425,6 +427,50 @@ router.post("/guilds/:guildId/reset", requireAuth, async (req, res) => {
   } catch {
     res.status(500).json({ error: "Failed to reset economy data." });
   }
+});
+
+// ═══════════════════════════════════════════════════════════════
+// GUILD CHANNELS (synced from bot on startup/join)
+// ═══════════════════════════════════════════════════════════════
+
+router.get("/guilds/:guildId/channels", requireAuth, async (req, res) => {
+  const { guildId } = req.params;
+  if (!(await assertGuildAdmin(req, res, guildId))) return;
+
+  const rows = await db
+    .select()
+    .from(guildChannelsTable)
+    .where(eq(guildChannelsTable.guildId, guildId));
+
+  res.json(rows.map((r) => ({
+    id:       r.channelId,
+    name:     r.channelName,
+    type:     r.channelType,
+    parentId: r.parentCategoryId,
+  })));
+});
+
+// ═══════════════════════════════════════════════════════════════
+// GUILD ROLES (synced from bot on startup/join)
+// ═══════════════════════════════════════════════════════════════
+
+router.get("/guilds/:guildId/roles", requireAuth, async (req, res) => {
+  const { guildId } = req.params;
+  if (!(await assertGuildAdmin(req, res, guildId))) return;
+
+  const rows = await db
+    .select()
+    .from(guildRolesTable)
+    .where(eq(guildRolesTable.guildId, guildId));
+
+  // Sort by position descending (highest position = most privileged, shown first)
+  rows.sort((a, b) => b.position - a.position);
+
+  res.json(rows.map((r) => ({
+    id:       r.roleId,
+    name:     r.roleName,
+    position: r.position,
+  })));
 });
 
 // ═══════════════════════════════════════════════════════════════
