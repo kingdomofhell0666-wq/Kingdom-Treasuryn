@@ -12,6 +12,7 @@ from ..services.cerberus_service import CerberusService
 from ..utils.embeds import EmbedFactory
 from ..utils.badges import BADGES_CATALOG
 from ..utils.grind_card import generate_grind_card
+from ..utils.result_cards import generate_tribute_card, generate_transfer_card, generate_ascend_card
 from ..utils.card_generator import fetch_avatar
 from ..ui import MarketView, AscendConfirmView, MineEntryView
 
@@ -294,7 +295,31 @@ class EconomyCog(commands.Cog):
             await interaction.followup.send(embed=EmbedFactory.error(str(e)), ephemeral=True)
             return
 
-        await interaction.followup.send(embed=EmbedFactory.tribute_result(result))
+        try:
+            avatar_url   = interaction.user.display_avatar.with_size(128).url
+        except Exception:
+            avatar_url   = None
+        avatar_bytes = await fetch_avatar(avatar_url)
+
+        loop     = asyncio.get_event_loop()
+        card_buf = await loop.run_in_executor(None, lambda: generate_tribute_card(
+            username     = username,
+            rank         = result.get("rank", "Forsaken"),
+            gross        = result["gross"],
+            bonus        = result.get("bonus", 0),
+            tax          = result["tax_amount"],
+            tax_rate     = result["tax_rate"],
+            net          = result["net"],
+            balance      = result["new_balance"],
+            avatar_bytes = avatar_bytes,
+            skin_id      = result.get("equipped_skin"),
+        ))
+        card_embed = discord.Embed(color=0xFFD700)
+        card_embed.set_image(url="attachment://tribute_result.png")
+        await interaction.followup.send(
+            embed=card_embed, file=discord.File(card_buf, filename="tribute_result.png")
+        )
+
         await self.db.increment_tribute_count(guild_id, discord_id)
         new_badges = await self.badge_service.check_and_award(guild_id, discord_id)
         await self._announce_badges(interaction, new_badges)
@@ -319,11 +344,30 @@ class EconomyCog(commands.Cog):
             await interaction.followup.send(embed=EmbedFactory.error(str(e)), ephemeral=True)
             return
 
-        embed = EmbedFactory.transfer_success(
-            sender_name, recipient_name,
-            result["amount"], result["tax_on_transfer"], result["net_to_recipient"], result["sender_balance"],
+        try:
+            avatar_url   = interaction.user.display_avatar.with_size(128).url
+        except Exception:
+            avatar_url   = None
+        avatar_bytes = await fetch_avatar(avatar_url)
+
+        loop     = asyncio.get_event_loop()
+        card_buf = await loop.run_in_executor(None, lambda: generate_transfer_card(
+            sender_name      = sender_name,
+            sender_rank      = result.get("sender_rank", "Forsaken"),
+            recipient_name   = recipient_name,
+            amount           = result["amount"],
+            tax              = result["tax_on_transfer"],
+            net_to_recipient = result["net_to_recipient"],
+            sender_balance   = result["sender_balance"],
+            avatar_bytes     = avatar_bytes,
+            skin_id          = result.get("equipped_skin"),
+        ))
+        accent_col  = 0xB22222
+        card_embed  = discord.Embed(color=accent_col)
+        card_embed.set_image(url="attachment://transfer_result.png")
+        await interaction.followup.send(
+            embed=card_embed, file=discord.File(card_buf, filename="transfer_result.png")
         )
-        await interaction.followup.send(embed=embed)
 
     # ─── /vault ───────────────────────────────────────────────
 
@@ -382,9 +426,31 @@ class EconomyCog(commands.Cog):
         async def do_ascend(inter: discord.Interaction):
             tx_service = TransactionService(self.db)
             await tx_service.ascension_payment(guild_id, discord_id, rank_name, cost)
-            updated    = await self.db.get_user(guild_id, discord_id)
+            updated     = await self.db.get_user(guild_id, discord_id)
             new_balance = updated["balance"] if updated else 0
-            await inter.followup.send(embed=EmbedFactory.ascend_success(rank_name, cost, new_balance))
+            skin_id     = updated.get("equipped_skin") if updated else None
+
+            try:
+                av_url   = inter.user.display_avatar.with_size(128).url
+            except Exception:
+                av_url   = None
+            av_bytes = await fetch_avatar(av_url)
+
+            _loop    = asyncio.get_event_loop()
+            card_buf = await _loop.run_in_executor(None, lambda: generate_ascend_card(
+                username  = username,
+                old_rank  = current_rank,
+                new_rank  = rank_name,
+                cost      = cost,
+                balance   = new_balance,
+                avatar_bytes = av_bytes,
+                skin_id   = skin_id,
+            ))
+            card_embed = discord.Embed(color=0xFFD700)
+            card_embed.set_image(url="attachment://ascend_result.png")
+            await inter.followup.send(
+                embed=card_embed, file=discord.File(card_buf, filename="ascend_result.png")
+            )
             new_badges = await self.badge_service.check_and_award(guild_id, discord_id)
             await self._announce_badges(inter, new_badges)
 

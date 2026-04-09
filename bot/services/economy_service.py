@@ -114,7 +114,10 @@ class EconomyService:
         return {
             "gross": gross, "bonus": bonus,
             "tax_amount": tax, "tax_rate": tax_rate,
-            "net": net, "new_balance": updated["balance"] if updated else 0,
+            "net": net,
+            "new_balance":   updated["balance"]           if updated else 0,
+            "rank":          updated.get("rank", "Forsaken") if updated else "Forsaken",
+            "equipped_skin": updated.get("equipped_skin") if updated else None,
         }
 
     async def transfer(self, guild_id: str, sender_id: str, sender_name: str, recipient_id: str, recipient_name: str, amount: int) -> Dict[str, Any]:
@@ -137,5 +140,7 @@ class EconomyService:
         return {
             "amount": amount, "tax_on_transfer": tax,
             "net_to_recipient": net_to_recipient,
-            "sender_balance": updated["balance"] if updated else 0,
+            "sender_balance":  updated["balance"]           if updated else 0,
+            "sender_rank":     updated.get("rank", "Forsaken") if updated else "Forsaken",
+            "equipped_skin":   updated.get("equipped_skin") if updated else None,
         }

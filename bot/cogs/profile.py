@@ -7,6 +7,7 @@ from ..services import AuditService
 from ..services.cosmetic_service import CosmeticService
 from ..utils.embeds import EmbedFactory
 from ..utils.card_generator import generate_card, fetch_avatar
+from ..utils.result_cards import generate_wealth_card
 from ..utils.skins import get_skin
 from ..ui import IdentityView
 
@@ -98,8 +99,37 @@ class ProfileCog(commands.Cog):
 
     @app_commands.command(name="wealth", description="Check your current balance.")
     async def wealth(self, interaction: discord.Interaction):
+        import asyncio
+        await interaction.response.defer(ephemeral=False)
+
         guild_id   = str(interaction.guild_id)
         discord_id = str(interaction.user.id)
         username   = interaction.user.display_name
         user_data  = await self.db.upsert_user(guild_id, discord_id, username)
-        await interaction.response.send_message(embed=EmbedFactory.wealth(user_data))
+
+        kingdom_rank = await self.audit.get_kingdom_rank(guild_id, discord_id)
+
+        try:
+            avatar_url = interaction.user.display_avatar.with_size(128).url
+        except Exception:
+            avatar_url = None
+        avatar_bytes = await fetch_avatar(avatar_url)
+
+        skin_id = user_data.get("equipped_skin") or "default"
+
+        loop     = asyncio.get_event_loop()
+        card_buf = await loop.run_in_executor(None, lambda: generate_wealth_card(
+            username     = username,
+            rank         = user_data.get("rank", "Forsaken"),
+            balance      = user_data.get("balance", 0),
+            taxes_paid   = user_data.get("taxes_paid", 0),
+            kingdom_rank = kingdom_rank,
+            risk_score   = user_data.get("risk_score", 0),
+            avatar_bytes = avatar_bytes,
+            skin_id      = skin_id,
+        ))
+        card_embed = discord.Embed(color=0xFFD700)
+        card_embed.set_image(url="attachment://wealth_result.png")
+        await interaction.followup.send(
+            embed=card_embed, file=discord.File(card_buf, filename="wealth_result.png")
+        )

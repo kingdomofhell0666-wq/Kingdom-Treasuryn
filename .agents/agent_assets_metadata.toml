@@ -209,3 +209,51 @@ id = "QRbhFiC1yaKNPQgQzo_oI"
 uri = "file://bot/assets/previews/grind_skin_crimson_sigil.png"
 type = "image"
 title = "Crimson Sigil"
+
+[[outputs]]
+id = "fZ8KsL0z_HFIZk87bgxi7"
+uri = "file://bot/assets/previews/tribute_default.png"
+type = "image"
+title = "/tribute — Infernal Standard"
+
+[[outputs]]
+id = "9afvNylNpXgGVsfQuoYYS"
+uri = "file://bot/assets/previews/tribute_infernal_gold.png"
+type = "image"
+title = "/tribute — Infernal Gold"
+
+[[outputs]]
+id = "6UAAfIYQczl9d6ngHKq3S"
+uri = "file://bot/assets/previews/wealth_abyss_smoke.png"
+type = "image"
+title = "/wealth — Abyss Smoke"
+
+[[outputs]]
+id = "if56ra_NHONxWdN_rYUsj"
+uri = "file://bot/assets/previews/wealth_blood_crown.png"
+type = "image"
+title = "/wealth — Blood Crown"
+
+[[outputs]]
+id = "xHpGvWw-x1jPFq_c3sMuy"
+uri = "file://bot/assets/previews/transfer_default.png"
+type = "image"
+title = "/transfer — Infernal Standard"
+
+[[outputs]]
+id = "0AqTIb5ADC29mr8-aB-ym"
+uri = "file://bot/assets/previews/transfer_infernal_gold.png"
+type = "image"
+title = "/transfer — Infernal Gold"
+
+[[outputs]]
+id = "OcCMs1wSNQbp70A4NDqeV"
+uri = "file://bot/assets/previews/ascend_default.png"
+type = "image"
+title = "/ascend — Infernal Standard"
+
+[[outputs]]
+id = "nLVw4cgTxg27ZH8k5AmzN"
+uri = "file://bot/assets/previews/ascend_blood_crown.png"
+type = "image"
+title = "/ascend — Blood Crown"
