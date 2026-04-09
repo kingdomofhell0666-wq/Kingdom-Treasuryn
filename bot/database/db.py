@@ -294,25 +294,73 @@ class Database:
             return 0
         return user["grind_count_24h"]
 
+    # Kingdom rank ordering: rank hierarchy (index) DESC, then balance DESC.
+    # This CASE expression mirrors the RANKS list in rank_service.py exactly.
+    _RANK_CASE = """
+        CASE rank
+            WHEN 'Forsaken'    THEN 0
+            WHEN 'Vermin'      THEN 1
+            WHEN 'Corrupted'   THEN 2
+            WHEN 'Mythology'   THEN 3
+            WHEN 'Folklore'    THEN 4
+            WHEN 'Eschatology' THEN 5
+            WHEN 'Demonology'  THEN 6
+            WHEN 'Archangel'   THEN 7
+            WHEN 'Archdemon'   THEN 8
+            WHEN 'Knight'      THEN 9
+            WHEN 'Baron'       THEN 10
+            WHEN 'Viscount'    THEN 11
+            WHEN 'Count'       THEN 12
+            WHEN 'Marquis'     THEN 13
+            WHEN 'Duke'        THEN 14
+            WHEN 'Chancellor'  THEN 15
+            ELSE 0
+        END
+    """
+
     async def get_leaderboard(self, guild_id: str, limit: int = 10) -> List[dict]:
+        """
+        Return top users sorted by rank hierarchy first (Chancellor > Duke > ... > Forsaken),
+        then by balance descending for ties within the same rank.
+        This matches the /identity card kingdom_rank exactly.
+        """
         async with self._db.execute(
-            """SELECT discord_id, username, balance, rank
+            f"""SELECT discord_id, username, balance, rank,
+                       {self._RANK_CASE} AS rank_idx
                FROM users WHERE guild_id = ?
-               ORDER BY balance DESC LIMIT ?""",
+               ORDER BY rank_idx DESC, balance DESC LIMIT ?""",
             (guild_id, limit),
         ) as cur:
             rows = await cur.fetchall()
             return [dict(r) for r in rows]
 
     async def get_kingdom_rank(self, guild_id: str, discord_id: str) -> int:
+        """
+        Return the user's 1-based kingdom rank position using rank hierarchy first,
+        then balance for ties. Matches get_leaderboard ordering exactly.
+        """
         async with self._db.execute(
-            """
+            f"""
             SELECT COUNT(*) + 1 AS kingdom_rank
             FROM users
             WHERE guild_id = ?
-              AND balance > (SELECT balance FROM users WHERE guild_id = ? AND discord_id = ?)
+              AND (
+                {self._RANK_CASE} > (
+                    SELECT {self._RANK_CASE}
+                    FROM users WHERE guild_id = ? AND discord_id = ?
+                )
+                OR (
+                    {self._RANK_CASE} = (
+                        SELECT {self._RANK_CASE}
+                        FROM users WHERE guild_id = ? AND discord_id = ?
+                    )
+                    AND balance > (
+                        SELECT balance FROM users WHERE guild_id = ? AND discord_id = ?
+                    )
+                )
+              )
             """,
-            (guild_id, guild_id, discord_id),
+            (guild_id, guild_id, discord_id, guild_id, discord_id, guild_id, discord_id),
         ) as cur:
             row = await cur.fetchone()
             return row["kingdom_rank"] if row else 1

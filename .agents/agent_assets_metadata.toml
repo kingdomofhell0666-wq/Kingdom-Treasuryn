@@ -341,3 +341,9 @@ id = "mbu3YyQ3xR9KdKOG4stRf"
 uri = "file://bot/assets/previews/treasury_crimson_sigil.png"
 type = "image"
 title = "/treasury — Crimson Sigil"
+
+[[outputs]]
+id = "yg0YdKafso5RLDHPlmL-Z"
+uri = "file://leaderboard_preview.png"
+type = "image"
+title = "Leaderboard Image — sample data preview"
