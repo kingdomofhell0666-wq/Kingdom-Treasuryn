@@ -4,25 +4,15 @@ AscensionAnnouncementService
 
 Bot-first, dashboard-override ascension announcement system.
 
-Priority order
-──────────────
-1. Valid dashboard config (DB row exists, enabled is explicitly set)
-2. Bot-native fallback (always enabled, uses origin channel)
+Channel resolution — strict priority
+──────────────────────────────────────
+1. Dashboard config channel_id (if DB row exists AND channel_id is non-null/non-empty)
+2. Hard-default channel: DEFAULT_ANNOUNCE_CHANNEL_ID
+3. If resolved channel cannot be used → log error, abort. NO random fallback.
 
-The bot is NEVER silent just because the dashboard config is missing.
-The dashboard only overrides/customises the default behaviour.
-
-Channel resolution order (fallback path)
-──────────────────────────────────────────
-1. origin_channel_id  — the channel where /ascend was executed
-2. Any sendable text channel found in the guild
-3. No-send + warning log
-
-Channel resolution order (dashboard path)
-──────────────────────────────────────────
-1. configured channel_id from DB
-2. If not found/invalid → log warning, then fall back to origin_channel_id
-3. If that also fails → no-send + warning log
+The bot NEVER uses the /ascend origin channel, walks guild channels,
+or guesses. If neither the dashboard channel nor the default channel
+is reachable, the announcement is suppressed and logged.
 """
 
 import logging
@@ -33,7 +23,13 @@ import discord
 
 logger = logging.getLogger("kingdom_treasury")
 
-# ── Constants ─────────────────────────────────────────────────────────────────
+# ── Hard-locked default channel ───────────────────────────────────────────────
+# Used when the dashboard has no explicit override.
+# Changed only when the dashboard saves a valid non-null channel_id.
+
+DEFAULT_ANNOUNCE_CHANNEL_ID = "1488244124992929802"   # #🏆┃domination
+
+# ── Announcement defaults ─────────────────────────────────────────────────────
 
 DEFAULT_TEMPLATE = "{user} has ascended to {rank} in the Kingdom of Hell! 🔥"
 ANNOUNCE_COLOR   = 0xFFD700
@@ -45,7 +41,8 @@ ANNOUNCE_COLOR   = 0xFFD700
 class EffectiveAscensionConfig:
     source:            str            # "dashboard" | "fallback"
     enabled:           bool
-    channel_id:        Optional[str]  # raw string ID or None
+    channel_id:        str            # always a non-None channel ID string
+    channel_source:    str            # "dashboard" | "default"
     message_template:  str
     resolved_strategy: str            # human-readable resolution note
 
@@ -64,43 +61,57 @@ class AscensionAnnouncementService:
     async def resolve_config(
         self,
         guild_id:          str,
-        origin_channel_id: str,
         config_service,                # ConfigService instance (avoids circular import)
     ) -> EffectiveAscensionConfig:
         """
         Load the dashboard config from PostgreSQL.
         Return an EffectiveAscensionConfig describing what should happen.
+
+        Dashboard channel is used ONLY when the DB row exists AND channel_id
+        is non-null and non-empty.  Every other case uses DEFAULT_ANNOUNCE_CHANNEL_ID.
         """
-        # Always invalidate cache so we get the freshest saved settings.
         config_service.invalidate_guild(guild_id)
         ann = await config_service.get_ascension_announcement_settings(guild_id)
 
         # ── Dashboard config path ──────────────────────────────────────────────
         if ann is not None and ann.get("enabled") is not None:
-            enabled   = bool(ann["enabled"])
-            ch_id     = ann.get("channel_id") or None
-            template  = (ann.get("message_template") or "").strip() or DEFAULT_TEMPLATE
-            strategy  = "dashboard config: enabled={} channel_id={}".format(enabled, ch_id)
+            enabled  = bool(ann["enabled"])
+            template = (ann.get("message_template") or "").strip() or DEFAULT_TEMPLATE
+
+            # Dashboard channel is an override ONLY if explicitly saved and non-null.
+            db_channel_id = (ann.get("channel_id") or "").strip() or None
+            if db_channel_id:
+                channel_id     = db_channel_id
+                channel_source = "dashboard"
+            else:
+                channel_id     = DEFAULT_ANNOUNCE_CHANNEL_ID
+                channel_source = "default"
 
             return EffectiveAscensionConfig(
                 source            = "dashboard",
                 enabled           = enabled,
-                channel_id        = ch_id,
+                channel_id        = channel_id,
+                channel_source    = channel_source,
                 message_template  = template,
-                resolved_strategy = strategy,
+                resolved_strategy = (
+                    f"dashboard: enabled={enabled} "
+                    f"channel_source={channel_source} "
+                    f"channel_id={channel_id}"
+                ),
             )
 
         # ── Fallback path (no DB row or enabled field is NULL) ─────────────────
         logger.info(
-            f"[Announce] no valid dashboard config for guild={guild_id} "
-            f"— using bot-native fallback defaults"
+            f"[Ascend] no valid dashboard config for guild={guild_id} "
+            f"— using hard-locked default channel={DEFAULT_ANNOUNCE_CHANNEL_ID}"
         )
         return EffectiveAscensionConfig(
             source            = "fallback",
             enabled           = True,
-            channel_id        = origin_channel_id,
+            channel_id        = DEFAULT_ANNOUNCE_CHANNEL_ID,
+            channel_source    = "default",
             message_template  = DEFAULT_TEMPLATE,
-            resolved_strategy = f"fallback: origin_channel_id={origin_channel_id}",
+            resolved_strategy = f"fallback: no valid dashboard config — using default channel={DEFAULT_ANNOUNCE_CHANNEL_ID}",
         )
 
     # ── Channel resolution ─────────────────────────────────────────────────────
@@ -108,46 +119,43 @@ class AscensionAnnouncementService:
     async def _resolve_channel(
         self,
         guild:    discord.Guild,
-        ch_id:    Optional[str],
-        fallback: Optional[str] = None,
+        ch_id:    str,
     ) -> Optional[discord.abc.Messageable]:
         """
-        Try to get a sendable channel by ID.
-        Falls back to `fallback` ID if primary ID is missing/invalid.
-        Returns None if nothing resolves.
+        Resolve a sendable channel from a specific ID.
+
+        STRICT — no guild channel walk, no origin-channel fallback.
+        Returns None only when the given ID is unreachable or unsendable.
         """
-        for candidate_id in filter(None, [ch_id, fallback]):
+        try:
+            raw = int(ch_id)
+        except (TypeError, ValueError):
+            logger.warning(f"[Ascend ERROR] channel_id {ch_id!r} is not a valid integer — cannot resolve")
+            return None
+
+        ch = guild.get_channel(raw)
+        if ch is None:
+            logger.info(f"[Ascend] channel {raw} not in guild cache — calling fetch_channel()")
             try:
-                raw = int(candidate_id)
-            except (TypeError, ValueError):
-                logger.warning(f"[Announce] channel_id {candidate_id!r} is not a valid integer — skipping")
-                continue
+                ch = await guild.fetch_channel(raw)
+            except discord.NotFound:
+                logger.warning(f"[Ascend ERROR] channel {raw} not found (NotFound)")
+                return None
+            except discord.Forbidden:
+                logger.warning(f"[Ascend ERROR] channel {raw} fetch forbidden (no permission)")
+                return None
+            except Exception as e:
+                logger.warning(f"[Ascend ERROR] fetch_channel({raw}) failed: {e}")
+                return None
 
-            # Try guild cache first
-            ch = guild.get_channel(raw)
-            if ch is None:
-                logger.info(f"[Announce] channel {raw} not in guild cache — calling fetch_channel()")
-                try:
-                    ch = await guild.fetch_channel(raw)
-                except discord.NotFound:
-                    logger.warning(f"[Announce] channel {raw} not found (NotFound)")
-                    ch = None
-                except discord.Forbidden:
-                    logger.warning(f"[Announce] channel {raw} fetch forbidden (no permission)")
-                    ch = None
-                except Exception as e:
-                    logger.warning(f"[Announce] fetch_channel({raw}) failed: {e}")
-                    ch = None
+        if ch is not None and hasattr(ch, "send"):
+            return ch
 
-            if ch is not None and hasattr(ch, "send"):
-                return ch
-
-            if ch is not None:
-                logger.warning(
-                    f"[Announce] channel {raw} resolved to {type(ch).__name__} "
-                    f"which has no send() — skipping"
-                )
-
+        if ch is not None:
+            logger.warning(
+                f"[Ascend ERROR] channel {raw} resolved to {type(ch).__name__} "
+                f"which has no send() — cannot use"
+            )
         return None
 
     # ── Message rendering ──────────────────────────────────────────────────────
@@ -161,7 +169,7 @@ class AscensionAnnouncementService:
                 .replace("{rank}", rank_name)
             )
         except Exception as e:
-            logger.warning(f"[Announce] template rendering failed ({e}) — using default")
+            logger.warning(f"[Ascend] template rendering failed ({e}) — using default")
             return (
                 DEFAULT_TEMPLATE
                 .replace("{user}", f"<@{discord_id}>")
@@ -177,7 +185,7 @@ class AscensionAnnouncementService:
         guild_id:          str,
         discord_id:        str,
         rank_name:         str,
-        origin_channel_id: str,
+        origin_channel_id: str,                   # kept for logging only
         config_service,
     ) -> None:
         """
@@ -190,62 +198,47 @@ class AscensionAnnouncementService:
             )
 
             # ── 1. Resolve config ──────────────────────────────────────────────
-            cfg = await self.resolve_config(guild_id, origin_channel_id, config_service)
+            cfg = await self.resolve_config(guild_id, config_service)
             logger.info(
-                f"[Announce] config_source={cfg.source} "
+                f"[Ascend] config_source={cfg.source} "
                 f"enabled={cfg.enabled} "
+                f"channel_source={cfg.channel_source} "
                 f"channel_id={cfg.channel_id} "
-                f"template={cfg.message_template!r} "
                 f"strategy={cfg.resolved_strategy}"
             )
 
             # ── 2. Respect explicit disable ────────────────────────────────────
             if not cfg.enabled:
-                logger.info("[Announce] disabled by dashboard config — no message sent")
+                logger.info("[Ascend] disabled by dashboard config — no message sent")
                 return
 
             # ── 3. Need a guild object ─────────────────────────────────────────
             guild = inter.guild
             if guild is None:
-                logger.warning("[Announce] inter.guild is None — cannot resolve channel, skipping")
+                logger.warning("[Ascend ERROR] inter.guild is None — cannot resolve channel, skipping")
                 return
 
-            # ── 4. Resolve channel ─────────────────────────────────────────────
-            #    Dashboard path:  configured channel_id → origin channel (graceful fallback)
-            #    Fallback path:   origin_channel_id (already set in cfg.channel_id)
-            if cfg.source == "dashboard" and cfg.channel_id:
-                channel = await self._resolve_channel(
-                    guild,
-                    ch_id    = cfg.channel_id,
-                    fallback = origin_channel_id,
-                )
-            else:
-                channel = await self._resolve_channel(
-                    guild,
-                    ch_id    = cfg.channel_id or origin_channel_id,
-                    fallback = None,
-                )
-
-            if channel is None:
-                # Last-resort: walk guild text channels and pick the first sendable one
-                logger.info("[Announce] configured channels unavailable — scanning guild for any text channel")
-                for gc in guild.text_channels:
-                    if hasattr(gc, "send"):
-                        channel = gc
-                        logger.info(f"[Announce] using first available text channel #{gc.name} ({gc.id})")
-                        break
+            # ── 4. Resolve channel (strict — no random fallback) ───────────────
+            channel = await self._resolve_channel(guild, cfg.channel_id)
 
             if channel is None:
                 logger.warning(
-                    f"[Announce] no sendable channel found in guild={guild_id} "
-                    f"— announcement suppressed"
+                    f"[Ascend ERROR] guild={guild_id} "
+                    f"channel_source={cfg.channel_source} "
+                    f"channel_id={cfg.channel_id} "
+                    f"— channel unreachable, announcement suppressed"
                 )
                 return
+
+            logger.info(
+                f"[Ascend] channel_source={cfg.channel_source} "
+                f"channel_id={channel.id}"
+            )
 
             # ── 5. Render message ──────────────────────────────────────────────
             message = self._render(cfg.message_template, discord_id, rank_name)
             logger.info(
-                f"[Announce] resolved_channel_name=#{channel.name} ({channel.id}) "
+                f"[Ascend] resolved_channel_name=#{channel.name} ({channel.id}) "
                 f"rendered_message={message!r}"
             )
 
@@ -256,12 +249,12 @@ class AscensionAnnouncementService:
             # ── 7. Send ────────────────────────────────────────────────────────
             sent = await channel.send(embed=embed)
             logger.info(
-                f"[Announce] success message_id={sent.id} "
+                f"[Ascend] success message_id={sent.id} "
                 f"guild={guild_id} channel={channel.id} (#{channel.name})"
             )
 
         except Exception as exc:
             logger.warning(
-                f"[Announce] ❌ unexpected exception — /ascend success is NOT affected: {exc}",
+                f"[Ascend ERROR] unexpected exception — /ascend success is NOT affected: {exc}",
                 exc_info=True,
             )

@@ -1,15 +1,14 @@
 """
 LeaderboardCog — bot-first, dashboard-override scheduled leaderboard posting.
 
-Two-layer architecture
-──────────────────────
-1. Bot-native fallback  — always enabled, uses first available guild channel,
-                          weekly at 20:00 UTC.  Works with zero dashboard config.
-2. Dashboard config     — overrides fallback when a valid DB row exists.
+Channel resolution — strict priority
+──────────────────────────────────────
+1. Dashboard config channel_id (if row exists AND channel_id is non-null/non-empty)
+2. Hard-default channel: DEFAULT_LEADERBOARD_CHANNEL_ID
+3. If resolved channel cannot be used → log error, abort. NO random fallback.
 
-The bot iterates ALL guilds it is in every minute.
-For each guild it resolves the effective config (dashboard → fallback)
-and posts when the schedule is due.
+The bot NEVER walks guild channels or guesses. If neither the dashboard channel
+nor the default channel is reachable, the post is suppressed and logged.
 
 Ranking rule (identical to /identity)
 ──────────────────────────────────────
@@ -36,7 +35,14 @@ from bot.utils.leaderboard_card import generate_leaderboard_image
 logger = logging.getLogger("kingdom_treasury")
 
 
-# ─── Fallback defaults ────────────────────────────────────────────────────────
+# ─── Hard-locked default channel ─────────────────────────────────────────────
+# Used when the dashboard has no explicit override.
+# Changed only when the dashboard saves a valid non-null channel_id.
+
+DEFAULT_LEADERBOARD_CHANNEL_ID = "1488243375579861012"   # #📊┃leaderboard
+
+
+# ─── Fallback schedule defaults ───────────────────────────────────────────────
 
 FALLBACK_FREQUENCY    = "weekly"
 FALLBACK_POST_HOUR    = 20
@@ -49,18 +55,19 @@ LEADERBOARD_TYPE      = "kingdom_rank_top_10"   # fixed — never changes
 
 @dataclass
 class EffectiveLeaderboardConfig:
-    source:           str             # "dashboard" | "fallback"
-    enabled:          bool
-    leaderboard_type: str             # always LEADERBOARD_TYPE
-    post_channel_id:  Optional[str]
-    post_frequency:   str             # "daily" | "weekly" | "monthly"
-    post_hour:        int
-    post_minute:      int
-    post_day_of_week: Optional[int]
-    post_day_of_month: Optional[int]
-    timezone:         str
-    last_posted_at:   Optional[datetime]
-    resolved_strategy: str
+    source:             str             # "dashboard" | "fallback"
+    enabled:            bool
+    leaderboard_type:   str             # always LEADERBOARD_TYPE
+    post_channel_id:    str             # always a non-None channel ID string
+    channel_source:     str             # "dashboard" | "default"
+    post_frequency:     str             # "daily" | "weekly" | "monthly"
+    post_hour:          int
+    post_minute:        int
+    post_day_of_week:   Optional[int]
+    post_day_of_month:  Optional[int]
+    timezone:           str
+    last_posted_at:     Optional[datetime]
+    resolved_strategy:  str
 
 
 # ─── Config resolver ──────────────────────────────────────────────────────────
@@ -73,8 +80,8 @@ async def resolve_leaderboard_config(
     Load the dashboard config from PostgreSQL.
     Return an EffectiveLeaderboardConfig for this guild.
 
-    Dashboard path: DB row exists and has 'enabled' set.
-    Fallback path:  no DB row or 'enabled' is NULL.
+    Dashboard channel is used ONLY when the DB row exists AND post_channel_id
+    is non-null and non-empty.  Every other case uses DEFAULT_LEADERBOARD_CHANNEL_ID.
     """
     rows = await config_service.get_leaderboard_settings_for_guild(guild_id)
 
@@ -89,11 +96,22 @@ async def resolve_leaderboard_config(
         if lpa is not None and lpa.tzinfo is None:
             lpa = lpa.replace(tzinfo=timezone.utc)
 
+        # Dashboard has an explicit, non-null channel_id → use it.
+        # Otherwise fall through to the hard-locked default.
+        db_channel_id = (r.get("post_channel_id") or "").strip() or None
+        if db_channel_id:
+            post_channel_id = db_channel_id
+            channel_source  = "dashboard"
+        else:
+            post_channel_id = DEFAULT_LEADERBOARD_CHANNEL_ID
+            channel_source  = "default"
+
         return EffectiveLeaderboardConfig(
             source            = "dashboard",
             enabled           = bool(r["enabled"]),
             leaderboard_type  = LEADERBOARD_TYPE,
-            post_channel_id   = r.get("post_channel_id") or None,
+            post_channel_id   = post_channel_id,
+            channel_source    = channel_source,
             post_frequency    = r.get("post_frequency") or FALLBACK_FREQUENCY,
             post_hour         = int(r.get("post_hour") or FALLBACK_POST_HOUR),
             post_minute       = int(r.get("post_minute") or FALLBACK_POST_MINUTE),
@@ -103,17 +121,19 @@ async def resolve_leaderboard_config(
             last_posted_at    = lpa,
             resolved_strategy = (
                 f"dashboard: enabled={r['enabled']} "
-                f"channel={r.get('post_channel_id')} "
+                f"channel_source={channel_source} "
+                f"channel={post_channel_id} "
                 f"freq={r.get('post_frequency')}"
             ),
         )
 
-    # ── Fallback ──────────────────────────────────────────────────────────────
+    # ── Fallback: no valid dashboard row — use hard-locked default ─────────────
     return EffectiveLeaderboardConfig(
         source            = "fallback",
         enabled           = True,
         leaderboard_type  = LEADERBOARD_TYPE,
-        post_channel_id   = None,          # resolved at post time
+        post_channel_id   = DEFAULT_LEADERBOARD_CHANNEL_ID,
+        channel_source    = "default",
         post_frequency    = FALLBACK_FREQUENCY,
         post_hour         = FALLBACK_POST_HOUR,
         post_minute       = FALLBACK_POST_MINUTE,
@@ -121,7 +141,7 @@ async def resolve_leaderboard_config(
         post_day_of_month = None,
         timezone          = FALLBACK_TIMEZONE,
         last_posted_at    = None,
-        resolved_strategy = "fallback: no valid dashboard config",
+        resolved_strategy = f"fallback: no valid dashboard config — using default channel={DEFAULT_LEADERBOARD_CHANNEL_ID}",
     )
 
 
@@ -172,61 +192,44 @@ def _is_due(cfg: EffectiveLeaderboardConfig, now_utc: datetime) -> bool:
 
 async def _resolve_channel(
     guild:      discord.Guild,
-    channel_id: Optional[str],
+    channel_id: str,
 ) -> Optional[discord.abc.Messageable]:
     """
-    Resolve a sendable channel from an ID.
-    Falls back to walking guild.text_channels if no ID is given or ID is invalid.
+    Resolve a sendable channel from a specific ID.
+
+    STRICT — no guild channel walk, no keyword guessing.
+    Returns None only when the given ID is unreachable or unsendable.
+    The caller must then abort and log; it must NOT pick a random fallback.
     """
-    if channel_id:
+    try:
+        raw = int(channel_id)
+    except (ValueError, TypeError):
+        logger.warning(f"[Leaderboard ERROR] channel_id {channel_id!r} is not a valid integer — cannot resolve")
+        return None
+
+    ch = guild.get_channel(raw)
+    if ch is None:
+        logger.info(f"[Leaderboard] channel {raw} not in guild cache — calling fetch_channel()")
         try:
-            raw = int(channel_id)
-        except (ValueError, TypeError):
-            logger.warning(f"[Leaderboard] channel_id {channel_id!r} is not a valid integer")
-            raw = None
+            ch = await guild.fetch_channel(raw)
+        except discord.NotFound:
+            logger.warning(f"[Leaderboard ERROR] channel {raw} not found (NotFound)")
+            return None
+        except discord.Forbidden:
+            logger.warning(f"[Leaderboard ERROR] channel {raw} fetch forbidden (no permission)")
+            return None
+        except Exception as exc:
+            logger.warning(f"[Leaderboard ERROR] fetch_channel({raw}) failed: {exc}")
+            return None
 
-        if raw is not None:
-            ch = guild.get_channel(raw)
-            if ch is None:
-                logger.info(f"[Leaderboard] channel {raw} not in cache — fetching from API")
-                try:
-                    ch = await guild.fetch_channel(raw)
-                except discord.NotFound:
-                    logger.warning(f"[Leaderboard] channel {raw} not found (NotFound)")
-                    ch = None
-                except discord.Forbidden:
-                    logger.warning(f"[Leaderboard] channel {raw} fetch forbidden")
-                    ch = None
-                except Exception as exc:
-                    logger.warning(f"[Leaderboard] fetch_channel({raw}) error: {exc}")
-                    ch = None
+    if ch is not None and hasattr(ch, "send"):
+        return ch
 
-            if ch is not None and hasattr(ch, "send"):
-                return ch
-            if ch is not None:
-                logger.warning(
-                    f"[Leaderboard] channel {raw} is type {type(ch).__name__} "
-                    f"— no send(), skipping"
-                )
-
-    # ── Fallback: find first sendable text channel in guild ───────────────────
-    logger.info(
-        f"[Leaderboard] no configured channel — scanning guild={guild.id} "
-        f"for a usable text channel"
-    )
-    # Prefer channels with "general", "leaderboard", "rank" in name
-    preferred_keywords = ("leaderboard", "rank", "kingdom", "general", "bot", "announcement")
-    for kw in preferred_keywords:
-        for tc in guild.text_channels:
-            if kw in tc.name.lower() and hasattr(tc, "send"):
-                logger.info(f"[Leaderboard] selected #{tc.name} ({tc.id}) via keyword '{kw}'")
-                return tc
-    # Any sendable text channel
-    for tc in guild.text_channels:
-        if hasattr(tc, "send"):
-            logger.info(f"[Leaderboard] selected first available #{tc.name} ({tc.id})")
-            return tc
-
+    if ch is not None:
+        logger.warning(
+            f"[Leaderboard ERROR] channel {raw} resolved to {type(ch).__name__} "
+            f"which has no send() — cannot use"
+        )
     return None
 
 
@@ -297,7 +300,6 @@ class LeaderboardCog(commands.Cog):
 
         now_utc = datetime.now(timezone.utc)
 
-        # Iterate every guild the bot is in — both dashboard and fallback guilds
         for guild in self.bot.guilds:
             try:
                 await self._process_guild(guild, config_svc, now_utc)
@@ -321,6 +323,7 @@ class LeaderboardCog(commands.Cog):
         logger.debug(
             f"[Leaderboard] config_source={cfg.source} "
             f"enabled={cfg.enabled} "
+            f"channel_source={cfg.channel_source} "
             f"channel_id={cfg.post_channel_id} "
             f"frequency={cfg.post_frequency} "
             f"timezone={cfg.timezone} "
@@ -340,22 +343,21 @@ class LeaderboardCog(commands.Cog):
             f"source={cfg.source} freq={cfg.post_frequency}"
         )
 
-        # ── 4. Resolve channel ────────────────────────────────────────────────
+        # ── 4. Resolve channel (strict — no random fallback) ──────────────────
         channel = await _resolve_channel(guild, cfg.post_channel_id)
+
         if channel is None:
             logger.warning(
-                f"[Leaderboard] no valid channel found for guild={guild_id} "
-                f"— skipping this tick"
+                f"[Leaderboard ERROR] guild={guild_id} "
+                f"channel_source={cfg.channel_source} "
+                f"channel_id={cfg.post_channel_id} "
+                f"— channel unreachable, post suppressed"
             )
             return
 
         logger.info(
-            f"[Leaderboard] config_source={cfg.source} "
-            f"enabled={cfg.enabled} "
-            f"channel_id={channel.id} "
-            f"resolved_channel_name=#{channel.name} "
-            f"frequency={cfg.post_frequency} "
-            f"timezone={cfg.timezone}"
+            f"[Leaderboard] channel_source={cfg.channel_source} "
+            f"channel_id={channel.id}"
         )
 
         # ── 5. Fetch guild config (currency) ──────────────────────────────────
@@ -468,12 +470,12 @@ class LeaderboardCog(commands.Cog):
             return True
         except discord.Forbidden:
             logger.warning(
-                f"[Leaderboard] permission denied sending to #{channel.name} "
-                f"({channel.id}) in guild={guild_id}"
+                f"[Leaderboard ERROR] permission denied sending to "
+                f"#{channel.name} ({channel.id}) in guild={guild_id}"
             )
         except Exception as exc:
             logger.error(
-                f"[Leaderboard] send failed for guild={guild_id} "
+                f"[Leaderboard ERROR] send failed for guild={guild_id} "
                 f"channel={channel.id}: {exc}",
                 exc_info=True,
             )
@@ -490,12 +492,23 @@ class LeaderboardCog(commands.Cog):
         if config_svc is None:
             return False
 
-        guild_id  = str(guild.id)
-        cfg       = await resolve_leaderboard_config(guild_id, config_svc)
-        channel   = await _resolve_channel(guild, cfg.post_channel_id)
+        guild_id = str(guild.id)
+        cfg      = await resolve_leaderboard_config(guild_id, config_svc)
+
+        channel = await _resolve_channel(guild, cfg.post_channel_id)
         if channel is None:
-            logger.warning(f"[Leaderboard] force_post: no channel for guild={guild_id}")
+            logger.warning(
+                f"[Leaderboard ERROR] force_post: guild={guild_id} "
+                f"channel_source={cfg.channel_source} "
+                f"channel_id={cfg.post_channel_id} "
+                f"— channel unreachable, post suppressed"
+            )
             return False
+
+        logger.info(
+            f"[Leaderboard] force_post channel_source={cfg.channel_source} "
+            f"channel_id={channel.id}"
+        )
 
         guild_cfg     = await config_svc.get_guild_config(guild_id)
         currency_name = guild_cfg.get("currency_name", "DevilCoins")
