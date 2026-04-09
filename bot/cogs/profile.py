@@ -10,6 +10,7 @@ from ..utils.card_generator import generate_card, fetch_avatar
 from ..utils.result_cards import generate_wealth_card
 from ..utils.skins import get_skin
 from ..utils.identity_variant import resolve_identity_card_variant
+from ..utils.routing import check_routing
 from ..ui import IdentityView
 
 
@@ -28,6 +29,9 @@ class ProfileCog(commands.Cog):
     @app_commands.describe(user="The soul whose identity you wish to inspect.")
     async def identity(self, interaction: discord.Interaction, user: Optional[discord.Member] = None):
         await interaction.response.defer(ephemeral=False)
+
+        if not await check_routing(interaction, "identity", getattr(self.bot, "config_service", None)):
+            return
 
         guild_id     = str(interaction.guild_id)
         target       = user or interaction.user
@@ -100,6 +104,9 @@ class ProfileCog(commands.Cog):
     async def wealth(self, interaction: discord.Interaction):
         import asyncio
         await interaction.response.defer(ephemeral=False)
+
+        if not await check_routing(interaction, "wealth", getattr(self.bot, "config_service", None)):
+            return
 
         guild_id   = str(interaction.guild_id)
         discord_id = str(interaction.user.id)

@@ -17,6 +17,7 @@ from ..utils.skins import (
     RARITY_COLORS as SKIN_RARITY_COLORS, DEFAULT_SKIN_ID,
 )
 from ..utils.formatting import format_dc
+from ..utils.routing import check_routing
 from ..ui import MarketView, MarketItem
 
 
@@ -82,6 +83,9 @@ class CosmeticsCog(commands.Cog):
     @app_commands.describe(buy="Name of a skin or title to purchase directly (optional).")
     async def market(self, interaction: discord.Interaction, buy: Optional[str] = None):
         await interaction.response.defer(ephemeral=True)
+
+        if not await check_routing(interaction, "market", getattr(self.bot, "config_service", None)):
+            return
 
         guild_id   = str(interaction.guild_id)
         discord_id = str(interaction.user.id)
@@ -178,6 +182,10 @@ class CosmeticsCog(commands.Cog):
     ])
     async def equip_skin(self, interaction: discord.Interaction, skin_id: str):
         await interaction.response.defer(ephemeral=True)
+
+        if not await check_routing(interaction, "equip-skin", getattr(self.bot, "config_service", None)):
+            return
+
         guild_id   = str(interaction.guild_id)
         discord_id = str(interaction.user.id)
         await self.db.upsert_user(guild_id, discord_id, interaction.user.display_name)
@@ -211,6 +219,10 @@ class CosmeticsCog(commands.Cog):
     ])
     async def equip_title(self, interaction: discord.Interaction, title: str):
         await interaction.response.defer(ephemeral=True)
+
+        if not await check_routing(interaction, "equip-title", getattr(self.bot, "config_service", None)):
+            return
+
         guild_id   = str(interaction.guild_id)
         discord_id = str(interaction.user.id)
         await self.db.upsert_user(guild_id, discord_id, interaction.user.display_name)

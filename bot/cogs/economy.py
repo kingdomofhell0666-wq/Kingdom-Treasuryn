@@ -12,6 +12,7 @@ from ..services.rank_service import RankService
 from ..services.transaction_service import TransactionService
 from ..services.cerberus_service import CerberusService
 from ..utils.embeds import EmbedFactory
+from ..utils.routing import check_routing
 from ..utils.grind_card import generate_grind_card
 from ..utils.result_cards import generate_tribute_card, generate_transfer_card, generate_ascend_card
 from ..utils.card_generator import fetch_avatar
@@ -118,20 +119,16 @@ class EconomyCog(commands.Cog):
     # ─── Command access check ──────────────────────────────────────────────────
 
     async def _check_access(self, interaction: discord.Interaction, command_name: str) -> bool:
-        """Check channel routing and permission rules. Returns True if allowed."""
-        guild_id   = str(interaction.guild_id)
-        channel_id = str(interaction.channel_id)
-
-        if not await self.config_service.check_channel_allowed(guild_id, command_name, channel_id):
-            embed = discord.Embed(
-                title       = "⚔  Wrong Channel",
-                description = f"The `/{command_name}` command is restricted to a specific channel in this server.",
-                color       = 0x8B0000,
-            )
-            embed.set_footer(text="Kingdom Treasury  ·  Kingdom of Hell")
-            await interaction.followup.send(embed=embed, ephemeral=True)
+        """
+        Enforce channel routing (hardcoded defaults, dashboard override) then
+        role-based permissions.  Returns True if the command may proceed.
+        The denial embed is sent inside check_routing / here — caller just returns.
+        """
+        if not await check_routing(interaction, command_name, self.config_service):
             return False
 
+        guild_id      = str(interaction.guild_id)
+        channel_id    = str(interaction.channel_id)
         user_role_ids = [str(r.id) for r in getattr(interaction.user, "roles", [])]
         if not await self.config_service.check_user_permission(guild_id, command_name, user_role_ids, channel_id):
             embed = discord.Embed(
@@ -402,6 +399,9 @@ class EconomyCog(commands.Cog):
     @app_commands.describe(buy="Rank to ascend to directly (must be the next rank).")
     async def ascend(self, interaction: discord.Interaction, buy: Optional[str] = None):
         await interaction.response.defer(ephemeral=True)
+
+        if not await check_routing(interaction, "ascend", self.config_service):
+            return
 
         guild_id   = str(interaction.guild_id)
         discord_id = str(interaction.user.id)

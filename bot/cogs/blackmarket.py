@@ -4,6 +4,7 @@ from discord.ext import commands
 
 from ..services.blackmarket_service import BlackMarketService
 from ..utils.embeds import EmbedFactory
+from ..utils.routing import check_routing
 from ..ui import BlackMarketView
 
 
@@ -17,6 +18,11 @@ class BlackMarketCog(commands.Cog):
 
     @app_commands.command(name="blackmarket", description="Browse forbidden items of power. Rotates every 6 hours.")
     async def blackmarket(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+
+        if not await check_routing(interaction, "blackmarket", getattr(self.bot, "config_service", None)):
+            return
+
         guild_id = str(interaction.guild_id)
         items    = self.market.get_active_items()
 
@@ -36,4 +42,4 @@ class BlackMarketCog(commands.Cog):
 
         view  = BlackMarketView(items, buy_callback)
         embed = view.build_embed()
-        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+        await interaction.followup.send(embed=embed, view=view, ephemeral=True)

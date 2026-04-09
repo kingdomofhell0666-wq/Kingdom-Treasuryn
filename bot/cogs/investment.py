@@ -10,6 +10,7 @@ from ..utils.result_cards import (
     generate_collect_card, generate_withdraw_card,
 )
 from ..utils.card_generator import fetch_avatar
+from ..utils.routing import check_routing
 
 
 class InvestmentCog(commands.Cog):
@@ -31,6 +32,10 @@ class InvestmentCog(commands.Cog):
     ])
     async def invest(self, interaction: discord.Interaction, inv_type: str, amount: int):
         await interaction.response.defer(ephemeral=False)
+
+        if not await check_routing(interaction, "invest", getattr(self.bot, "config_service", None)):
+            return
+
         guild_id   = str(interaction.guild_id)
         discord_id = str(interaction.user.id)
         username   = interaction.user.display_name
@@ -70,6 +75,10 @@ class InvestmentCog(commands.Cog):
     @app_commands.command(name="portfolio", description="View your active and matured investments.")
     async def portfolio(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=False)
+
+        if not await check_routing(interaction, "portfolio", getattr(self.bot, "config_service", None)):
+            return
+
         guild_id   = str(interaction.guild_id)
         discord_id = str(interaction.user.id)
         username   = interaction.user.display_name
@@ -101,6 +110,10 @@ class InvestmentCog(commands.Cog):
     @app_commands.command(name="collect", description="Collect all matured investments.")
     async def collect(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=False)
+
+        if not await check_routing(interaction, "collect", getattr(self.bot, "config_service", None)):
+            return
+
         guild_id   = str(interaction.guild_id)
         discord_id = str(interaction.user.id)
         username   = interaction.user.display_name
@@ -138,6 +151,10 @@ class InvestmentCog(commands.Cog):
     @app_commands.command(name="withdraw", description="Withdraw all active investments early. A 20% penalty applies.")
     async def withdraw(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=False)
+
+        if not await check_routing(interaction, "withdraw", getattr(self.bot, "config_service", None)):
+            return
+
         guild_id   = str(interaction.guild_id)
         discord_id = str(interaction.user.id)
         username   = interaction.user.display_name
