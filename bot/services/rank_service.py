@@ -99,6 +99,29 @@ EXCLUDED_ROLE_IDS: Dict[str, str] = {
 }
 
 
+# ─── Default ascension cooldowns (bot-first, dashboard-override) ─────────────
+# Keyed by CURRENT rank — how long you must wait at that rank before ascending.
+# Dashboard config (rank_cooldown_settings table) overrides these per guild.
+# All values in seconds.
+DEFAULT_ASCENSION_COOLDOWNS: Dict[str, int] = {
+    "Forsaken":    0,               # no wait — buy Vermin immediately
+    "Vermin":      15 * 60,         # 15 minutes
+    "Corrupted":   30 * 60,         # 30 minutes
+    "Folklore":    1 * 3600,        # 1 hour
+    "Mythology":   2 * 3600,        # 2 hours
+    "Demonology":  4 * 3600,        # 4 hours
+    "Eschatology": 8 * 3600,        # 8 hours
+    "Archangel":   12 * 3600,       # 12 hours
+    "Archdemon":   24 * 3600,       # 24 hours
+    "Knight":      48 * 3600,       # 48 hours
+    "Baron":       72 * 3600,       # 72 hours
+    "Viscount":    120 * 3600,      # 120 hours
+    "Count":       168 * 3600,      # 168 hours (7 days)
+    "Marquis":     240 * 3600,      # 240 hours (10 days)
+    "Duke":        336 * 3600,      # 336 hours (14 days) — no next rank, effectively unused
+}
+
+
 class RankService:
     def get_tax_rate(self, rank_name: str) -> float:
         entry = RANK_DICT.get(rank_name)

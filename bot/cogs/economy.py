@@ -7,12 +7,11 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from ..services import EconomyService, CooldownService, AuditService, TreasuryService, BadgeService
+from ..services import EconomyService, CooldownService, AuditService, TreasuryService
 from ..services.rank_service import RankService
 from ..services.transaction_service import TransactionService
 from ..services.cerberus_service import CerberusService
 from ..utils.embeds import EmbedFactory
-from ..utils.badges import BADGES_CATALOG
 from ..utils.grind_card import generate_grind_card
 from ..utils.result_cards import generate_tribute_card, generate_transfer_card, generate_ascend_card
 from ..utils.card_generator import fetch_avatar
@@ -112,8 +111,6 @@ class EconomyCog(commands.Cog):
     @property
     def cerberus(self):       return self.bot.cerberus_service
     @property
-    def badge_service(self):  return self.bot.badge_service
-    @property
     def config_service(self):       return self.bot.config_service
     @property
     def ascension_announce(self):   return self.bot.ascension_announcement_service
@@ -148,16 +145,6 @@ class EconomyCog(commands.Cog):
 
         return True
 
-    # ─── Badge announce helper ────────────────────────────────
-
-    async def _announce_badges(self, inter: discord.Interaction, new_badges: list):
-        if not new_badges:
-            return
-        lines = [f"{b.icon}  **{b.name}**  ·  *{b.description}*" for b in new_badges]
-        embed = discord.Embed(title="🏅  Badge Unlocked", description="\n".join(lines), color=0xFFD700)
-        embed.set_footer(text="Earned — not purchased.  ·  Kingdom Treasury")
-        await inter.followup.send(embed=embed)
-
     # ─── Cerberus helper ──────────────────────────────────────
 
     async def _run_cerberus(self, inter: discord.Interaction, guild_id: str, discord_id: str):
@@ -169,7 +156,6 @@ class EconomyCog(commands.Cog):
             elif outcome == "immune":
                 embed = EmbedFactory.cerberus_immune()
             else:
-                await self.badge_service.grant_badge(guild_id, discord_id, "cerberus_guard")
                 embed = EmbedFactory.cerberus_cleared(audit["risk_delta"])
             await inter.followup.send(embed=embed)
 
@@ -287,11 +273,7 @@ class EconomyCog(commands.Cog):
             card_file = discord.File(card_buf, filename="grind_result.png")
             await inter.edit_original_response(embed=card_embed, attachments=[card_file])
 
-            # ── Post-result: badges + audit ───────────────────
-            if outcome == "jackpot":
-                await self.badge_service.grant_badge(guild_id, discord_id, "high_roller")
-            new_badges = await self.badge_service.check_and_award(guild_id, discord_id)
-            await self._announce_badges(inter, new_badges)
+            # ── Post-result: cerberus audit ───────────────────
             await self._run_cerberus(inter, guild_id, discord_id)
 
         # ── Walk away callback ────────────────────────────────
@@ -363,8 +345,6 @@ class EconomyCog(commands.Cog):
         )
 
         await self.db.increment_tribute_count(guild_id, discord_id)
-        new_badges = await self.badge_service.check_and_award(guild_id, discord_id)
-        await self._announce_badges(interaction, new_badges)
         await self._run_cerberus(interaction, guild_id, discord_id)
 
     # ─── /transfer ────────────────────────────────────────────
@@ -434,22 +414,31 @@ class EconomyCog(commands.Cog):
         # ── shared ascend logic (used by both UI button and direct buy) ────────
         async def _execute_ascend(inter: discord.Interaction, rank_name: str, cost: int):
             # ── Rank ascension cooldown check ─────────────────────────────────
-            cooldown_secs = await self.config_service.get_rank_cooldown(guild_id, rank_name)
+            # Cooldown is keyed on the CURRENT rank — the wait imposed after
+            # arriving at your current tier before you may advance further.
+            # Falls back to bot-hardcoded defaults when no DB row exists.
+            from datetime import datetime, timezone
+            cooldown_secs = await self.config_service.get_rank_cooldown(guild_id, current_rank)
             if cooldown_secs > 0:
-                last_at = await self.db.get_last_ascension_time(guild_id, discord_id, rank_name)
+                last_at = await self.db.get_last_ascension_time(guild_id, discord_id, current_rank)
                 if last_at is not None:
-                    from datetime import datetime, timezone
                     elapsed = (datetime.now(timezone.utc) - last_at).total_seconds()
                     if elapsed < cooldown_secs:
                         remaining_secs = int(cooldown_secs - elapsed)
-                        h, m = divmod(remaining_secs // 60, 60)
-                        s    = remaining_secs % 60
-                        time_str = f"{h}h {m}m {s}s" if h else f"{m}m {s}s"
+                        days, rem  = divmod(remaining_secs, 86400)
+                        hours, rem = divmod(rem, 3600)
+                        mins, secs = divmod(rem, 60)
+                        parts = []
+                        if days:  parts.append(f"{days}d")
+                        if hours: parts.append(f"{hours}h")
+                        if mins:  parts.append(f"{mins}m")
+                        if secs and not days: parts.append(f"{secs}s")
+                        time_str = " ".join(parts) if parts else "moments"
                         embed = discord.Embed(
                             title       = "⏳  Ascension Cooldown",
                             description = (
-                                f"You must wait **{time_str}** before ascending to **{rank_name}** again.\n"
-                                "*The Kingdom does not rush ascension.*"
+                                f"You must wait **{time_str}** before your next ascension.\n"
+                                f"*Your current rank is **{current_rank}** — the Kingdom demands patience.*"
                             ),
                             color       = 0x4A0000,
                         )
@@ -514,8 +503,6 @@ class EconomyCog(commands.Cog):
                 file=discord.File(card_buf, filename="ascend_result.png"),
                 ephemeral=False,
             )
-            new_badges = await self.badge_service.check_and_award(guild_id, discord_id)
-            await self._announce_badges(inter, new_badges)
 
             # ── Ascension announcement ────────────────────────────────────────
             await self.ascension_announce.announce(

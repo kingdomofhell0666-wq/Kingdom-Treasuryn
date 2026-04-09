@@ -287,6 +287,14 @@ class ConfigService:
     # ── Ascension cooldown ────────────────────────────────────────────────────
 
     async def get_rank_cooldown(self, guild_id: str, rank_name: str) -> int:
+        """
+        Return cooldown seconds for rank_name in guild_id.
+        Priority:
+          1. Dashboard config (rank_cooldown_settings table) if a row exists
+          2. Bot-hardcoded defaults (DEFAULT_ASCENSION_COOLDOWNS) otherwise
+        """
+        from .rank_service import DEFAULT_ASCENSION_COOLDOWNS
+
         key = f"{guild_id}:rank_cooldown:{rank_name}"
         cached = _cache.get(key)
         if cached is not None:
@@ -296,7 +304,10 @@ class ConfigService:
             "SELECT cooldown_seconds FROM rank_cooldown_settings WHERE guild_id = $1 AND rank_name = $2",
             guild_id, rank_name,
         )
-        result = row["cooldown_seconds"] if row else 0
+        if row and row["cooldown_seconds"] is not None:
+            result = int(row["cooldown_seconds"])
+        else:
+            result = DEFAULT_ASCENSION_COOLDOWNS.get(rank_name, 0)
         _cache.set(key, result)
         return result
 
