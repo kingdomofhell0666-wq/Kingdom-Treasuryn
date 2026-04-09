@@ -63,7 +63,14 @@ class InvestmentService:
         await self.db.log_transaction(guild_id, "investment_open", f"user:{discord_id}", "kingdom_mint", amount, f"Investment opened: {inv_type}")
         inv_id      = await self.db.create_investment(guild_id, discord_id, inv_type, amount, matures_str)
         updated     = await self.db.get_user(guild_id, discord_id)
-        return {"id": inv_id, "inv_type": inv_type, "label": cfg["label"], "amount": amount, "matures_at": matures_at, "maturity_hours": cfg["maturity_hours"], "new_balance": updated["balance"] if updated else 0}
+        return {
+            "id": inv_id, "inv_type": inv_type, "label": cfg["label"],
+            "amount": amount, "matures_at": matures_at,
+            "maturity_hours": cfg["maturity_hours"],
+            "new_balance":    updated["balance"]           if updated else 0,
+            "rank":           updated.get("rank", "Forsaken") if updated else "Forsaken",
+            "equipped_skin":  updated.get("equipped_skin") if updated else None,
+        }
 
     async def get_portfolio(self, guild_id: str, discord_id: str) -> List[Dict[str, Any]]:
         investments = await self.db.get_active_investments(guild_id, discord_id)
@@ -89,7 +96,12 @@ class InvestmentService:
             total_payout += payout
             results.append({"id": inv["id"], "inv_type": inv["inv_type"], "principal": inv["principal"], "payout": payout, "profit": profit, "success": success})
         updated = await self.db.get_user(guild_id, discord_id)
-        return {"results": results, "total_payout": total_payout, "new_balance": updated["balance"] if updated else 0}
+        return {
+            "results": results, "total_payout": total_payout,
+            "new_balance":   updated["balance"]           if updated else 0,
+            "rank":          updated.get("rank", "Forsaken") if updated else "Forsaken",
+            "equipped_skin": updated.get("equipped_skin") if updated else None,
+        }
 
     async def withdraw_early(self, guild_id: str, discord_id: str) -> Dict[str, Any]:
         investments = await self.db.get_active_investments(guild_id, discord_id)
@@ -110,4 +122,9 @@ class InvestmentService:
             total_payout += payout
             results.append({"id": inv["id"], "inv_type": inv["inv_type"], "principal": inv["principal"], "payout": payout, "penalty": penalty})
         updated = await self.db.get_user(guild_id, discord_id)
-        return {"results": results, "total_payout": total_payout, "count": len(results), "new_balance": updated["balance"] if updated else 0}
+        return {
+            "results": results, "total_payout": total_payout, "count": len(results),
+            "new_balance":   updated["balance"]           if updated else 0,
+            "rank":          updated.get("rank", "Forsaken") if updated else "Forsaken",
+            "equipped_skin": updated.get("equipped_skin") if updated else None,
+        }

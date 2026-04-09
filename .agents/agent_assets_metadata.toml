@@ -257,3 +257,63 @@ id = "nLVw4cgTxg27ZH8k5AmzN"
 uri = "file://bot/assets/previews/ascend_blood_crown.png"
 type = "image"
 title = "/ascend — Blood Crown"
+
+[[outputs]]
+id = "Yt8Pelpd-xaAbYeYQtA38"
+uri = "file://bot/assets/previews/invest_safe_default.png"
+type = "image"
+title = "/invest — Safe (Infernal Standard)"
+
+[[outputs]]
+id = "EqOS2xmOTk7ygcF0we0Wg"
+uri = "file://bot/assets/previews/invest_risky_infernal_gold.png"
+type = "image"
+title = "/invest — High Risk (Infernal Gold)"
+
+[[outputs]]
+id = "jhWgff_v4Q1985qepbAGE"
+uri = "file://bot/assets/previews/invest_medium_blood_crown.png"
+type = "image"
+title = "/invest — Medium Risk (Blood Crown)"
+
+[[outputs]]
+id = "XWaIZISBJ-s2toI4ZpFm2"
+uri = "file://bot/assets/previews/portfolio_default.png"
+type = "image"
+title = "/portfolio — Active Investments"
+
+[[outputs]]
+id = "nt0yxvyRJt9O3uNbhinmH"
+uri = "file://bot/assets/previews/portfolio_infernal_gold.png"
+type = "image"
+title = "/portfolio — Infernal Gold"
+
+[[outputs]]
+id = "grH0LOcX9jnTKzg0guWnk"
+uri = "file://bot/assets/previews/portfolio_empty.png"
+type = "image"
+title = "/portfolio — Empty State"
+
+[[outputs]]
+id = "CcHIvYM4KTygsq9SDWdqt"
+uri = "file://bot/assets/previews/collect_default.png"
+type = "image"
+title = "/collect — Returns Collected"
+
+[[outputs]]
+id = "eFMpUgKHKszJZKO62GhK_"
+uri = "file://bot/assets/previews/collect_abyss_smoke.png"
+type = "image"
+title = "/collect — Abyss Smoke"
+
+[[outputs]]
+id = "5qQ4MKVvLdyND_lc4BPbm"
+uri = "file://bot/assets/previews/withdraw_default.png"
+type = "image"
+title = "/withdraw — Early Withdrawal"
+
+[[outputs]]
+id = "gNP7V9_ncbBzoozv7HPRB"
+uri = "file://bot/assets/previews/withdraw_blood_crown.png"
+type = "image"
+title = "/withdraw — Blood Crown"

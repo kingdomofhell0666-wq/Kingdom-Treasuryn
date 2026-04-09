@@ -451,3 +451,324 @@ def generate_ascend_card(
             _hline(draw, y + 54, th, alpha=20, x1=RIGHT_X, x2=W - PAD)
 
     return _finish(card, draw, th)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# INVESTMENT CARDS  (/invest  /portfolio  /collect  /withdraw)
+# ══════════════════════════════════════════════════════════════════════════════
+
+# Risk palette — badge colours for invest cards
+_RISK_META = {
+    "safe":   dict(label="SAFE  INVESTMENT", badge_col=(165, 138, 30), badge_glow=(90, 72, 5)),
+    "medium": dict(label="MEDIUM  RISK",     badge_col=(195, 118, 0),  badge_glow=(130, 68, 0)),
+    "risky":  dict(label="HIGH  RISK",       badge_col=(185, 22,  22), badge_glow=(110, 8,  8)),
+}
+
+# ─── Utility: format timedelta ────────────────────────────────────────────────
+
+def _fmt_td(td) -> str:
+    total = int(td.total_seconds())
+    if total <= 0:
+        return "Matured"
+    h, rem = divmod(total, 3600)
+    m = rem // 60
+    if h:
+        return f"{h}h {m:02d}m"
+    return f"{m}m"
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 5.  INVEST  CARD
+# ══════════════════════════════════════════════════════════════════════════════
+
+def generate_invest_card(
+    username:       str,
+    rank:           str,
+    inv_type:       str,            # "safe" / "medium" / "risky"
+    type_label:     str,
+    amount:         int,
+    maturity_hours: int,
+    new_balance:    int,
+    avatar_bytes:   Optional[bytes] = None,
+    skin_id:        Optional[str]   = None,
+) -> io.BytesIO:
+
+    th   = _t(skin_id)
+    rm   = _RISK_META.get(inv_type, _RISK_META["safe"])
+    gold = th["gold"]
+
+    card, draw = _base_canvas(
+        th,
+        header_txt = "KINGDOM  OF  HELL    ·    INFERNAL  MARKETS",
+        badge_txt  = rm["label"],
+        badge_col  = rm["badge_col"],
+        badge_glow = rm["badge_glow"],
+    )
+
+    _avatar_col(card, avatar_bytes, th, username, rank, rm["badge_col"])
+    draw = ImageDraw.Draw(card)
+
+    sf = _font(9, cinzel=True)
+    draw.text((RIGHT_X, 56), "INVESTMENT  COMMITTED",
+              font=sf, fill=(*th["text2"][:3], 108))
+    _hline(draw, 84, th, alpha=38, x1=RIGHT_X, x2=W - PAD)
+
+    mat_str  = f"{maturity_hours}h"
+    amt_str  = _fmt(amount)
+    bal_str  = _fmt(new_balance)
+
+    rows = [
+        ("📊  Type",           type_label, th["text1"],         False),
+        ("💰  Amount Committed", f"−{amt_str}", rm["badge_col"], False),
+        ("⏳  Matures In",     mat_str,    th["text2"],         False),
+        ("💼  Wallet After",   bal_str,    gold,                True),
+    ]
+    ROW_H = 68
+    for i, (label, value, vcol, hl) in enumerate(rows):
+        y = 94 + i * ROW_H
+        _stat_row(card, draw, label, value, y, vcol, th, highlighted=hl, hl_accent=rm["badge_col"])
+        draw = ImageDraw.Draw(card)
+        if i < len(rows) - 1:
+            _hline(draw, y + 54, th, alpha=22, x1=RIGHT_X, x2=W - PAD)
+
+    return _finish(card, draw, th)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 6.  PORTFOLIO  CARD  (full-width table, no avatar column)
+# ══════════════════════════════════════════════════════════════════════════════
+
+def generate_portfolio_card(
+    username:    str,
+    investments: list,          # from get_portfolio()
+    skin_id:     Optional[str] = None,
+) -> io.BytesIO:
+
+    th    = _t(skin_id)
+    gold  = th["gold"]
+    acc   = th["accent"]
+
+    card, draw = _base_canvas(
+        th,
+        header_txt = "KINGDOM  OF  HELL    ·    INFERNAL  MARKETS",
+        badge_txt  = "PORTFOLIO",
+        badge_col  = gold,
+        badge_glow = th["glow"],
+    )
+    draw = ImageDraw.Draw(card)
+
+    # Owner label
+    uf = _font(14, bold=True)
+    draw.text((PAD + 8, 56), username, font=uf, fill=(*th["text1"][:3], 200))
+
+    _hline(draw, 84, th, alpha=38)
+
+    if not investments:
+        # Empty state
+        ef  = _font(16)
+        etxt = "No active investments in the infernal markets."
+        ew   = _tw(draw, etxt, ef)
+        draw.text(((W - ew) // 2, H // 2 - 14), etxt,
+                  font=ef, fill=(*th["text2"][:3], 150))
+        return _finish(card, draw, th)
+
+    # Table header
+    COL_X = [PAD + 8, 230, 450, 620, 760]
+    TH_Y  = 95
+    hf = _font(9, cinzel=True)
+    for txt, x in zip(["TYPE", "PRINCIPAL", "RETURN RANGE", "STATUS", "MATURES IN"], COL_X):
+        draw.text((x, TH_Y), txt, font=hf, fill=(*th["text2"][:3], 120))
+
+    _hline(draw, TH_Y + 18, th, alpha=30)
+
+    # Rows — up to 5
+    MAX_ROWS = 5
+    shown    = investments[:MAX_ROWS]
+    ROW_H    = 48
+    rf       = _font(13)
+    vf_s     = _font(15, bold=True)
+
+    _RISK_LABELS = {"safe": "Safe", "medium": "Medium", "risky": "High Risk"}
+    _RISK_RANGE  = {"safe": "5–10%", "medium": "20–35%", "risky": "50–80%"}
+    _RISK_COLS   = {
+        "safe":   (165, 138, 30),
+        "medium": (195, 118, 0),
+        "risky":  (185, 22, 22),
+    }
+
+    for i, inv in enumerate(shown):
+        y      = TH_Y + 24 + i * ROW_H
+        itype  = inv.get("inv_type", "safe")
+        rc     = _RISK_COLS.get(itype, th["text2"])
+        status_col = gold if inv.get("matured") else (*th["text1"][:3], 210)
+        status_lbl = "✓  Ready" if inv.get("matured") else "Active"
+        rem    = _fmt_td(inv.get("remaining")) if not inv.get("matured") else "—"
+
+        row_data = [
+            (_RISK_LABELS.get(itype, itype.title()), rc),
+            (_fmt(inv["principal"]), th["text1"]),
+            (_RISK_RANGE.get(itype, "—"), th["text2"]),
+            (status_lbl, status_col),
+            (rem, th["text2"]),
+        ]
+        for (txt, col), x in zip(row_data, COL_X):
+            col3 = col[:3] if len(col) >= 3 else col
+            draw.text((x, y + 4), txt, font=vf_s, fill=(*col3, 210))
+
+        if i < len(shown) - 1:
+            _hline(draw, y + ROW_H - 6, th, alpha=18)
+
+    if len(investments) > MAX_ROWS:
+        extra_f = _font(11)
+        extra_t = f"+ {len(investments) - MAX_ROWS} more  ·  use /portfolio for full list"
+        extra_y = TH_Y + 24 + MAX_ROWS * ROW_H + 4
+        draw.text((PAD + 8, extra_y), extra_t,
+                  font=extra_f, fill=(*th["text2"][:3], 120))
+
+    # Summary bar
+    matured_count = sum(1 for inv in investments if inv.get("matured"))
+    active_count  = len(investments) - matured_count
+    total_locked  = sum(inv["principal"] for inv in investments if not inv.get("matured"))
+
+    _dline(draw, H - 56, th)
+    sf_sm = _font(10)
+    summary = (
+        f"Active: {active_count}    "
+        f"Ready to Collect: {matured_count}    "
+        f"Total Locked: {_fmt(total_locked)}"
+    )
+    sw = _tw(draw, summary, sf_sm)
+    draw.text(((W - sw) // 2, H - 46), summary,
+              font=sf_sm, fill=(*th["text2"][:3], 150))
+
+    return _finish(card, draw, th)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 7.  COLLECT  CARD
+# ══════════════════════════════════════════════════════════════════════════════
+
+def generate_collect_card(
+    username:      str,
+    rank:          str,
+    results:       list,       # list of {inv_type, principal, payout, profit, success}
+    total_payout:  int,
+    new_balance:   int,
+    avatar_bytes:  Optional[bytes] = None,
+    skin_id:       Optional[str]   = None,
+) -> io.BytesIO:
+
+    th      = _t(skin_id)
+    gold    = th["gold"]
+    acc     = th["accent"]
+
+    any_success = any(r.get("success", True) for r in results)
+    badge_col  = gold if any_success else (140, 55, 55)
+    badge_glow = th["glow"] if any_success else (90, 18, 18)
+
+    card, draw = _base_canvas(
+        th,
+        header_txt = "KINGDOM  OF  HELL    ·    INFERNAL  MARKETS",
+        badge_txt  = "RETURNS  COLLECTED",
+        badge_col  = badge_col,
+        badge_glow = badge_glow,
+    )
+
+    _avatar_col(card, avatar_bytes, th, username, rank, badge_col)
+    draw = ImageDraw.Draw(card)
+
+    sf = _font(9, cinzel=True)
+    draw.text((RIGHT_X, 56), "COLLECTION  REPORT",
+              font=sf, fill=(*th["text2"][:3], 108))
+    _hline(draw, 84, th, alpha=38, x1=RIGHT_X, x2=W - PAD)
+
+    total_invested = sum(r["principal"] for r in results)
+    net_profit     = total_payout - total_invested
+    count          = len(results)
+    wins           = sum(1 for r in results if r.get("success", True))
+
+    profit_str   = (f"+{_fmt(net_profit)}" if net_profit >= 0 else f"−{_fmt(abs(net_profit))}")
+    profit_col   = gold if net_profit >= 0 else (200, 60, 60)
+    win_str      = f"{wins}/{count}"
+    total_str    = f"+{_fmt(total_payout)}"
+    bal_str      = _fmt(new_balance)
+
+    rows = [
+        ("📦  Investments",    f"{count} matured",    th["text2"],  False),
+        ("🎯  Outcomes",       win_str,               th["text1"],  False),
+        ("💹  Net Profit",     profit_str,            profit_col,   False),
+        ("💰  Total Payout",   total_str,             gold,         True),
+        ("💼  Wallet After",   bal_str,               th["text1"],  False),
+    ]
+    ROW_H = 58
+    for i, (label, value, vcol, hl) in enumerate(rows):
+        y = 94 + i * ROW_H
+        _stat_row(card, draw, label, value, y, vcol, th, highlighted=hl, hl_accent=badge_col)
+        draw = ImageDraw.Draw(card)
+        if i < len(rows) - 1:
+            _hline(draw, y + 46, th, alpha=22, x1=RIGHT_X, x2=W - PAD)
+
+    return _finish(card, draw, th)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 8.  WITHDRAW  CARD  (early withdrawal)
+# ══════════════════════════════════════════════════════════════════════════════
+
+def generate_withdraw_card(
+    username:     str,
+    rank:         str,
+    results:      list,       # list of {inv_type, principal, payout, penalty}
+    total_payout: int,
+    new_balance:  int,
+    avatar_bytes: Optional[bytes] = None,
+    skin_id:      Optional[str]   = None,
+) -> io.BytesIO:
+
+    th   = _t(skin_id)
+    gold = th["gold"]
+    red  = (185, 40, 40)
+    red_glow = (110, 12, 12)
+
+    card, draw = _base_canvas(
+        th,
+        header_txt = "KINGDOM  OF  HELL    ·    INFERNAL  MARKETS",
+        badge_txt  = "EARLY  WITHDRAWAL",
+        badge_col  = red,
+        badge_glow = red_glow,
+    )
+
+    _avatar_col(card, avatar_bytes, th, username, rank, red)
+    draw = ImageDraw.Draw(card)
+
+    sf = _font(9, cinzel=True)
+    draw.text((RIGHT_X, 56), "WITHDRAWAL  RECEIPT",
+              font=sf, fill=(*th["text2"][:3], 108))
+    _hline(draw, 84, th, alpha=38, x1=RIGHT_X, x2=W - PAD)
+
+    count          = len(results)
+    total_principal = sum(r["principal"] for r in results)
+    total_penalty   = sum(r["penalty"] for r in results)
+
+    cnt_str    = f"{count} position{'s' if count != 1 else ''}"
+    orig_str   = _fmt(total_principal)
+    pen_str    = f"−{_fmt(total_penalty)}  (20%)"
+    payout_str = _fmt(total_payout)
+    bal_str    = _fmt(new_balance)
+
+    rows = [
+        ("📤  Positions Closed",  cnt_str,    th["text2"],   False),
+        ("📥  Original Value",    orig_str,   th["text1"],   False),
+        ("☠  Penalty Burned",    pen_str,    red,           False),
+        ("💰  Returned",          payout_str, gold,          True),
+        ("💼  Wallet After",      bal_str,    th["text1"],   False),
+    ]
+    ROW_H = 58
+    for i, (label, value, vcol, hl) in enumerate(rows):
+        y = 94 + i * ROW_H
+        _stat_row(card, draw, label, value, y, vcol, th, highlighted=hl, hl_accent=red)
+        draw = ImageDraw.Draw(card)
+        if i < len(rows) - 1:
+            _hline(draw, y + 46, th, alpha=22, x1=RIGHT_X, x2=W - PAD)
+
+    return _finish(card, draw, th)
