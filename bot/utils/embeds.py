@@ -689,3 +689,47 @@ class EmbedFactory:
         )
         embed.set_footer(text="Kingdom Treasury  ·  Kingdom of Hell")
         return embed
+
+    # ─── Cerberus Aggression Levels ────────────────────────────────────────────
+
+    @staticmethod
+    def cerberus_routing_deny(level: int, seizure: int = 0) -> discord.Embed:
+        """
+        Immersive routing denial embed with aggression level tone.
+        Level 4 includes the financial seizure amount when seizure > 0.
+        """
+        if level == 1:
+            embed = discord.Embed(
+                title       = "Cerberus watches.",
+                description = "*You are misplaced.*",
+                color       = 0x1C1C1C,
+            )
+        elif level == 2:
+            embed = discord.Embed(
+                title       = "Cerberus grows impatient.",
+                description = "*Do not test the Kingdom's patience.*",
+                color       = 0x4A0000,
+            )
+        elif level == 3:
+            embed = discord.Embed(
+                title       = "The Kingdom rejects you.",
+                description = "*You have been warned. Cease.*",
+                color       = 0x8B0000,
+            )
+        else:
+            # Level 4
+            if seizure > 0:
+                description = (
+                    f"*Cerberus has claimed what is owed.*\n"
+                    f"**{format_dc(seizure)}** has been seized."
+                )
+            else:
+                description = "*Cerberus has claimed what is owed.*"
+            embed = discord.Embed(
+                title       = "Enough.",
+                description = description,
+                color       = 0x000000,
+            )
+
+        embed.set_footer(text="Kingdom Treasury  ·  Kingdom of Hell")
+        return embed

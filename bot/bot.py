@@ -13,6 +13,7 @@ from .services import (
 )
 from .services.config_service import ConfigService
 from .services.guild_sync_service import GuildSyncService
+from .services.cerberus_aggression import CerberusAggression
 
 logger = logging.getLogger("kingdom_treasury")
 
@@ -30,6 +31,7 @@ class KingdomTreasuryBot(commands.Bot):
 
         self.rank_service                    = RankService()
         self.ascension_announcement_service  = AscensionAnnouncementService()
+        self.cerberus_aggression             = CerberusAggression()   # in-memory, always available
         self.economy_service                 = None
         self.cooldown_service                = None
         self.transaction_service             = None
