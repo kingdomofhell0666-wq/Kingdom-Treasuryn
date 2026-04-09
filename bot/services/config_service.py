@@ -187,6 +187,14 @@ class ConfigService:
     # ── Rank-role mappings ────────────────────────────────────────────────────
 
     async def get_rank_role_mapping(self, guild_id: str, rank_name: str) -> Optional[Dict]:
+        """
+        Return the rank→role mapping for a single rank.
+        Priority:
+          1. Dashboard config (rank_role_mapping table row)
+          2. CANONICAL_ROLE_IDS fallback (hardcoded in rank_service.py)
+        """
+        from .rank_service import CANONICAL_ROLE_IDS
+
         key = f"{guild_id}:rank_role:{rank_name}"
         cached = _cache.get(key)
         if cached is not None:
@@ -196,10 +204,28 @@ class ConfigService:
             "SELECT * FROM rank_role_mapping WHERE guild_id = $1 AND rank_name = $2",
             guild_id, rank_name,
         )
+
+        # Fall back to canonical hardcoded IDs when no DB row exists
+        if row is None and rank_name in CANONICAL_ROLE_IDS:
+            row = {
+                "guild_id":        guild_id,
+                "rank_name":       rank_name,
+                "role_id":         CANONICAL_ROLE_IDS[rank_name],
+                "remove_previous": True,
+                "_source":         "canonical_fallback",
+            }
+
         _cache.set(key, row)
         return row
 
     async def get_all_rank_role_mappings(self, guild_id: str) -> List[Dict]:
+        """
+        Return all rank→role mappings for a guild.
+        Merges CANONICAL_ROLE_IDS (base) with any dashboard overrides.
+        Dashboard rows override canonical fallbacks for the same rank_name.
+        """
+        from .rank_service import CANONICAL_ROLE_IDS
+
         key = f"{guild_id}:rank_roles_all"
         cached = _cache.get(key)
         if cached is not None:
@@ -208,8 +234,55 @@ class ConfigService:
         rows = await self._query_all(
             "SELECT * FROM rank_role_mapping WHERE guild_id = $1", guild_id
         )
-        _cache.set(key, rows)
-        return rows
+
+        # Build map: canonical defaults → overridden by DB rows
+        merged: Dict[str, Dict] = {
+            rank_name: {
+                "guild_id":        guild_id,
+                "rank_name":       rank_name,
+                "role_id":         role_id,
+                "remove_previous": True,
+                "_source":         "canonical_fallback",
+            }
+            for rank_name, role_id in CANONICAL_ROLE_IDS.items()
+        }
+        for row in rows:
+            merged[row["rank_name"]] = dict(row)
+
+        result = list(merged.values())
+        _cache.set(key, result)
+        return result
+
+    async def seed_canonical_role_mappings(self, guild_id: str) -> None:
+        """
+        Upsert CANONICAL_ROLE_IDS into rank_role_mapping for the given guild.
+        Uses INSERT ... ON CONFLICT DO NOTHING so manual dashboard overrides
+        are preserved across restarts.
+        Run once on guild sync / bot ready.
+        """
+        from .rank_service import CANONICAL_ROLE_IDS
+
+        pool = await self._get_pool()
+        if pool is None:
+            return
+        try:
+            async with pool.acquire() as conn:
+                for rank_name, role_id in CANONICAL_ROLE_IDS.items():
+                    await conn.execute(
+                        """
+                        INSERT INTO rank_role_mapping (guild_id, rank_name, role_id, remove_previous)
+                        VALUES ($1, $2, $3, TRUE)
+                        ON CONFLICT (guild_id, rank_name) DO NOTHING
+                        """,
+                        guild_id, rank_name, role_id,
+                    )
+            _cache.invalidate_guild(guild_id)
+            logger.info(
+                f"ConfigService: seeded {len(CANONICAL_ROLE_IDS)} canonical role "
+                f"mappings for guild={guild_id}"
+            )
+        except Exception as exc:
+            logger.warning(f"ConfigService seed_canonical_role_mappings error: {exc}")
 
     # ── Ascension cooldown ────────────────────────────────────────────────────
 

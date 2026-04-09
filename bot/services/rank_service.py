@@ -63,6 +63,41 @@ PUBLIC_KINGDOM_RANKS: List[str] = [
 # Fast set for O(1) validation
 _PUBLIC_RANK_SET = set(PUBLIC_KINGDOM_RANKS)
 
+# ─── Canonical Discord role IDs — Kingdom of Hell server ─────────────────────
+# These are the exact role IDs for the Kingdom of Hell Discord server.
+# Used as a bot-first fallback when no dashboard config exists.
+# Dashboard config (rank_role_mapping table) overrides these when present.
+# ALL public ascension ranks + Forsaken (needed for remove_previous logic).
+CANONICAL_ROLE_IDS: Dict[str, str] = {
+    "Forsaken":    "1489101267048468490",
+    "Vermin":      "1484302112241352744",
+    "Corrupted":   "1290484661419638866",
+    "Folklore":    "1290484661419638868",
+    "Mythology":   "1290484661419638867",
+    "Demonology":  "1290529262377500815",
+    "Eschatology": "1290484661419638869",
+    "Archangel":   "1290530281580662796",
+    "Archdemon":   "1290530372748185612",
+    "Knight":      "1489126295798415380",
+    "Baron":       "1489127375206613082",
+    "Viscount":    "1489127901461876807",
+    "Count":       "1489128625474113697",
+    "Marquis":     "1489129490209706045",
+    "Duke":        "1489130140532211874",
+}
+
+# Staff/moderator roles — NEVER assigned or removed by the economy system.
+EXCLUDED_ROLE_IDS: Dict[str, str] = {
+    "Sovereign":     "1290484661419638873",
+    "Consorts":      "1418279591528890508",
+    "Princes":       "1290484661419638870",
+    "Princesses":    "1489067882557079603",
+    "Chancellor":    "1414110540128718898",
+    "Legates":       "1489108767353344130",
+    "Centurion":     "1489108909682589696",
+    "Legionnaires":  "1290484661419638871",
+}
+
 
 class RankService:
     def get_tax_rate(self, rank_name: str) -> float:

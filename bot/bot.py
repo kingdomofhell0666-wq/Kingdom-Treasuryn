@@ -109,6 +109,18 @@ class KingdomTreasuryBot(commands.Bot):
         # Sync all guild structures into PostgreSQL so the dashboard
         # always has up-to-date channel/role data.
         asyncio.create_task(self.guild_sync_service.sync_all(list(self.guilds)))
+        # Seed canonical role IDs for all guilds (DO NOTHING on conflict, so
+        # manual dashboard overrides are preserved across restarts).
+        asyncio.create_task(self._seed_canonical_roles())
+
+    async def _seed_canonical_roles(self):
+        """Seed hardcoded canonical role IDs into the DB for all guilds."""
+        for guild in self.guilds:
+            guild_id = str(guild.id)
+            try:
+                await self.config_service.seed_canonical_role_mappings(guild_id)
+            except Exception as exc:
+                logger.warning(f"Canonical role seed failed for guild={guild_id}: {exc}")
 
     async def on_guild_join(self, guild: discord.Guild):
         """Immediately sync a newly joined guild's channels and roles."""
