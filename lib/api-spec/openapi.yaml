@@ -3,20 +3,28 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Kingdom Treasury Dashboard API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: auth
+    description: Discord OAuth2 authentication
+  - name: guilds
+    description: Guild management
+  - name: config
+    description: Per-guild configuration
+  - name: stats
+    description: Guild economy statistics
+
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +32,231 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /auth/discord:
+    get:
+      operationId: discordLogin
+      tags: [auth]
+      summary: Redirect to Discord OAuth2
+      responses:
+        "302":
+          description: Redirect to Discord
+
+  /auth/discord/callback:
+    get:
+      operationId: discordCallback
+      tags: [auth]
+      summary: Discord OAuth2 callback
+      parameters:
+        - name: code
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: error
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "302":
+          description: Redirect after auth
+
+  /auth/logout:
+    post:
+      operationId: logout
+      tags: [auth]
+      summary: Log out current session
+      responses:
+        "200":
+          description: Logged out
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+
+  /auth/me:
+    get:
+      operationId: getMe
+      tags: [auth]
+      summary: Get current authenticated user
+      responses:
+        "200":
+          description: Authenticated user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DiscordUser"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /guilds:
+    get:
+      operationId: getGuilds
+      tags: [guilds]
+      summary: Get guilds the user can manage (has bot + admin perms)
+      responses:
+        "200":
+          description: List of manageable guilds
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Guild"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /guilds/{guildId}:
+    get:
+      operationId: getGuild
+      tags: [guilds]
+      summary: Get full guild details including channels and roles
+      parameters:
+        - name: guildId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Guild details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GuildDetail"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Guild not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /guilds/{guildId}/config:
+    get:
+      operationId: getGuildConfig
+      tags: [config]
+      summary: Get per-guild bot configuration
+      parameters:
+        - name: guildId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Guild config
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GuildConfig"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    patch:
+      operationId: updateGuildConfig
+      tags: [config]
+      summary: Update per-guild bot configuration
+      parameters:
+        - name: guildId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateGuildConfigBody"
+      responses:
+        "200":
+          description: Updated config
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GuildConfig"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /guilds/{guildId}/stats:
+    get:
+      operationId: getGuildStats
+      tags: [stats]
+      summary: Get guild economy statistics summary
+      parameters:
+        - name: guildId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Guild economy stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GuildStats"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /guilds/{guildId}/bot-status:
+    get:
+      operationId: getBotStatus
+      tags: [guilds]
+      summary: Get bot presence and uptime in this guild
+      parameters:
+        - name: guildId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Bot status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BotStatus"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
   schemas:
     HealthStatus:
@@ -31,6 +264,208 @@ components:
       properties:
         status:
           type: string
-      required:
-        - status
+      required: [status]
 
+    OkResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+      required: [ok]
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required: [error]
+
+    DiscordUser:
+      type: object
+      properties:
+        id:
+          type: string
+        username:
+          type: string
+        discriminator:
+          type: string
+        avatar:
+          type: string
+          nullable: true
+        avatarUrl:
+          type: string
+      required: [id, username, discriminator, avatarUrl]
+
+    Guild:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        icon:
+          type: string
+          nullable: true
+        iconUrl:
+          type: string
+          nullable: true
+        memberCount:
+          type: integer
+        botPresent:
+          type: boolean
+        isAdmin:
+          type: boolean
+      required: [id, name, botPresent, isAdmin]
+
+    DiscordChannel:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        type:
+          type: integer
+      required: [id, name, type]
+
+    DiscordRole:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        color:
+          type: integer
+        position:
+          type: integer
+      required: [id, name, color, position]
+
+    GuildDetail:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        icon:
+          type: string
+          nullable: true
+        iconUrl:
+          type: string
+          nullable: true
+        memberCount:
+          type: integer
+        channels:
+          type: array
+          items:
+            $ref: "#/components/schemas/DiscordChannel"
+        roles:
+          type: array
+          items:
+            $ref: "#/components/schemas/DiscordRole"
+        botPresent:
+          type: boolean
+      required: [id, name, channels, roles, botPresent]
+
+    GuildConfig:
+      type: object
+      properties:
+        guildId:
+          type: string
+        currencyName:
+          type: string
+        currencyIcon:
+          type: string
+        timezone:
+          type: string
+        grindCooldownSeconds:
+          type: integer
+        tributeCooldownSeconds:
+          type: integer
+        grindMinReward:
+          type: integer
+        grindMaxReward:
+          type: integer
+        tributeMinReward:
+          type: integer
+        tributeMaxReward:
+          type: integer
+        blackMarketRiskPct:
+          type: number
+        investmentTaxRate:
+          type: number
+        commandRouting:
+          type: object
+          additionalProperties:
+            type: string
+        updatedAt:
+          type: string
+          format: date-time
+      required: [guildId, currencyName, currencyIcon, timezone]
+
+    UpdateGuildConfigBody:
+      type: object
+      properties:
+        currencyName:
+          type: string
+        currencyIcon:
+          type: string
+        timezone:
+          type: string
+        grindCooldownSeconds:
+          type: integer
+        tributeCooldownSeconds:
+          type: integer
+        grindMinReward:
+          type: integer
+        grindMaxReward:
+          type: integer
+        tributeMinReward:
+          type: integer
+        tributeMaxReward:
+          type: integer
+        blackMarketRiskPct:
+          type: number
+        investmentTaxRate:
+          type: number
+        commandRouting:
+          type: object
+          additionalProperties:
+            type: string
+
+    GuildStats:
+      type: object
+      properties:
+        guildId:
+          type: string
+        totalUsers:
+          type: integer
+        totalWalletBalance:
+          type: integer
+        totalTreasuryBalance:
+          type: integer
+        totalTaxesPaid:
+          type: integer
+        activeInvestments:
+          type: integer
+        topRankName:
+          type: string
+        topRankCount:
+          type: integer
+      required: [guildId, totalUsers, totalWalletBalance, totalTreasuryBalance, totalTaxesPaid, activeInvestments]
+
+    BotStatus:
+      type: object
+      properties:
+        online:
+          type: boolean
+        guildCount:
+          type: integer
+        uptimeSeconds:
+          type: integer
+        lastHeartbeat:
+          type: string
+          format: date-time
+          nullable: true
+      required: [online, guildCount, uptimeSeconds]

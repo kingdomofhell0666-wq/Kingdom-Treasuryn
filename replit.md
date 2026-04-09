@@ -92,6 +92,66 @@ Forsaken (default) → Vermin (1.5K) → Corrupted (6K) → Mythology (15K) → 
 | `audit_immunity` | Blocks next Cerberus audit |
 | `risk_reduce` | Instantly reduces risk_score by N points |
 
+## Dashboard (Admin Web Panel)
+
+A production-grade admin dashboard at `/dashboard/` built with React + Vite + Discord OAuth2.
+
+### Stack
+
+- **Frontend**: React + Vite (static build served by Express)
+- **Backend**: Express API server at port 8080
+- **Database**: PostgreSQL (Drizzle ORM) — `guild_configs`, `dashboard_sessions`
+- **Auth**: Discord OAuth2 via session cookies (connect-pg-simple)
+
+### Architecture
+
+```
+artifacts/dashboard/          # React + Vite SPA (build output served by api-server)
+artifacts/api-server/         # Express API server
+  src/
+    app.ts                    # Middleware + routes + static file serving for /dashboard/
+    lib/discord.ts            # Discord OAuth2 + API helpers
+    lib/session.ts            # express-session + PostgreSQL store
+    routes/
+      auth.ts                 # /api/auth/discord, /callback, /logout, /me
+      guilds.ts               # /api/guilds, /api/guilds/:id, /config, /stats, /bot-status
+lib/api-spec/openapi.yaml     # OpenAPI spec (source of truth)
+lib/api-client-react/         # Generated React Query hooks (do not edit)
+lib/api-zod/                  # Generated Zod schemas (do not edit)
+lib/db/                       # Drizzle ORM + PostgreSQL
+  src/schema/
+    guild_configs.ts          # Per-guild bot configuration table
+    dashboard_sessions.ts     # Session storage table
+```
+
+### Dashboard Pages
+
+| Path | Description |
+|---|---|
+| `/dashboard/` | Login page with Discord OAuth2 |
+| `/dashboard/guilds` | Guild selection — only shows guilds with bot + admin perms |
+| `/dashboard/guilds/:id` | Dashboard overview — bot status, economy stats |
+| `/dashboard/guilds/:id/economy` | Economy config — grind/tribute rewards, cooldowns, taxes |
+| `/dashboard/guilds/:id/currency` | Currency name + icon with live preview |
+| `/dashboard/guilds/:id/channels` | Command channel routing |
+| `/dashboard/guilds/:id/settings` | General settings (timezone, etc.) |
+
+### Building
+
+The dashboard frontend is a static build served by Express:
+```bash
+# Build dashboard
+cd artifacts/dashboard && PORT=5000 BASE_PATH=/dashboard/ pnpm run build
+# API server serves it automatically from artifacts/dashboard/dist/public/
+```
+
+### Important Notes
+
+- Dashboard workflow is FAILED (known port detection issue) — the static build is served from the API server instead
+- Auth OAuth2 callback URL is auto-detected from `REPLIT_DOMAINS` env var
+- Guild configs stored in PostgreSQL `guild_configs` table
+- Bot stats read from `kingdom_treasury.db` SQLite via better-sqlite3
+
 ## Setup
 
 1. Add `DISCORD_BOT_TOKEN` as a secret in the Secrets panel
@@ -100,6 +160,8 @@ Forsaken (default) → Vermin (1.5K) → Corrupted (6K) → Mythology (15K) → 
 
 ## Database
 
-- File: `kingdom_treasury.db` (auto-created on first run)
-- Tables: `users`, `transactions`, `treasury`, `cooldowns`, `investments`, `user_perks`
-- Safe migrations via try/except ALTER TABLE for schema evolution
+- **Bot DB**: `kingdom_treasury.db` (SQLite, auto-created on first run)
+  - Tables: `users`, `transactions`, `treasury`, `cooldowns`, `investments`, `user_perks`
+  - Safe migrations via try/except ALTER TABLE for schema evolution
+- **Dashboard DB**: PostgreSQL (DATABASE_URL env var)
+  - Tables: `guild_configs`, `dashboard_sessions`
