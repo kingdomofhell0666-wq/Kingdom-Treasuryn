@@ -9,7 +9,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
 import { apiGet, apiPatch } from "@/lib/api";
 import { useGetGuild, useGetGuildConfig } from "@workspace/api-client-react";
-import { Trophy, Save, Eye, AlertCircle } from "lucide-react";
+import { Trophy, Save, Eye, AlertCircle, Crown } from "lucide-react";
 import { Spinner } from "@/components/ui/spinner";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
@@ -18,7 +18,6 @@ const ENDPOINT = (guildId: string) => `/api/guilds/${guildId}/leaderboard`;
 
 const DEFAULT_SETTINGS = {
   enabled: false,
-  leaderboardType: "wealth",
   postFrequency: "weekly",
   postChannelId: null as string | null,
   postHour: 20,
@@ -40,20 +39,14 @@ const TIMEZONES = [
 ];
 
 const SAMPLE_ENTRIES = [
-  { name: "Darkblade", balance: 4_200_000, rank: "Duke" },
-  { name: "Infernal_Rex", balance: 2_800_000, rank: "Baron" },
-  { name: "SoulHarvest", balance: 1_500_000, rank: "Knight" },
-  { name: "VoidWalker", balance: 890_000, rank: "Archdemon" },
-  { name: "CrimsonTide", balance: 450_000, rank: "Archangel" },
+  { name: "Darkblade",    balance: 5_000_000, rank: "Chancellor" },
+  { name: "Infernal_Rex", balance: 4_800_000, rank: "Duke" },
+  { name: "SoulHarvest",  balance: 2_100_000, rank: "Duke" },
+  { name: "VoidWalker",   balance: 1_400_000, rank: "Baron" },
+  { name: "CrimsonTide",  balance: 890_000,   rank: "Knight" },
 ];
 
 const MEDALS = ["🥇", "🥈", "🥉"];
-
-const BOARD_META: Record<string, { emoji: string; label: string; color: string }> = {
-  wealth:  { emoji: "💰", label: "Wealth",  color: "border-yellow-500" },
-  grind:   { emoji: "⛏",  label: "Grind",   color: "border-red-700" },
-  tribute: { emoji: "👑", label: "Tribute", color: "border-red-900" },
-};
 
 type LoadState = "loading" | "ok" | "error";
 
@@ -67,8 +60,8 @@ export default function LeaderboardPage() {
           <div>
             <h1 className="text-3xl font-bold tracking-tight mb-2 font-serif text-foreground">Leaderboard</h1>
             <p className="text-muted-foreground">
-              Schedule automatic leaderboard posts to a specific channel.
-              Rankings use the same balance order as <strong>/identity</strong>.
+              Schedule automatic <strong>Kingdom Rank Top 10</strong> posts to a channel.
+              Rankings are identical to <strong>/identity</strong> — rank hierarchy first, then balance.
             </p>
           </div>
           <LeaderboardForm guildId={guildId} />
@@ -98,14 +91,16 @@ function LeaderboardForm({ guildId }: { guildId: string }) {
     setLoadState("loading");
     setLoadError(null);
     try {
-      const data = await apiGet<LeaderboardSettings>(endpoint);
-      setSettings({ ...DEFAULT_SETTINGS, ...data });
+      const raw = await apiGet<Record<string, unknown>>(endpoint);
+      // Strip leaderboardType — no longer used in the UI
+      const { leaderboardType: _ignored, ...rest } = raw as Record<string, unknown>;
+      void _ignored;
+      setSettings({ ...DEFAULT_SETTINGS, ...(rest as Partial<LeaderboardSettings>) });
       setLoadState("ok");
     } catch (e: unknown) {
       const msg = (e as Error).message;
       console.error(`[LeaderboardPage] Failed to load settings from ${endpoint}:`, msg);
       setLoadError(msg);
-      // Use fallback defaults so the form renders even if the API fails
       setSettings(DEFAULT_SETTINGS);
       setLoadState("error");
     }
@@ -116,8 +111,10 @@ function LeaderboardForm({ guildId }: { guildId: string }) {
   const save = async () => {
     setSaving(true);
     try {
-      const data = await apiPatch<LeaderboardSettings>(endpoint, settings);
-      setSettings({ ...DEFAULT_SETTINGS, ...data });
+      const raw = await apiPatch<Record<string, unknown>>(endpoint, settings);
+      const { leaderboardType: _ignored, ...rest } = raw;
+      void _ignored;
+      setSettings({ ...DEFAULT_SETTINGS, ...(rest as Partial<LeaderboardSettings>) });
       setLoadState("ok");
       setLoadError(null);
       toast({ title: "Saved", description: "Leaderboard schedule updated." });
@@ -128,7 +125,6 @@ function LeaderboardForm({ guildId }: { guildId: string }) {
     }
   };
 
-  // ── Render ────────────────────────────────────────────────────────────────
   if (loadState === "loading") {
     return (
       <div className="flex items-center justify-center py-16 gap-3 text-muted-foreground">
@@ -155,6 +151,13 @@ function LeaderboardForm({ guildId }: { guildId: string }) {
         </Alert>
       )}
 
+      {/* Kingdom Rank badge — always-visible indicator of the fixed board type */}
+      <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-red-950/30 border border-red-800/40 text-sm">
+        <Crown className="w-4 h-4 text-red-400 shrink-0" />
+        <span className="text-red-200 font-medium">Kingdom Rank Top 10</span>
+        <span className="text-muted-foreground">— rank hierarchy primary · balance tiebreaker · matches /identity</span>
+      </div>
+
       <Card className="bg-card border-border/60">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-lg">
@@ -162,8 +165,8 @@ function LeaderboardForm({ guildId }: { guildId: string }) {
             Leaderboard Schedule
           </CardTitle>
           <CardDescription>
-            The bot posts the top players to your chosen channel on the schedule below.
-            Only that channel receives the post — no other channels are affected.
+            The bot posts the Kingdom Rank Top 10 to your chosen channel on the schedule below.
+            Only that channel receives the post.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -184,19 +187,6 @@ function LeaderboardForm({ guildId }: { guildId: string }) {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <Label className="text-xs font-medium">Board Type</Label>
-              <Select value={settings.leaderboardType} onValueChange={(v) => setSettings(s => ({ ...s, leaderboardType: v }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="wealth">💰 Wealth (Balance)</SelectItem>
-                  <SelectItem value="grind">⛏ Grind (Times mined)</SelectItem>
-                  <SelectItem value="tribute">👑 Tribute (Daily collected)</SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">Same ranking as <strong>/identity</strong></p>
-            </div>
-
             <div className="space-y-1.5">
               <Label className="text-xs font-medium">Post Channel</Label>
               <Select
@@ -315,7 +305,7 @@ function LeaderboardForm({ guildId }: { guildId: string }) {
         <Card className="bg-card border-border/60">
           <CardHeader>
             <CardTitle className="text-sm">Discord Message Preview</CardTitle>
-            <CardDescription>Sample embed showing how this will appear in Discord.</CardDescription>
+            <CardDescription>Sample of how the bot message will appear in Discord.</CardDescription>
           </CardHeader>
           <CardContent>
             <LeaderboardPreview
@@ -339,7 +329,6 @@ function LeaderboardPreview({
   currencyIcon: string;
   channelName: string;
 }) {
-  const meta = BOARD_META[settings.leaderboardType] ?? BOARD_META.wealth;
   const freq = { daily: "Daily", weekly: "Weekly", monthly: "Monthly" }[settings.postFrequency] ?? "";
   const dateStr = new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
 
@@ -348,11 +337,11 @@ function LeaderboardPreview({
       <p className="text-sm text-muted-foreground">
         Posting to <strong className="text-foreground">#{channelName}</strong>
       </p>
-      <div className={`rounded-md border-l-4 bg-[#2b2d31] p-4 ${meta.color} max-w-md`}>
+      <div className="rounded-md border-l-4 border-red-700 bg-[#2b2d31] p-4 max-w-md">
         <div className="space-y-3">
           <div>
             <p className="text-white font-semibold text-sm">
-              {meta.emoji}  {freq} {meta.label} Leaderboard
+              👑  {freq} Kingdom Rank Leaderboard
             </p>
             <p className="text-[#b9bbbe] text-[10px] mt-0.5">Kingdom of Hell  ·  Kingdom Treasury</p>
           </div>
@@ -372,12 +361,12 @@ function LeaderboardPreview({
             ))}
           </div>
           <p className="text-[#72767d] text-[10px] border-t border-[#3d3f45] pt-2">
-            Ranked by {meta.label.toLowerCase()}  ·  {dateStr}
+            Ranked by kingdom hierarchy  ·  {dateStr}
           </p>
         </div>
       </div>
       <p className="text-xs text-muted-foreground">
-        Ranking order is identical to <strong>/identity</strong> — balance descending.
+        Ranking order is identical to <strong>/identity</strong> — rank hierarchy first, balance tiebreaker.
       </p>
     </div>
   );

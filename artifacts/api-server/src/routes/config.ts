@@ -247,7 +247,7 @@ router.patch("/guilds/:guildId/leaderboard", requireAuth, async (req, res) => {
   if (!(await assertGuildAdmin(req, res, guildId))) return;
 
   const allowed = [
-    "enabled", "leaderboardType", "postFrequency",
+    "enabled", "postFrequency",
     "postChannelId", "postHour", "postMinute",
     "postDayOfWeek", "postDayOfMonth", "timezone",
   ] as const;

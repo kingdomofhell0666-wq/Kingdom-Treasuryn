@@ -4,7 +4,7 @@ export const leaderboardSettingsTable = pgTable("leaderboard_settings", {
   id:               serial("id").primaryKey(),
   guildId:          text("guild_id").notNull().unique(),
   enabled:          boolean("enabled").notNull().default(false),
-  leaderboardType:  text("leaderboard_type").notNull().default("wealth"),
+  leaderboardType:  text("leaderboard_type").notNull().default("kingdom_rank"),
   postFrequency:    text("post_frequency").notNull().default("daily"),
   postChannelId:    text("post_channel_id"),
   postHour:         integer("post_hour").notNull().default(12),
