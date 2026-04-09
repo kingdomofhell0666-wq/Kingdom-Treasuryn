@@ -148,6 +148,15 @@ class Database:
                 uses_remaining INTEGER NOT NULL DEFAULT 1,
                 created_at     TEXT NOT NULL DEFAULT (datetime('now'))
             );
+
+            CREATE TABLE IF NOT EXISTS ascension_history (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                guild_id     TEXT NOT NULL,
+                discord_id   TEXT NOT NULL,
+                username     TEXT NOT NULL,
+                rank         TEXT NOT NULL,
+                ascended_at  TEXT NOT NULL DEFAULT (datetime('now'))
+            );
         """)
         await self._db.commit()
 
@@ -155,7 +164,7 @@ class Database:
 
     async def reset_guild_data(self, guild_id: str):
         """Hard-delete ALL economy data for a specific guild."""
-        tables = ["users", "transactions", "treasury", "cooldowns", "investments", "user_perks"]
+        tables = ["users", "transactions", "treasury", "cooldowns", "investments", "user_perks", "ascension_history"]
         for tbl in tables:
             await self._db.execute(f"DELETE FROM {tbl} WHERE guild_id = ?", (guild_id,))
         await self._db.commit()
@@ -163,7 +172,7 @@ class Database:
 
     async def reset_all_data(self):
         """Hard-delete ALL economy data across every guild."""
-        tables = ["users", "transactions", "treasury", "cooldowns", "investments", "user_perks"]
+        tables = ["users", "transactions", "treasury", "cooldowns", "investments", "user_perks", "ascension_history"]
         for tbl in tables:
             await self._db.execute(f"DELETE FROM {tbl}")
         await self._db.commit()
@@ -544,3 +553,30 @@ class Database:
         )
         await self._db.commit()
         logger.info(f"Guild {guild_id} — user {discord_id} economy reset by admin.")
+
+    # ─── Ascension History ────────────────────────────────────────────────────
+
+    async def record_ascension(self, guild_id: str, discord_id: str, username: str, rank_name: str):
+        now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+        await self._db.execute(
+            """INSERT INTO ascension_history (guild_id, discord_id, username, rank, ascended_at)
+               VALUES (?, ?, ?, ?, ?)""",
+            (guild_id, discord_id, username, rank_name, now_str),
+        )
+        await self._db.commit()
+
+    async def get_last_ascension_time(self, guild_id: str, discord_id: str, rank_name: str) -> Optional[datetime]:
+        """Return the datetime of the user's most recent ascension to rank_name, or None."""
+        async with self._db.execute(
+            """SELECT ascended_at FROM ascension_history
+               WHERE guild_id = ? AND discord_id = ? AND rank = ?
+               ORDER BY ascended_at DESC LIMIT 1""",
+            (guild_id, discord_id, rank_name),
+        ) as cur:
+            row = await cur.fetchone()
+            if row is None:
+                return None
+            try:
+                return datetime.fromisoformat(row["ascended_at"]).replace(tzinfo=timezone.utc)
+            except Exception:
+                return None

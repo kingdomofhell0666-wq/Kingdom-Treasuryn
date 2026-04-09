@@ -2,8 +2,15 @@ import { useGetMe, useLogout } from "@workspace/api-client-react";
 import { useLocation } from "wouter";
 import { useEffect } from "react";
 import { Spinner } from "@/components/ui/spinner";
-import { Sidebar, SidebarContent, SidebarHeader, SidebarGroup, SidebarGroupContent, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarFooter, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
-import { LogOut, Home, Settings, Coins, Map, Activity, Shield } from "lucide-react";
+import {
+  Sidebar, SidebarContent, SidebarHeader, SidebarGroup, SidebarGroupLabel,
+  SidebarGroupContent, SidebarMenu, SidebarMenuItem, SidebarMenuButton,
+  SidebarFooter, SidebarProvider, SidebarTrigger,
+} from "@/components/ui/sidebar";
+import {
+  LogOut, Home, Settings, Coins, Map, Activity, Shield, Swords,
+  Crown, Trophy, Flame, RotateCcw, Wifi, BookOpen, Hash,
+} from "lucide-react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 
@@ -26,22 +33,65 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   }
 
   if (!user) {
-    return null; // Will redirect
+    return null;
   }
 
   return <>{children}</>;
 }
 
-export function AppLayout({ children, guildId }: { children: React.ReactNode, guildId?: string }) {
+const NAV_SECTIONS = [
+  {
+    label: "Overview",
+    items: [
+      { href: "", icon: Activity, label: "Dashboard" },
+      { href: "/bot-status", icon: Wifi, label: "Bot Status" },
+    ],
+  },
+  {
+    label: "Economy",
+    items: [
+      { href: "/economy", icon: Coins, label: "Economy" },
+      { href: "/currency", icon: BookOpen, label: "Currency" },
+      { href: "/treasury", icon: Flame, label: "Treasury" },
+    ],
+  },
+  {
+    label: "Commands",
+    items: [
+      { href: "/channels", icon: Hash, label: "Routing" },
+      { href: "/commands", icon: Swords, label: "Permissions" },
+    ],
+  },
+  {
+    label: "Ranks & Roles",
+    items: [
+      { href: "/ranks", icon: Crown, label: "Ranks & Roles" },
+      { href: "/ascension", icon: Flame, label: "Ascension" },
+    ],
+  },
+  {
+    label: "Automation",
+    items: [
+      { href: "/leaderboard", icon: Trophy, label: "Leaderboard" },
+    ],
+  },
+  {
+    label: "Server",
+    items: [
+      { href: "/settings", icon: Settings, label: "Settings" },
+      { href: "/reset", icon: RotateCcw, label: "Reset" },
+    ],
+  },
+];
+
+export function AppLayout({ children, guildId }: { children: React.ReactNode; guildId?: string }) {
   const { data: user } = useGetMe();
   const logout = useLogout();
   const [, setLocation] = useLocation();
 
   const handleLogout = () => {
     logout.mutate(undefined, {
-      onSuccess: () => {
-        setLocation("/");
-      }
+      onSuccess: () => setLocation("/"),
     });
   };
 
@@ -57,52 +107,27 @@ export function AppLayout({ children, guildId }: { children: React.ReactNode, gu
               </Link>
             </SidebarHeader>
             <SidebarContent>
-              <SidebarGroup>
-                <SidebarGroupContent>
-                  <SidebarMenu>
-                    <SidebarMenuItem>
-                      <SidebarMenuButton asChild tooltip="Dashboard">
-                        <Link href={`/guilds/${guildId}`}>
-                          <Activity className="w-4 h-4" />
-                          <span>Dashboard</span>
-                        </Link>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                    <SidebarMenuItem>
-                      <SidebarMenuButton asChild tooltip="Economy">
-                        <Link href={`/guilds/${guildId}/economy`}>
-                          <Coins className="w-4 h-4" />
-                          <span>Economy</span>
-                        </Link>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                    <SidebarMenuItem>
-                      <SidebarMenuButton asChild tooltip="Currency">
-                        <Link href={`/guilds/${guildId}/currency`}>
-                          <Coins className="w-4 h-4 text-secondary" />
-                          <span>Currency</span>
-                        </Link>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                    <SidebarMenuItem>
-                      <SidebarMenuButton asChild tooltip="Channels">
-                        <Link href={`/guilds/${guildId}/channels`}>
-                          <Map className="w-4 h-4" />
-                          <span>Channels</span>
-                        </Link>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                    <SidebarMenuItem>
-                      <SidebarMenuButton asChild tooltip="Settings">
-                        <Link href={`/guilds/${guildId}/settings`}>
-                          <Settings className="w-4 h-4" />
-                          <span>Settings</span>
-                        </Link>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  </SidebarMenu>
-                </SidebarGroupContent>
-              </SidebarGroup>
+              {NAV_SECTIONS.map((section) => (
+                <SidebarGroup key={section.label}>
+                  <SidebarGroupLabel className="text-xs uppercase tracking-widest text-muted-foreground/60 px-3 py-1">
+                    {section.label}
+                  </SidebarGroupLabel>
+                  <SidebarGroupContent>
+                    <SidebarMenu>
+                      {section.items.map((item) => (
+                        <SidebarMenuItem key={item.href}>
+                          <SidebarMenuButton asChild tooltip={item.label}>
+                            <Link href={`/guilds/${guildId}${item.href}`}>
+                              <item.icon className="w-4 h-4" />
+                              <span>{item.label}</span>
+                            </Link>
+                          </SidebarMenuButton>
+                        </SidebarMenuItem>
+                      ))}
+                    </SidebarMenu>
+                  </SidebarGroupContent>
+                </SidebarGroup>
+              ))}
             </SidebarContent>
             <SidebarFooter className="p-4 border-t border-border/50">
               <div className="flex items-center gap-3 w-full">
@@ -118,7 +143,13 @@ export function AppLayout({ children, guildId }: { children: React.ReactNode, gu
                 <div className="flex-1 truncate">
                   <p className="text-sm font-medium truncate">{user?.username}</p>
                 </div>
-                <Button variant="ghost" size="icon" onClick={handleLogout} className="text-muted-foreground hover:text-foreground" data-testid="button-logout">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={handleLogout}
+                  className="text-muted-foreground hover:text-foreground"
+                  data-testid="button-logout"
+                >
                   <LogOut className="w-4 h-4" />
                 </Button>
               </div>

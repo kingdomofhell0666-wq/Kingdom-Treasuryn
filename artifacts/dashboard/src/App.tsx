@@ -10,6 +10,13 @@ import EconomyPage from "@/pages/guilds/economy";
 import CurrencyPage from "@/pages/guilds/currency";
 import ChannelsPage from "@/pages/guilds/channels";
 import SettingsPage from "@/pages/guilds/settings";
+import CommandsPage from "@/pages/guilds/commands";
+import RanksPage from "@/pages/guilds/ranks";
+import LeaderboardPage from "@/pages/guilds/leaderboard";
+import AscensionPage from "@/pages/guilds/ascension";
+import TreasuryPage from "@/pages/guilds/treasury";
+import ResetPage from "@/pages/guilds/reset";
+import BotStatusPage from "@/pages/guilds/bot-status";
 
 const queryClient = new QueryClient();
 
@@ -23,6 +30,13 @@ function Router() {
       <Route path="/guilds/:guildId/currency" component={CurrencyPage} />
       <Route path="/guilds/:guildId/channels" component={ChannelsPage} />
       <Route path="/guilds/:guildId/settings" component={SettingsPage} />
+      <Route path="/guilds/:guildId/commands" component={CommandsPage} />
+      <Route path="/guilds/:guildId/ranks" component={RanksPage} />
+      <Route path="/guilds/:guildId/leaderboard" component={LeaderboardPage} />
+      <Route path="/guilds/:guildId/ascension" component={AscensionPage} />
+      <Route path="/guilds/:guildId/treasury" component={TreasuryPage} />
+      <Route path="/guilds/:guildId/reset" component={ResetPage} />
+      <Route path="/guilds/:guildId/bot-status" component={BotStatusPage} />
       <Route component={NotFound} />
     </Switch>
   );

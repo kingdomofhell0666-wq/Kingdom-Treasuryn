@@ -98,21 +98,53 @@ class EconomyCog(commands.Cog):
         self.bot = bot
 
     @property
-    def db(self):            return self.bot.db
+    def db(self):             return self.bot.db
     @property
-    def economy(self):       return self.bot.economy_service
+    def economy(self):        return self.bot.economy_service
     @property
-    def cooldown(self):      return self.bot.cooldown_service
+    def cooldown(self):       return self.bot.cooldown_service
     @property
-    def audit(self):         return self.bot.audit_service
+    def audit(self):          return self.bot.audit_service
     @property
-    def treasury(self):      return self.bot.treasury_service
+    def treasury(self):       return self.bot.treasury_service
     @property
-    def rank_service(self):  return self.bot.rank_service
+    def rank_service(self):   return self.bot.rank_service
     @property
-    def cerberus(self):      return self.bot.cerberus_service
+    def cerberus(self):       return self.bot.cerberus_service
     @property
-    def badge_service(self): return self.bot.badge_service
+    def badge_service(self):  return self.bot.badge_service
+    @property
+    def config_service(self): return self.bot.config_service
+
+    # ─── Command access check ──────────────────────────────────────────────────
+
+    async def _check_access(self, interaction: discord.Interaction, command_name: str) -> bool:
+        """Check channel routing and permission rules. Returns True if allowed."""
+        guild_id   = str(interaction.guild_id)
+        channel_id = str(interaction.channel_id)
+
+        if not await self.config_service.check_channel_allowed(guild_id, command_name, channel_id):
+            embed = discord.Embed(
+                title       = "⚔  Wrong Channel",
+                description = f"The `/{command_name}` command is restricted to a specific channel in this server.",
+                color       = 0x8B0000,
+            )
+            embed.set_footer(text="Kingdom Treasury  ·  Kingdom of Hell")
+            await interaction.followup.send(embed=embed, ephemeral=True)
+            return False
+
+        user_role_ids = [str(r.id) for r in getattr(interaction.user, "roles", [])]
+        if not await self.config_service.check_user_permission(guild_id, command_name, user_role_ids, channel_id):
+            embed = discord.Embed(
+                title       = "🔒  Access Denied",
+                description = f"You do not have permission to use `/{command_name}` in this server.",
+                color       = 0x8B0000,
+            )
+            embed.set_footer(text="Kingdom Treasury  ·  Kingdom of Hell")
+            await interaction.followup.send(embed=embed, ephemeral=True)
+            return False
+
+        return True
 
     # ─── Badge announce helper ────────────────────────────────
 
@@ -148,6 +180,9 @@ class EconomyCog(commands.Cog):
         guild_id   = str(interaction.guild_id)
         discord_id = str(interaction.user.id)
         username   = interaction.user.display_name
+
+        if not await self._check_access(interaction, "grind"):
+            return
 
         # ── Cooldown gate (checked before entry screen) ───────
         ready, remaining = await self.cooldown.check_cooldown(guild_id, discord_id, "grind")
@@ -283,6 +318,9 @@ class EconomyCog(commands.Cog):
         discord_id = str(interaction.user.id)
         username   = interaction.user.display_name
 
+        if not await self._check_access(interaction, "tribute"):
+            return
+
         ready, remaining = await self.cooldown.check_cooldown(guild_id, discord_id, "tribute")
         if not ready:
             embed = EmbedFactory.cooldown_error("tribute", self.cooldown.format_remaining(remaining))
@@ -340,6 +378,9 @@ class EconomyCog(commands.Cog):
         recipient_id   = str(recipient.id)
         recipient_name = recipient.display_name
 
+        if not await self._check_access(interaction, "transfer"):
+            return
+
         try:
             result = await self.economy.transfer(guild_id, sender_id, sender_name, recipient_id, recipient_name, amount)
         except ValueError as e:
@@ -390,11 +431,63 @@ class EconomyCog(commands.Cog):
 
         # ── shared ascend logic (used by both UI button and direct buy) ────────
         async def _execute_ascend(inter: discord.Interaction, rank_name: str, cost: int):
+            # ── Rank ascension cooldown check ─────────────────────────────────
+            cooldown_secs = await self.config_service.get_rank_cooldown(guild_id, rank_name)
+            if cooldown_secs > 0:
+                last_at = await self.db.get_last_ascension_time(guild_id, discord_id, rank_name)
+                if last_at is not None:
+                    from datetime import datetime, timezone
+                    elapsed = (datetime.now(timezone.utc) - last_at).total_seconds()
+                    if elapsed < cooldown_secs:
+                        remaining_secs = int(cooldown_secs - elapsed)
+                        h, m = divmod(remaining_secs // 60, 60)
+                        s    = remaining_secs % 60
+                        time_str = f"{h}h {m}m {s}s" if h else f"{m}m {s}s"
+                        embed = discord.Embed(
+                            title       = "⏳  Ascension Cooldown",
+                            description = (
+                                f"You must wait **{time_str}** before ascending to **{rank_name}** again.\n"
+                                "*The Kingdom does not rush ascension.*"
+                            ),
+                            color       = 0x4A0000,
+                        )
+                        embed.set_footer(text="Kingdom Treasury  ·  Kingdom of Hell")
+                        await inter.followup.send(embed=embed, ephemeral=True)
+                        return
+
             tx_service = TransactionService(self.db)
             await tx_service.ascension_payment(guild_id, discord_id, rank_name, cost)
             updated     = await self.db.get_user(guild_id, discord_id)
             new_balance = updated["balance"] if updated else 0
             skin_id     = updated.get("equipped_skin") if updated else None
+
+            # ── Record ascension history ──────────────────────────────────────
+            await self.db.record_ascension(guild_id, discord_id, username, rank_name)
+
+            # ── Discord role assignment ───────────────────────────────────────
+            try:
+                guild   = inter.guild
+                member  = inter.user
+                mapping = await self.config_service.get_rank_role_mapping(guild_id, rank_name)
+
+                if mapping and guild and member:
+                    new_role = guild.get_role(int(mapping["role_id"]))
+                    if new_role:
+                        await member.add_roles(new_role, reason=f"Kingdom Treasury: ascended to {rank_name}")
+
+                    if mapping.get("remove_previous"):
+                        all_mappings = await self.config_service.get_all_rank_role_mappings(guild_id)
+                        old_role_ids = {
+                            int(m["role_id"])
+                            for m in all_mappings
+                            if m["rank_name"] != rank_name and m["role_id"] != mapping["role_id"]
+                        }
+                        roles_to_remove = [r for r in member.roles if r.id in old_role_ids]
+                        if roles_to_remove:
+                            await member.remove_roles(*roles_to_remove, reason="Kingdom Treasury: rank role update")
+            except Exception as role_err:
+                import logging
+                logging.getLogger("kingdom_treasury").warning(f"Role assignment failed: {role_err}")
 
             try:
                 av_url = inter.user.display_avatar.with_size(128).url
@@ -421,6 +514,24 @@ class EconomyCog(commands.Cog):
             )
             new_badges = await self.badge_service.check_and_award(guild_id, discord_id)
             await self._announce_badges(inter, new_badges)
+
+            # ── Ascension announcement ────────────────────────────────────────
+            try:
+                ann = await self.config_service.get_ascension_announcement_settings(guild_id)
+                if ann and ann.get("enabled") and ann.get("channel_id") and inter.guild:
+                    ann_channel = inter.guild.get_channel(int(ann["channel_id"]))
+                    if ann_channel and isinstance(ann_channel, discord.TextChannel):
+                        template = ann.get("message_template", "{user} has ascended to {rank}!")
+                        message  = template.replace("{user}", f"<@{discord_id}>").replace("{rank}", rank_name)
+                        ann_embed = discord.Embed(
+                            description = message,
+                            color       = 0xFFD700,
+                        )
+                        ann_embed.set_footer(text="Kingdom Treasury  ·  Kingdom of Hell")
+                        await ann_channel.send(embed=ann_embed)
+            except Exception as ann_err:
+                import logging
+                logging.getLogger("kingdom_treasury").warning(f"Ascension announcement failed: {ann_err}")
 
         # ── Direct buy path ────────────────────────────────────────────────────
         if buy:

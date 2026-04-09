@@ -1,7 +1,9 @@
 import os
+import asyncio
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 import logging
+from datetime import datetime, timezone
 
 from .database import Database
 from .services import (
@@ -9,6 +11,7 @@ from .services import (
     TreasuryService, AuditService, CerberusService, BlackMarketService,
     InvestmentService, CosmeticService, BadgeService,
 )
+from .services.config_service import ConfigService
 
 logger = logging.getLogger("kingdom_treasury")
 
@@ -21,6 +24,7 @@ class KingdomTreasuryBot(commands.Bot):
         super().__init__(command_prefix="!kt_", intents=intents, help_command=None)
 
         self.db: Database = Database()
+        self.config_service: ConfigService = ConfigService()
 
         self.rank_service         = RankService()
         self.economy_service      = None
@@ -68,12 +72,13 @@ class KingdomTreasuryBot(commands.Bot):
         self.badge_service       = BadgeService(self.db)
 
         # ── Cogs ─────────────────────────────────────────────────────────────
-        from .cogs.economy    import EconomyCog
-        from .cogs.profile    import ProfileCog
-        from .cogs.investment import InvestmentCog
+        from .cogs.economy     import EconomyCog
+        from .cogs.profile     import ProfileCog
+        from .cogs.investment  import InvestmentCog
         from .cogs.blackmarket import BlackMarketCog
-        from .cogs.cosmetics  import CosmeticsCog
-        from .cogs.admin      import AdminCog
+        from .cogs.cosmetics   import CosmeticsCog
+        from .cogs.admin       import AdminCog
+        from .cogs.leaderboard import LeaderboardCog
 
         await self.add_cog(EconomyCog(self))
         await self.add_cog(ProfileCog(self))
@@ -81,6 +86,7 @@ class KingdomTreasuryBot(commands.Bot):
         await self.add_cog(BlackMarketCog(self))
         await self.add_cog(CosmeticsCog(self))
         await self.add_cog(AdminCog(self))
+        await self.add_cog(LeaderboardCog(self))
 
         await self.tree.sync()
         logger.info("Command tree synchronized.")
@@ -94,6 +100,13 @@ class KingdomTreasuryBot(commands.Bot):
                 name="every transaction in the Kingdom",
             ),
         )
+        await self.db.set_meta("start_time", datetime.now(timezone.utc).isoformat())
+        if not self._heartbeat_loop.is_running():
+            self._heartbeat_loop.start()
+
+    @tasks.loop(seconds=30)
+    async def _heartbeat_loop(self):
+        await self.db.set_meta("last_heartbeat", datetime.now(timezone.utc).isoformat())
 
     async def on_guild_remove(self, guild: discord.Guild):
         """When the bot is kicked from or leaves a guild, purge that guild's economy data."""
@@ -103,4 +116,5 @@ class KingdomTreasuryBot(commands.Bot):
 
     async def close(self):
         await self.db.close()
+        await self.config_service.close()
         await super().close()

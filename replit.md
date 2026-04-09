@@ -133,8 +133,15 @@ lib/db/                       # Drizzle ORM + PostgreSQL
 | `/dashboard/guilds/:id` | Dashboard overview — bot status, economy stats |
 | `/dashboard/guilds/:id/economy` | Economy config — grind/tribute rewards, cooldowns, taxes |
 | `/dashboard/guilds/:id/currency` | Currency name + icon with live preview |
-| `/dashboard/guilds/:id/channels` | Command channel routing |
+| `/dashboard/guilds/:id/channels` | Command channel routing (per-channel per-command) |
+| `/dashboard/guilds/:id/commands` | Role-based command permissions (allow/deny per role) |
+| `/dashboard/guilds/:id/ranks` | Rank→Discord role mapping + per-rank ascension cooldowns |
+| `/dashboard/guilds/:id/leaderboard` | Scheduled leaderboard posting (daily/weekly/monthly) |
+| `/dashboard/guilds/:id/ascension` | Ascension announcement channel + message template |
+| `/dashboard/guilds/:id/treasury` | Live treasury stats + wealth leaderboard (top 20) |
+| `/dashboard/guilds/:id/bot-status` | Bot online status, uptime, heartbeat, active commands |
 | `/dashboard/guilds/:id/settings` | General settings (timezone, etc.) |
+| `/dashboard/guilds/:id/reset` | Two-confirm economy wipe (preserves config) |
 
 ### Building
 
@@ -164,4 +171,5 @@ cd artifacts/dashboard && PORT=5000 BASE_PATH=/dashboard/ pnpm run build
   - Tables: `users`, `transactions`, `treasury`, `cooldowns`, `investments`, `user_perks`
   - Safe migrations via try/except ALTER TABLE for schema evolution
 - **Dashboard DB**: PostgreSQL (DATABASE_URL env var)
-  - Tables: `guild_configs`, `dashboard_sessions`
+  - Tables: `guild_configs`, `dashboard_sessions`, `command_routing`, `command_permissions`, `rank_role_mapping`, `leaderboard_settings`, `ascension_announcement_settings`, `rank_cooldown_settings`
+- **Bot heartbeat**: Bot writes `start_time` + `last_heartbeat` to SQLite `meta` table every 30s; API reads it for status checks
