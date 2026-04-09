@@ -73,12 +73,14 @@ class KingdomTreasuryBot(commands.Bot):
         from .cogs.investment import InvestmentCog
         from .cogs.blackmarket import BlackMarketCog
         from .cogs.cosmetics  import CosmeticsCog
+        from .cogs.admin      import AdminCog
 
         await self.add_cog(EconomyCog(self))
         await self.add_cog(ProfileCog(self))
         await self.add_cog(InvestmentCog(self))
         await self.add_cog(BlackMarketCog(self))
         await self.add_cog(CosmeticsCog(self))
+        await self.add_cog(AdminCog(self))
 
         await self.tree.sync()
         logger.info("Command tree synchronized.")

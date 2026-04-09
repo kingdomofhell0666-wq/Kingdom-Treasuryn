@@ -369,14 +369,7 @@ class EconomyCog(commands.Cog):
             embed=card_embed, file=discord.File(card_buf, filename="transfer_result.png")
         )
 
-    # ─── /vault ───────────────────────────────────────────────
-
-    @app_commands.command(name="vault", description="View the total reserves of the Kingdom Treasury.")
-    async def vault(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=False)
-        guild_id = str(interaction.guild_id)
-        balance  = await self.treasury.get_balance(guild_id)
-        await interaction.followup.send(embed=EmbedFactory.vault(balance))
+    # /vault removed — replaced by /treasury in AdminCog
 
     # ─── /market ──────────────────────────────────────────────
 

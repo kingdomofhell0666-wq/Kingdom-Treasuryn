@@ -772,3 +772,104 @@ def generate_withdraw_card(
             _hline(draw, y + 46, th, alpha=22, x1=RIGHT_X, x2=W - PAD)
 
     return _finish(card, draw, th)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 9.  TREASURY  CARD  (/treasury  —  kingdom-wide reserves, no avatar column)
+# ══════════════════════════════════════════════════════════════════════════════
+
+def generate_treasury_card(
+    balance:  int,
+    skin_id:  Optional[str] = None,
+) -> io.BytesIO:
+
+    th   = _t(skin_id)
+    gold = th["gold"]
+
+    # Full-width canvas
+    card = _gradient(W, H, th["bg1"], th["bg2"])
+    _sigil(card, th, cx=450, cy=220, r=200)   # centre sigil — larger, full-width
+    draw = ImageDraw.Draw(card)
+
+    # Outer border
+    draw.rounded_rectangle([(1, 1), (W - 2, H - 2)],
+                            radius=RADIUS, outline=(*th["border"][:3], 220), width=2)
+    draw.rounded_rectangle([(5, 5), (W - 6, H - 6)],
+                            radius=RADIUS - 3, outline=(*th["border"][:3], 38), width=1)
+
+    # Header
+    hf   = _font(9, cinzel=True)
+    htxt = "KINGDOM  OF  HELL    ·    INFERNAL  TREASURY"
+    draw.text(((W - _tw(draw, htxt, hf)) // 2, 14),
+              htxt, font=hf, fill=(*th["text2"][:3], 140))
+
+    # Badge
+    bf  = _font(11, bold=True, cinzel=True)
+    btxt = "RESERVES"
+    bw   = _tw(draw, btxt, bf)
+    _glow(card, (W - PAD - bw, 10), btxt, bf,
+          (*gold[:3], 255), (*th["glow"][:3], 255), blur=10, spread=2)
+    draw = ImageDraw.Draw(card)
+
+    _dline(draw, 44, th)
+
+    # Sub-label
+    sl  = _font(10, cinzel=True)
+    slt = "TOTAL  RESERVES"
+    draw.text(((W - _tw(draw, slt, sl)) // 2, 64),
+              slt, font=sl, fill=(*th["text2"][:3], 120))
+
+    # Large balance — centrepiece
+    bf2 = _font(56, bold=True)
+    bval = _fmt(balance)
+    bw2  = _tw(draw, bval, bf2)
+    _glow(card, ((W - bw2) // 2, 86), bval, bf2,
+          (*gold[:3], 255), (*th["glow"][:3], 255), blur=22, spread=4)
+    draw = ImageDraw.Draw(card)
+
+    # Horizontal rule
+    _dline(draw, 176, th)
+
+    # Atmospheric quote
+    qf   = _font(13)
+    qtxt = '"All wealth flows through the Kingdom. None escapes its ledger."'
+    qw   = _tw(draw, qtxt, qf)
+    # Wrap if too wide
+    if qw > W - PAD * 4:
+        words  = qtxt.split()
+        line1  = ' '.join(words[:len(words)//2])
+        line2  = ' '.join(words[len(words)//2:])
+        lw1    = _tw(draw, line1, qf)
+        lw2    = _tw(draw, line2, qf)
+        draw.text(((W - lw1) // 2, 192), line1, font=qf, fill=(*th["text2"][:3], 130))
+        draw.text(((W - lw2) // 2, 214), line2, font=qf, fill=(*th["text2"][:3], 130))
+    else:
+        draw.text(((W - qw) // 2, 200), qtxt, font=qf, fill=(*th["text2"][:3], 130))
+
+    # ── DC breakdown decorative rows ────────────────────────────────────────
+    ROW_Y = 268
+    _hline(draw, ROW_Y - 8, th, alpha=30)
+
+    detail_items = [
+        ("Total Reserves", _fmt(balance)),
+        ("Status",         "Active"),
+    ]
+    col_w  = (W - PAD * 2) // len(detail_items)
+    vf2    = _font(18, bold=True)
+    lf2    = _font(10, cinzel=True)
+    for i, (label, value) in enumerate(detail_items):
+        cx = PAD + i * col_w + col_w // 2
+        lw = _tw(draw, label, lf2)
+        vw = _tw(draw, value, vf2)
+        draw.text((cx - lw // 2, ROW_Y), label, font=lf2,
+                  fill=(*th["text2"][:3], 110))
+        draw.text((cx - vw // 2, ROW_Y + 18), value, font=vf2,
+                  fill=(*gold[:3], 200))
+        if i < len(detail_items) - 1:
+            mid_x = PAD + (i + 1) * col_w
+            draw.line([(mid_x, ROW_Y - 4), (mid_x, ROW_Y + 46)],
+                      fill=(*th["border"][:3], 35), width=1)
+
+    _hline(draw, ROW_Y + 52, th, alpha=30)
+
+    return _finish(card, draw, th)

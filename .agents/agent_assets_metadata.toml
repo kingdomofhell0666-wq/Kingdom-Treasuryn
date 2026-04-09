@@ -317,3 +317,27 @@ id = "gNP7V9_ncbBzoozv7HPRB"
 uri = "file://bot/assets/previews/withdraw_blood_crown.png"
 type = "image"
 title = "/withdraw — Blood Crown"
+
+[[outputs]]
+id = "Zteuc3TXqiVm0gbbsA4kv"
+uri = "file://bot/assets/previews/treasury_default.png"
+type = "image"
+title = "/treasury — Infernal Standard"
+
+[[outputs]]
+id = "OkRtub3aZdUra-v7GMT-E"
+uri = "file://bot/assets/previews/treasury_infernal_gold.png"
+type = "image"
+title = "/treasury — Infernal Gold"
+
+[[outputs]]
+id = "6c896OuisEV8mkLy60PWt"
+uri = "file://bot/assets/previews/treasury_royal_dark.png"
+type = "image"
+title = "/treasury — Royal Dark"
+
+[[outputs]]
+id = "mbu3YyQ3xR9KdKOG4stRf"
+uri = "file://bot/assets/previews/treasury_crimson_sigil.png"
+type = "image"
+title = "/treasury — Crimson Sigil"

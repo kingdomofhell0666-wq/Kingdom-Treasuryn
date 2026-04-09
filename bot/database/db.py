@@ -514,3 +514,33 @@ class Database:
             (badges_json, guild_id, discord_id),
         )
         await self._db.commit()
+
+    async def admin_reset_user(self, guild_id: str, discord_id: str):
+        """Fully reset a user's economy within a guild (admin action)."""
+        # Reset all user stats to default
+        await self._db.execute(
+            """UPDATE users
+               SET balance = 0, rank = 'Forsaken', risk_score = 0,
+                   taxes_paid = 0, grind_count = 0, grind_count_24h = 0,
+                   tribute_count = 0
+               WHERE guild_id = ? AND discord_id = ?""",
+            (guild_id, discord_id),
+        )
+        # Delete all cooldown records
+        await self._db.execute(
+            "DELETE FROM cooldowns WHERE guild_id = ? AND discord_id = ?",
+            (guild_id, discord_id),
+        )
+        # Void all active investments (return nothing)
+        await self._db.execute(
+            """UPDATE investments SET status = 'voided', payout = 0
+               WHERE guild_id = ? AND discord_id = ? AND status = 'active'""",
+            (guild_id, discord_id),
+        )
+        # Remove all perks
+        await self._db.execute(
+            "DELETE FROM user_perks WHERE guild_id = ? AND discord_id = ?",
+            (guild_id, discord_id),
+        )
+        await self._db.commit()
+        logger.info(f"Guild {guild_id} — user {discord_id} economy reset by admin.")
