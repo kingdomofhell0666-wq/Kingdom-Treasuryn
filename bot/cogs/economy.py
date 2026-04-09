@@ -244,7 +244,7 @@ class EconomyCog(commands.Cog):
             card_embed.set_image(url="attachment://grind_result.png")
 
             card_file = discord.File(card_buf, filename="grind_result.png")
-            await inter.edit_original_response(embed=card_embed, file=card_file, attachments=[])
+            await inter.edit_original_response(embed=card_embed, attachments=[card_file])
 
             # ── Post-result: badges + audit ───────────────────
             if outcome == "jackpot":
