@@ -693,10 +693,14 @@ class EmbedFactory:
     # ─── Cerberus Aggression Levels ────────────────────────────────────────────
 
     @staticmethod
-    def cerberus_routing_deny(level: int, seizure: int = 0) -> discord.Embed:
+    def cerberus_routing_deny(level: int, seizure: int = 0, rage_level: int = 0) -> discord.Embed:
         """
-        Immersive routing denial embed with aggression level tone.
-        Level 4 includes the financial seizure amount when seizure > 0.
+        Immersive routing denial embed.
+
+        Levels 1–3 carry escalating tone.
+        Level 4 carries rage-aware text + seizure details.
+        rage_level reflects how many times this user has been taxed in the
+        current loop (0 = first tax ever, increments each subsequent trigger).
         """
         if level == 1:
             embed = discord.Embed(
@@ -717,16 +721,31 @@ class EmbedFactory:
                 color       = 0x8B0000,
             )
         else:
-            # Level 4
+            # Level 4 — tone escalates with rage_level
+            if rage_level <= 2:
+                title = "Enough."
+                flavor = "*Cerberus watches.*"
+            elif rage_level <= 4:
+                title = "You persist."
+                flavor = "*Cerberus does not forget.*"
+            elif rage_level <= 6:
+                title = "The Kingdom takes more."
+                flavor = "*You invited this.*"
+            else:
+                title = "There will be nothing left."
+                flavor = "*The end of your defiance.*"
+
             if seizure > 0:
                 description = (
+                    f"{flavor}\n"
                     f"*Cerberus has claimed what is owed.*\n"
                     f"**{format_dc(seizure)}** has been seized."
                 )
             else:
-                description = "*Cerberus has claimed what is owed.*"
+                description = f"{flavor}\n*Cerberus has claimed what is owed.*"
+
             embed = discord.Embed(
-                title       = "Enough.",
+                title       = title,
                 description = description,
                 color       = 0x000000,
             )

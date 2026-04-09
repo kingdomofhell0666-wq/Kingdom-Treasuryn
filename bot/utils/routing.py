@@ -110,17 +110,18 @@ async def check_routing(
     bot = interaction.client
     cerberus = getattr(bot, "cerberus_aggression", None)
 
-    level   = 1
-    seizure = 0
+    level      = 1
+    seizure    = 0
+    rage_level = 0
 
     if cerberus is not None:
         level = cerberus.record_violation(guild_id, discord_id)
 
-        # ── Level 4: punitive tax ─────────────────────────────────────────
+        # ── Level 4: punitive tax with rage scaling ───────────────────────
         if level >= 4 and cerberus.should_tax(guild_id, discord_id):
+            rage_level = cerberus.get_rage_level(guild_id, discord_id)
             db = getattr(bot, "db", None)
             if db is not None:
-                # Fetch user rank for tier calculation
                 rank = "Forsaken"
                 try:
                     user = await db.get_user(guild_id, discord_id)
@@ -128,10 +129,14 @@ async def check_routing(
                 except Exception:
                     pass
 
-                seizure = await cerberus.execute_seizure(db, guild_id, discord_id, rank)
+                result  = await cerberus.execute_seizure(db, guild_id, discord_id, rank)
+                seizure = result["seizure"]
+        elif level >= 4:
+            # L4 but click-spam guard active — still show the rage level
+            rage_level = cerberus.get_rage_level(guild_id, discord_id)
 
     # ── Build and send the immersive embed ─────────────────────────────────
-    embed = EmbedFactory.cerberus_routing_deny(level, seizure)
+    embed = EmbedFactory.cerberus_routing_deny(level, seizure, rage_level)
 
     try:
         if interaction.response.is_done():
