@@ -14,10 +14,12 @@ import { Spinner } from "@/components/ui/spinner";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 
-const RANKS = [
-  "Forsaken","Vermin","Corrupted","Mythology","Folklore",
-  "Eschatology","Demonology","Archangel","Archdemon",
-  "Knight","Baron","Viscount","Count","Marquis","Duke","Chancellor",
+// Canonical public Kingdom ranks — the only ranks players can ascend through.
+// Excludes Forsaken (starting state) and Chancellor (staff/moderator role).
+const PUBLIC_KINGDOM_RANKS = [
+  "Vermin","Corrupted","Folklore","Mythology","Demonology",
+  "Eschatology","Archangel","Archdemon",
+  "Knight","Baron","Viscount","Count","Marquis","Duke",
 ];
 
 type RankRole = { rankName: string; roleId: string; removePrevious: boolean };
@@ -128,7 +130,7 @@ function RanksManager({ guildId }: { guildId: string }) {
 
   return (
     <div className="space-y-3">
-      {RANKS.filter(r => r !== "Forsaken").map(rank => {
+      {PUBLIC_KINGDOM_RANKS.map(rank => {
         const rr = rankRoles[rank];
         const cd = cooldowns[rank] ?? 0;
         const role = roles.find(r => r.id === rr?.roleId);

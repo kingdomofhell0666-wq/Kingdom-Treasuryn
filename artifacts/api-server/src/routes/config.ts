@@ -56,6 +56,28 @@ import { assertGuildAdmin } from "../lib/discord";
 
 const router = Router();
 
+// ─── Canonical public Kingdom rank list ───────────────────────────────────────
+// This is the single source of truth for rank validation in all API routes.
+// Excludes Forsaken (starting state) and Chancellor (staff role — not purchasable).
+// Must stay in sync with PUBLIC_KINGDOM_RANKS in bot/services/rank_service.py.
+const PUBLIC_KINGDOM_RANKS = new Set([
+  "Vermin", "Corrupted", "Folklore", "Mythology", "Demonology",
+  "Eschatology", "Archangel", "Archdemon",
+  "Knight", "Baron", "Viscount", "Count", "Marquis", "Duke",
+]);
+
+function assertPublicRank(rank: string, res: any): boolean {
+  if (!PUBLIC_KINGDOM_RANKS.has(rank)) {
+    res.status(400).json({
+      error: `"${rank}" is not a valid public Kingdom rank. ` +
+        `Allowed: ${[...PUBLIC_KINGDOM_RANKS].join(", ")}. ` +
+        `Chancellor is a staff role and cannot be used in public rank configuration.`,
+    });
+    return false;
+  }
+  return true;
+}
+
 // ═══════════════════════════════════════════════════════════════
 // COMMAND ROUTING
 // ═══════════════════════════════════════════════════════════════
@@ -185,6 +207,7 @@ router.get("/guilds/:guildId/rank-roles", requireAuth, async (req, res) => {
 router.put("/guilds/:guildId/rank-roles/:rank", requireAuth, async (req, res) => {
   const { guildId, rank } = req.params;
   if (!(await assertGuildAdmin(req, res, guildId))) return;
+  if (!assertPublicRank(rank, res)) return;
 
   const { roleId, removePrevious = true } = req.body as { roleId: string; removePrevious?: boolean };
   if (!roleId) { res.status(400).json({ error: "roleId is required." }); return; }
@@ -359,6 +382,7 @@ router.get("/guilds/:guildId/rank-cooldowns", requireAuth, async (req, res) => {
 router.put("/guilds/:guildId/rank-cooldowns/:rank", requireAuth, async (req, res) => {
   const { guildId, rank } = req.params;
   if (!(await assertGuildAdmin(req, res, guildId))) return;
+  if (!assertPublicRank(rank, res)) return;
 
   const { cooldownSeconds } = req.body as { cooldownSeconds: number };
   if (cooldownSeconds === undefined) { res.status(400).json({ error: "cooldownSeconds is required." }); return; }

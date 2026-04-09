@@ -39,11 +39,11 @@ const TIMEZONES = [
 ];
 
 const SAMPLE_ENTRIES = [
-  { name: "Darkblade",    balance: 5_000_000, rank: "Chancellor" },
-  { name: "Infernal_Rex", balance: 4_800_000, rank: "Duke" },
-  { name: "SoulHarvest",  balance: 2_100_000, rank: "Duke" },
-  { name: "VoidWalker",   balance: 1_400_000, rank: "Baron" },
-  { name: "CrimsonTide",  balance: 890_000,   rank: "Knight" },
+  { name: "Darkblade",    balance: 80_000_000, rank: "Duke" },
+  { name: "Infernal_Rex", balance: 42_000_000, rank: "Marquis" },
+  { name: "SoulHarvest",  balance: 21_000_000, rank: "Count" },
+  { name: "VoidWalker",   balance: 1_400_000,  rank: "Baron" },
+  { name: "CrimsonTide",  balance: 890_000,    rank: "Knight" },
 ];
 
 const MEDALS = ["🥇", "🥈", "🥉"];

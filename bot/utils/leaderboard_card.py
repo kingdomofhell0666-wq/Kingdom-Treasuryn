@@ -60,10 +60,10 @@ RANK_FLAVOR = {
     "Forsaken":    "the damned",
     "Vermin":      "a crawling wretch",
     "Corrupted":   "a tainted soul",
-    "Mythology":   "a legend in shadow",
     "Folklore":    "a whispered name",
-    "Eschatology": "a herald of endings",
+    "Mythology":   "a legend in shadow",
     "Demonology":  "a student of darkness",
+    "Eschatology": "a herald of endings",
     "Archangel":   "a fallen light",
     "Archdemon":   "a lord of the abyss",
     "Knight":      "a blade of the realm",
@@ -72,7 +72,6 @@ RANK_FLAVOR = {
     "Count":       "a lord of many souls",
     "Marquis":     "a marquis of ruin",
     "Duke":        "a duke of hell",
-    "Chancellor":  "the hand of the Kingdom",
 }
 
 # ─── Font helpers ─────────────────────────────────────────────────────────────

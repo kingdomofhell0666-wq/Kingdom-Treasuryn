@@ -13,7 +13,7 @@ and posts when the schedule is due.
 
 Ranking rule (identical to /identity)
 ──────────────────────────────────────
-  PRIMARY:   rank hierarchy (Chancellor=15 … Forsaken=0)
+  PRIMARY:   rank hierarchy (Duke=14 … Forsaken=0)
   SECONDARY: balance descending
 
 Leaderboard type: FIXED → Kingdom Rank Top 10 (no other modes).

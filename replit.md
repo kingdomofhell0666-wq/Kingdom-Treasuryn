@@ -68,7 +68,7 @@ main.py                  # Entry point
 - **Currency**: DevilCoins (DC)
 - **Default rank**: Forsaken (not purchasable)
 - **Grind tiers**: 60% common (250-350) / 20% meager (100-200) / 10% failure (0) / 7% rich (400-600) / 3% jackpot (800-1200)
-- **Tax system**: Rank-based rates from 12% (Forsaken) to 0% (Chancellor)
+- **Tax system**: Rank-based rates from 12% (Forsaken) to 1% (Duke)
 - **Transfer tax**: 2% to treasury
 - **Shop tax**: 10% treasury, 90% burned
 - **Cerberus**: risk_score 0–100; audit prob = risk × 0.3% (cap 50%); penalty 10–30% wallet
@@ -78,7 +78,12 @@ main.py                  # Entry point
 
 ## Ranks & Costs (strict linear progression — no skipping)
 
-Forsaken (default) → Vermin (1.5K) → Corrupted (6K) → Mythology (15K) → Folklore (35K) → Eschatology (80K) → Demonology (160K) → Archangel (400K) → Archdemon (1M) → Knight (2.5M) → Baron (5M) → Viscount (10M) → Count (20M) → Marquis (40M) → Duke (80M) → Chancellor (200M, 0% tax)
+**Public Kingdom Ranks (purchasable by players):**
+Forsaken (default) → Vermin (1.5K) → Corrupted (6K) → Folklore (15K) → Mythology (35K) → Demonology (80K) → Eschatology (160K) → Archangel (400K) → Archdemon (1M) → Knight (2.5M) → Baron (5M) → Viscount (10M) → Count (20M) → Marquis (40M) → **Duke (80M, ceiling)**
+
+**Chancellor = STAFF/MODERATOR ROLE ONLY — excluded from all public ascension logic.**
+- Chancellor is NOT purchasable, NOT in /ascend, NOT in cooldown config, NOT in leaderboard hierarchy, NOT on dashboard rank pages.
+- `PUBLIC_KINGDOM_RANKS` in `bot/services/rank_service.py` is the single source of truth.
 
 ## Perks (via Black Market)
 

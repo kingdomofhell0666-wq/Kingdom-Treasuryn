@@ -666,7 +666,7 @@ def generate_card(
     # Tax bracket tag
     RANK_TAX = {
         "Forsaken": 0.12, "Condemned": 0.09, "Hellbound": 0.06,
-        "Archdemon": 0.03, "Duke": 0.01, "Chancellor": 0.00,
+        "Archdemon": 0.03, "Duke": 0.01,
     }
     tax_rate = RANK_TAX.get(rank, 0.12)
     tax_str = "TAX EXEMPT" if tax_rate == 0 else f"TAX BRACKET  {int(tax_rate * 100)}%"

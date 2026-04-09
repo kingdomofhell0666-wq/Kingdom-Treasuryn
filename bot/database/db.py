@@ -295,16 +295,18 @@ class Database:
         return user["grind_count_24h"]
 
     # Kingdom rank ordering: rank hierarchy (index) DESC, then balance DESC.
-    # This CASE expression mirrors the RANKS list in rank_service.py exactly.
+    # Mirrors PUBLIC_KINGDOM_RANKS in rank_service.py.
+    # Chancellor is a staff role and is NOT part of the public rank hierarchy —
+    # it does not appear here. Duke (14) is the highest public economy rank.
     _RANK_CASE = """
         CASE rank
             WHEN 'Forsaken'    THEN 0
             WHEN 'Vermin'      THEN 1
             WHEN 'Corrupted'   THEN 2
-            WHEN 'Mythology'   THEN 3
-            WHEN 'Folklore'    THEN 4
-            WHEN 'Eschatology' THEN 5
-            WHEN 'Demonology'  THEN 6
+            WHEN 'Folklore'    THEN 3
+            WHEN 'Mythology'   THEN 4
+            WHEN 'Demonology'  THEN 5
+            WHEN 'Eschatology' THEN 6
             WHEN 'Archangel'   THEN 7
             WHEN 'Archdemon'   THEN 8
             WHEN 'Knight'      THEN 9
@@ -313,16 +315,15 @@ class Database:
             WHEN 'Count'       THEN 12
             WHEN 'Marquis'     THEN 13
             WHEN 'Duke'        THEN 14
-            WHEN 'Chancellor'  THEN 15
             ELSE 0
         END
     """
 
     async def get_leaderboard(self, guild_id: str, limit: int = 10) -> List[dict]:
         """
-        Return top users sorted by rank hierarchy first (Chancellor > Duke > ... > Forsaken),
+        Return top users sorted by public rank hierarchy first (Duke > … > Forsaken),
         then by balance descending for ties within the same rank.
-        This matches the /identity card kingdom_rank exactly.
+        Matches /identity ordering exactly.  Chancellor is not part of the public hierarchy.
         """
         async with self._db.execute(
             f"""SELECT discord_id, username, balance, rank,

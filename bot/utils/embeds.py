@@ -349,10 +349,10 @@ class EmbedFactory:
         RANK_FLAVOR = {
             "Vermin":      "The first step above nothing. Your name enters the record.",
             "Corrupted":   "Tainted by ambition. The hierarchy begins to notice.",
-            "Mythology":   "Your existence becomes legend. The lower ranks defer.",
             "Folklore":    "Spoken of in dark halls. A name that carries weight.",
-            "Eschatology": "You study the end of all things. Power through knowledge.",
+            "Mythology":   "Your existence becomes legend. The lower ranks defer.",
             "Demonology":  "The language of demons is now your native tongue.",
+            "Eschatology": "You study the end of all things. Power through knowledge.",
             "Archangel":   "Between sacred and infernal. A rare and delicate rank.",
             "Archdemon":   "The void bends. The Kingdom watches you closely.",
             "Knight":      "Honor forged through force. The noble class begins here.",
@@ -361,7 +361,6 @@ class EmbedFactory:
             "Count":       "Your decisions carry weight beyond your own walls.",
             "Marquis":     "Between Baron and Duke — quiet, absolute authority.",
             "Duke":        "The upper echelon. The throne is within reach.",
-            "Chancellor":  "The Kingdom bends to your command. Absolute.",
         }
 
         embed = discord.Embed(

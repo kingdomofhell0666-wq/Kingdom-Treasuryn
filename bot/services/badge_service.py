@@ -9,9 +9,9 @@ AUTO_UNLOCK_TYPES = {
 }
 
 RANK_ORDER = [
-    "Forsaken","Vermin","Corrupted","Mythology","Folklore","Eschatology",
-    "Demonology","Archangel","Archdemon","Knight","Baron","Viscount",
-    "Count","Marquis","Duke","Chancellor",
+    "Forsaken","Vermin","Corrupted","Folklore","Mythology","Demonology",
+    "Eschatology","Archangel","Archdemon","Knight","Baron","Viscount",
+    "Count","Marquis","Duke",
 ]
 
 
