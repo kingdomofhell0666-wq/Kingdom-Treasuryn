@@ -232,18 +232,21 @@ class AdminCog(commands.Cog):
 
     # ── /treasury ─────────────────────────────────────────────────────────────
 
-    @app_commands.command(name="treasury", description="View the total reserves of the Kingdom Treasury.")
+    @app_commands.command(name="treasury", description="[Admin] View the total reserves of the Kingdom Treasury.")
     async def treasury(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=False)
+        await interaction.response.defer(ephemeral=True)
 
-        guild_id = str(interaction.guild_id)
-        balance  = await self.bot.treasury_service.get_balance(guild_id)
+        if not await _is_admin(interaction):
+            await interaction.followup.send(embed=_denied(), ephemeral=True)
+            return
 
-        # Use caller's skin for the card theme
+        guild_id   = str(interaction.guild_id)
         discord_id = str(interaction.user.id)
         username   = interaction.user.display_name
-        user_data  = await self.db.upsert_user(guild_id, discord_id, username)
-        skin_id    = user_data.get("equipped_skin") or "default"
+
+        balance   = await self.bot.treasury_service.get_balance(guild_id)
+        user_data = await self.db.upsert_user(guild_id, discord_id, username)
+        skin_id   = user_data.get("equipped_skin") or "default"
 
         loop     = asyncio.get_event_loop()
         card_buf = await loop.run_in_executor(None, lambda: generate_treasury_card(
@@ -253,5 +256,6 @@ class AdminCog(commands.Cog):
         card_embed = discord.Embed(color=_GOLD)
         card_embed.set_image(url="attachment://treasury.png")
         await interaction.followup.send(
-            embed=card_embed, file=discord.File(card_buf, filename="treasury.png")
+            embed=card_embed, file=discord.File(card_buf, filename="treasury.png"),
+            ephemeral=False,
         )
