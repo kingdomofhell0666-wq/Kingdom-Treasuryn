@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
 import { apiGet, apiPatch } from "@/lib/api";
-import { useGetGuild, useGetGuildConfig } from "@workspace/api-client-react";
+import { useGetGuildConfig } from "@workspace/api-client-react";
 import { Trophy, Save, Eye, AlertCircle, Crown } from "lucide-react";
 import { Spinner } from "@/components/ui/spinner";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -73,7 +73,6 @@ export default function LeaderboardPage() {
 
 function LeaderboardForm({ guildId }: { guildId: string }) {
   const { toast } = useToast();
-  const { data: guild } = useGetGuild(guildId);
   const { data: config } = useGetGuildConfig(guildId);
 
   const [loadState, setLoadState] = useState<LoadState>("loading");
@@ -82,7 +81,14 @@ function LeaderboardForm({ guildId }: { guildId: string }) {
   const [saving, setSaving] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
 
-  const textChannels = (guild as { channels?: { id: string; name: string }[] })?.channels ?? [];
+  // Load channels from DB-backed endpoint (same fix as ascension page)
+  const [textChannels, setTextChannels] = useState<{ id: string; name: string }[]>([]);
+  useEffect(() => {
+    apiGet<{ id: string; name: string }[]>(`/api/guilds/${guildId}/channels`)
+      .then(data => setTextChannels(data ?? []))
+      .catch(() => setTextChannels([]));
+  }, [guildId]);
+
   const currencyName = config?.currencyName ?? "DevilCoins";
   const currencyIcon = config?.currencyIcon ?? "🪙";
   const endpoint = ENDPOINT(guildId);

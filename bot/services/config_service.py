@@ -243,25 +243,55 @@ class ConfigService:
 
     # ── Leaderboard settings ──────────────────────────────────────────────────
 
+    async def get_leaderboard_settings_for_guild(self, guild_id: str) -> Optional[Dict]:
+        """
+        Return the leaderboard_settings row for a single guild, or None if
+        no row exists.  Used by the bot-first resolver in leaderboard.py.
+        """
+        key = f"{guild_id}:leaderboard"
+        cached = _cache.get(key)
+        if cached is not None:
+            return cached
+
+        row = await self._query_one(
+            "SELECT * FROM leaderboard_settings WHERE guild_id = $1", guild_id
+        )
+        _cache.set(key, row)
+        return row
+
     async def get_all_leaderboard_settings(self) -> List[Dict]:
+        """Legacy method — returns all guilds with dashboard-enabled leaderboards."""
         rows = await self._query_all(
             "SELECT * FROM leaderboard_settings WHERE enabled = TRUE AND post_channel_id IS NOT NULL"
         )
         return rows
 
-    async def update_last_posted_at(self, guild_id: str):
+    async def upsert_last_posted_at(self, guild_id: str):
+        """
+        Create or update the last_posted_at timestamp for a guild.
+        Safe to call even when no leaderboard_settings row exists yet.
+        """
         pool = await self._get_pool()
         if pool is None:
             return
         try:
             async with pool.acquire() as conn:
                 await conn.execute(
-                    "UPDATE leaderboard_settings SET last_posted_at = NOW() WHERE guild_id = $1",
+                    """
+                    INSERT INTO leaderboard_settings (guild_id, last_posted_at)
+                    VALUES ($1, NOW())
+                    ON CONFLICT (guild_id)
+                    DO UPDATE SET last_posted_at = NOW()
+                    """,
                     guild_id,
                 )
             _cache.invalidate_guild(guild_id)
         except Exception as e:
-            logger.warning(f"ConfigService update_last_posted_at error: {e}")
+            logger.warning(f"ConfigService upsert_last_posted_at error: {e}")
+
+    async def update_last_posted_at(self, guild_id: str):
+        """Kept for backwards compatibility — delegates to upsert."""
+        await self.upsert_last_posted_at(guild_id)
 
     def invalidate_guild(self, guild_id: str):
         """Immediately drop all cached entries for a guild so the next query hits the DB."""
