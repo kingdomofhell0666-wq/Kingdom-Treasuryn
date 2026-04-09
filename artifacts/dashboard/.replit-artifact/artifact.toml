@@ -15,7 +15,7 @@ paths = [ "/dashboard/" ]
 localPort = 8080
 
 [services.development]
-run = "pnpm --filter @workspace/api-server run dev"
+run = "sleep infinity"
 
 [services.production]
 build = [ "pnpm", "--filter", "@workspace/dashboard", "run", "build" ]
@@ -25,7 +25,3 @@ serve = "static"
 [[services.production.rewrites]]
 from = "/*"
 to = "/index.html"
-
-[services.env]
-PORT = "8080"
-BASE_PATH = "/dashboard/"
