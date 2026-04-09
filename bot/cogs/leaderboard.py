@@ -4,6 +4,9 @@ LeaderboardCog — automatic scheduled leaderboard posting.
 Checks every minute whether any enabled guild's leaderboard is due to post,
 generates the embed, and sends it to the configured channel.
 
+The ranking uses the same balance-based ordering as /identity — position 1
+has the highest balance, matching the Kingdom Identity Card exactly.
+
 Frequency types: daily | weekly | monthly
 """
 
@@ -26,11 +29,11 @@ def _parse_tz(tz_name: str):
 
 def _is_due(settings: dict, now_utc: datetime) -> bool:
     """Return True if the leaderboard should be posted now (within this minute)."""
-    tz       = _parse_tz(settings.get("timezone") or "UTC")
+    tz        = _parse_tz(settings.get("timezone") or "UTC")
     now_local = now_utc.astimezone(tz)
 
-    post_hour   = settings.get("post_hour", 12)
-    post_minute = settings.get("post_minute", 0)
+    post_hour   = int(settings.get("post_hour", 12))
+    post_minute = int(settings.get("post_minute", 0))
 
     if now_local.hour != post_hour or now_local.minute != post_minute:
         return False
@@ -52,13 +55,13 @@ def _is_due(settings: dict, now_utc: datetime) -> bool:
             return False
         if frequency == "weekly":
             dow = settings.get("post_day_of_week")
-            if dow is not None and now_local.weekday() != dow:
+            if dow is not None and now_local.weekday() != int(dow):
                 return False
             if elapsed < timedelta(days=6, hours=23):
                 return False
         if frequency == "monthly":
             dom = settings.get("post_day_of_month")
-            if dom is not None and now_local.day != dom:
+            if dom is not None and now_local.day != int(dom):
                 return False
             if elapsed < timedelta(days=27):
                 return False
@@ -66,10 +69,31 @@ def _is_due(settings: dict, now_utc: datetime) -> bool:
     return True
 
 
-LEADERBOARD_COLORS = {
-    "wealth":  0xFFD700,
-    "grind":   0xB22222,
-    "tribute": 0x8B0000,
+BOARD_META = {
+    "wealth":  {"emoji": "💰", "label": "Wealth", "color": 0xFFD700},
+    "grind":   {"emoji": "⛏",  "label": "Grind",   "color": 0xB22222},
+    "tribute": {"emoji": "👑", "label": "Tribute", "color": 0x8B0000},
+}
+
+MEDALS = ["🥇", "🥈", "🥉"]
+
+RANK_FLAVOR = {
+    "Forsaken":    "the damned",
+    "Vermin":      "a crawling wretch",
+    "Corrupted":   "a tainted soul",
+    "Mythology":   "a legend in shadow",
+    "Folklore":    "a whispered name",
+    "Eschatology": "a herald of endings",
+    "Demonology":  "a student of darkness",
+    "Archangel":   "a fallen light",
+    "Archdemon":   "a lord of the abyss",
+    "Knight":      "a blade of the realm",
+    "Baron":       "a lord of the pit",
+    "Viscount":    "a noble of shadow",
+    "Count":       "a lord of many souls",
+    "Marquis":     "a marquis of ruin",
+    "Duke":        "a duke of hell",
+    "Chancellor":  "the hand of the Kingdom",
 }
 
 
@@ -97,7 +121,7 @@ class LeaderboardCog(commands.Cog):
         if config_svc is None:
             return
 
-        now_utc = datetime.now(timezone.utc)
+        now_utc      = datetime.now(timezone.utc)
         all_settings = await config_svc.get_all_leaderboard_settings()
 
         for settings in all_settings:
@@ -114,9 +138,14 @@ class LeaderboardCog(commands.Cog):
             channel = guild.get_channel(int(channel_id)) if guild else None
 
             if channel is None or not isinstance(channel, discord.TextChannel):
+                logger.warning(
+                    f"Leaderboard: channel {channel_id} not found or not a text channel "
+                    f"for guild {guild_id} — skipping."
+                )
                 continue
 
-            await self._post_leaderboard(channel, guild_id, settings)
+            guild_cfg = await config_svc.get_guild_config(guild_id)
+            await self._post_leaderboard(channel, guild_id, settings, guild_cfg)
             await config_svc.update_last_posted_at(guild_id)
 
     async def _post_leaderboard(
@@ -124,42 +153,64 @@ class LeaderboardCog(commands.Cog):
         channel: discord.TextChannel,
         guild_id: str,
         settings: dict,
+        guild_cfg: dict,
     ):
-        board_type = settings.get("leaderboard_type", "wealth")
+        board_type    = settings.get("leaderboard_type", "wealth")
+        currency_name = guild_cfg.get("currency_name", "DevilCoins")
+        currency_icon = guild_cfg.get("currency_icon", "🪙")
+        meta          = BOARD_META.get(board_type, BOARD_META["wealth"])
 
+        # ── Fetch leaderboard data (same ORDER BY balance DESC as /identity) ──
         try:
             rows = await self.bot.db.get_leaderboard(guild_id, limit=10)
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Leaderboard data fetch failed for guild {guild_id}: {e}")
             rows = []
 
         if not rows:
+            logger.info(f"Leaderboard: no data yet for guild {guild_id} — skipping post.")
             return
 
-        medals = ["🥇", "🥈", "🥉"]
-        lines  = []
+        # ── Build lines ───────────────────────────────────────────────────────
+        lines = []
         for i, row in enumerate(rows[:10]):
-            prefix = medals[i] if i < 3 else f"**{i + 1}.**"
-            name   = row.get("username", "Unknown")
-            bal    = row.get("balance", 0)
-            rank   = row.get("rank", "Forsaken")
-            lines.append(f"{prefix} **{name}** — `{bal:,} DC` · *{rank}*")
+            prefix   = MEDALS[i] if i < 3 else f"**#{i + 1}**"
+            name     = row.get("username", "Unknown Soul")
+            bal      = int(row.get("balance", 0))
+            kingdom_rank = row.get("rank", "Forsaken")
+            flavor   = RANK_FLAVOR.get(kingdom_rank, kingdom_rank)
+            lines.append(
+                f"{prefix} **{name}**  ·  {currency_icon} `{bal:,}` {currency_name}\n"
+                f"    *{flavor}* — {kingdom_rank}"
+            )
 
-        title = {
-            "wealth":  "💰  Wealth Leaderboard",
-            "grind":   "⛏  Grind Leaderboard",
-            "tribute": "👑  Tribute Leaderboard",
-        }.get(board_type, "🏆  Leaderboard")
+        # ── Frequency label for the header ────────────────────────────────────
+        freq_label = {
+            "daily":   "Daily",
+            "weekly":  "Weekly",
+            "monthly": "Monthly",
+        }.get(settings.get("post_frequency", "daily"), "")
+
+        title = f"{meta['emoji']}  {freq_label} {meta['label']} Leaderboard".strip()
+
+        tz        = _parse_tz(settings.get("timezone") or "UTC")
+        now_local = datetime.now(timezone.utc).astimezone(tz)
 
         embed = discord.Embed(
             title       = title,
-            description = "\n".join(lines) if lines else "*No data yet.*",
-            color       = LEADERBOARD_COLORS.get(board_type, 0xFFD700),
+            description = "\n\n".join(lines),
+            color       = meta["color"],
         )
-        embed.set_footer(text="Kingdom Treasury  ·  Kingdom of Hell")
+        embed.set_author(name="Kingdom of Hell  ·  Kingdom Treasury")
+        embed.set_footer(
+            text=f"Ranked by {meta['label'].lower()}  ·  {now_local.strftime('%B %d, %Y')}"
+        )
         embed.timestamp = discord.utils.utcnow()
 
         try:
             await channel.send(embed=embed)
-            logger.info(f"Posted leaderboard to guild={guild_id} channel={channel.id}")
+            logger.info(
+                f"Posted {board_type} leaderboard to guild={guild_id} channel={channel.id}"
+            )
         except Exception as e:
-            logger.warning(f"Failed to post leaderboard: {e}")
+            logger.warning(f"Failed to post leaderboard to channel {channel.id}: {e}")
