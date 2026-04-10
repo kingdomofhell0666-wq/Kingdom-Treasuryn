@@ -4,6 +4,7 @@ Commands: /mission create | complete | delete
 Background: expiry checker (every 60 s)
 """
 
+import asyncio
 import logging
 from typing import Optional, List
 
@@ -21,6 +22,8 @@ MISSION_CHANNEL_ID = 1488258105216209016
 _VOID    = 0x0A0A0A
 _CRIMSON = 0x6B0000
 _GOLD    = 0xFFD700
+
+_SEP = "━━━━━━━━━━━━━━━━━━━"
 
 _ALL_RANKS = [
     "Forsaken","Vermin","Corrupted","Folklore","Mythology",
@@ -63,6 +66,36 @@ def _err(msg: str) -> discord.Embed:
     )
 
 
+# ── Cinematic close embeds ────────────────────────────────────────────────────
+
+def _closing_embed(title: str) -> discord.Embed:
+    lines = [
+        _SEP,
+        f"📜  **{title}  —  CLOSING**",
+        _SEP,
+        "",
+        "*Closing...*",
+        "",
+        _SEP,
+    ]
+    return discord.Embed(description="\n".join(lines), color=0x1A0000)
+
+
+def _closed_embed(title: str) -> discord.Embed:
+    lines = [
+        _SEP,
+        f"📜  **{title}  —  CLOSED**",
+        _SEP,
+        "",
+        "*This mission is no longer available.*",
+        "",
+        "*Those who hesitated… lost their chance.*",
+        "",
+        _SEP,
+    ]
+    return discord.Embed(description="\n".join(lines), color=_VOID)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 
 class MissionsCog(commands.Cog):
@@ -70,7 +103,7 @@ class MissionsCog(commands.Cog):
         self.bot = bot
 
     @property
-    def db(self):                  return self.bot.db
+    def db(self):                    return self.bot.db
     @property
     def svc(self) -> MissionService: return self.bot.mission_service
 
@@ -98,8 +131,11 @@ class MissionsCog(commands.Cog):
                 for m in missions:
                     if is_expired(m):
                         await self.db.set_mission_status(m["id"], "expired")
-                        await self._update_mission_post(m, expired=True)
-                        logger.info(f"[Missions] Mission #{m['id']} expired.")
+                        asyncio.create_task(
+                            self._cinematic_close(m),
+                            name=f"mission_close_{m['id']}",
+                        )
+                        logger.info(f"[Missions] Mission #{m['id']} expired — cinematic close queued.")
         except Exception as exc:
             logger.warning(f"[Missions] expiry loop error: {exc}")
 
@@ -107,20 +143,68 @@ class MissionsCog(commands.Cog):
     async def _before_expiry(self):
         await self.bot.wait_until_ready()
 
-    async def _update_mission_post(self, mission: dict, expired: bool = False):
+    # ── Cinematic close sequence ──────────────────────────────────────────────
+
+    async def _cinematic_close(self, mission: dict):
+        """
+        ACTIVE → CLOSING → CLOSED → (deleted from channel)
+
+        Step 1  — Fetch the Discord message.
+        Step 2  — Edit: "CLOSING..." + strip all buttons.
+        Step 3  — Wait 2 s.
+        Step 4  — Edit: "CLOSED" state.
+        Step 5  — Wait 3 s.
+        Step 6  — Delete the message.
+        """
+        mission_id = mission.get("id", "?")
+        title      = mission.get("title", "KINGDOM MISSION")
+
+        if not mission.get("message_id"):
+            logger.warning(f"[Missions] cinematic_close #{mission_id}: no message_id stored.")
+            return
+
+        channel = self.bot.get_channel(int(mission["channel_id"]))
+        if channel is None:
+            try:
+                channel = await self.bot.fetch_channel(int(mission["channel_id"]))
+            except Exception as exc:
+                logger.warning(f"[Missions] cinematic_close #{mission_id}: channel not found — {exc}")
+                return
+
+        # Step 1 — Fetch message
         try:
-            if not mission.get("message_id"):
-                return
-            channel = self.bot.get_channel(int(mission["channel_id"]))
-            if channel is None:
-                return
-            msg   = await channel.fetch_message(int(mission["message_id"]))
-            count = await self.db.count_mission_participants(mission["id"])
-            embed = build_mission_embed(mission, count)
-            view  = MissionView(mission_id=mission["id"], disabled=expired)
-            await msg.edit(embed=embed, view=view)
+            msg = await channel.fetch_message(int(mission["message_id"]))
+        except discord.NotFound:
+            logger.warning(f"[Missions] cinematic_close #{mission_id}: message already gone.")
+            return
         except Exception as exc:
-            logger.debug(f"[Missions] update_post failed: {exc}")
+            logger.warning(f"[Missions] cinematic_close #{mission_id}: fetch failed — {exc}")
+            return
+
+        # Step 2 — Edit to CLOSING state; strip all components
+        try:
+            await msg.edit(embed=_closing_embed(title), view=None)
+        except Exception as exc:
+            logger.debug(f"[Missions] cinematic_close #{mission_id}: step 2 edit failed — {exc}")
+
+        # Step 3 — Wait 2 seconds
+        await asyncio.sleep(2)
+
+        # Step 4 — Edit to CLOSED state
+        try:
+            await msg.edit(embed=_closed_embed(title))
+        except Exception as exc:
+            logger.debug(f"[Missions] cinematic_close #{mission_id}: step 4 edit failed — {exc}")
+
+        # Step 5 — Wait 3 seconds
+        await asyncio.sleep(3)
+
+        # Step 6 — Delete the message
+        try:
+            await msg.delete()
+            logger.info(f"[Missions] cinematic_close #{mission_id}: message deleted.")
+        except Exception as exc:
+            logger.error(f"[Missions] cinematic_close #{mission_id}: delete failed — {exc}")
 
     # ── /mission group ────────────────────────────────────────────────────────
 
@@ -217,18 +301,18 @@ class MissionsCog(commands.Cog):
             description = f"*Mission **{title}** has been decreed in <#{MISSION_CHANNEL_ID}>.*",
             color       = _GOLD,
         )
-        confirm.add_field(name="ID",     value=f"**#{mission['id']}**",   inline=True)
-        confirm.add_field(name="Reward", value=f"**{reward:,} DC**",      inline=True)
+        confirm.add_field(name="ID",     value=f"**#{mission['id']}**",    inline=True)
+        confirm.add_field(name="Reward", value=f"**{reward:,} DC**",       inline=True)
         if entry_cost:
-            confirm.add_field(name="Entry",   value=f"**{entry_cost:,} DC**", inline=True)
+            confirm.add_field(name="Entry",   value=f"**{entry_cost:,} DC**",  inline=True)
         if max_participants:
-            confirm.add_field(name="Slots",   value=f"**{max_participants}**", inline=True)
+            confirm.add_field(name="Slots",   value=f"**{max_participants}**",  inline=True)
         if repeat_limit:
-            confirm.add_field(name="Repeats", value=f"**{repeat_limit}**",    inline=True)
+            confirm.add_field(name="Repeats", value=f"**{repeat_limit}**",     inline=True)
         if required_rank:
-            confirm.add_field(name="Rank",    value=f"**{required_rank}+**",  inline=True)
+            confirm.add_field(name="Rank",    value=f"**{required_rank}+**",   inline=True)
         if duration:
-            confirm.add_field(name="Expires", value=f"**{duration}**",        inline=True)
+            confirm.add_field(name="Expires", value=f"**{duration}**",         inline=True)
         confirm.set_footer(text="Kingdom Treasury  ·  Kingdom of Hell")
         await interaction.followup.send(embed=confirm, ephemeral=True)
 
@@ -290,6 +374,14 @@ class MissionsCog(commands.Cog):
         embed.set_footer(text="Kingdom Treasury  ·  Kingdom of Hell")
         await interaction.followup.send(embed=embed, ephemeral=True)
 
+        # Cinematic close runs in background — does not block the response
+        mission = await self.db.get_mission(mission_id)
+        if mission:
+            asyncio.create_task(
+                self._cinematic_close(mission),
+                name=f"mission_close_{mission_id}",
+            )
+
     @mission_complete.autocomplete("mission_id")
     async def complete_autocomplete(
         self, interaction: discord.Interaction, current: str
@@ -311,7 +403,7 @@ class MissionsCog(commands.Cog):
     # ── /mission delete ───────────────────────────────────────────────────────
 
     @mission.command(name="delete", description="Withdraw and remove a mission.")
-    @app_commands.describe(mission_id="Mission ID to withdraw.")
+    @app_commands.describe(mission_id="Mission to withdraw (use autocomplete to search by title).")
     async def mission_delete(self, interaction: discord.Interaction, mission_id: int):
         await interaction.response.defer(ephemeral=True)
         if not await _is_admin(interaction):
@@ -324,8 +416,6 @@ class MissionsCog(commands.Cog):
             return
 
         await self.svc.delete_mission(mission_id)
-        updated = await self.db.get_mission(mission_id)
-        await self._update_mission_post(updated)
 
         embed = discord.Embed(
             title       = "🗑  Mission Withdrawn",
@@ -334,3 +424,27 @@ class MissionsCog(commands.Cog):
         )
         embed.set_footer(text="Kingdom Treasury  ·  Kingdom of Hell")
         await interaction.followup.send(embed=embed, ephemeral=True)
+
+        # Cinematic close runs in background — does not block the response
+        asyncio.create_task(
+            self._cinematic_close(mission),
+            name=f"mission_close_{mission_id}",
+        )
+
+    @mission_delete.autocomplete("mission_id")
+    async def delete_autocomplete(
+        self, interaction: discord.Interaction, current: str
+    ) -> List[app_commands.Choice[int]]:
+        try:
+            missions = await self.db.get_active_missions(str(interaction.guild_id))
+        except Exception:
+            return []
+        q = current.lower()
+        choices = []
+        for m in missions:
+            label = f"#{m['id']} — {m['title']}"
+            if not q or q in str(m["id"]) or q in m["title"].lower():
+                choices.append(app_commands.Choice(name=label[:100], value=m["id"]))
+            if len(choices) >= 25:
+                break
+        return choices
