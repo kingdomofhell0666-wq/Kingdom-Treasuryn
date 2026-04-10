@@ -21,6 +21,24 @@ class InvestmentCog(commands.Cog):
     def investments(self) -> InvestmentService:
         return self.bot.investment_service
 
+    @property
+    def ledger(self):
+        return getattr(self.bot, "ledger_service", None)
+
+    async def _check_frozen(self, interaction: discord.Interaction) -> bool:
+        guild_id   = str(interaction.guild_id)
+        discord_id = str(interaction.user.id)
+        user = await self.bot.db.get_user(guild_id, discord_id)
+        if user and user.get("is_frozen"):
+            embed = discord.Embed(
+                description="*Cerberus has sealed your ledger.*",
+                color=0x0A0A0A,
+            )
+            embed.set_footer(text="Kingdom Treasury  ·  Kingdom of Hell")
+            await interaction.followup.send(embed=embed, ephemeral=True)
+            return True
+        return False
+
     # ─── /invest ──────────────────────────────────────────────────────────────
 
     @app_commands.command(name="invest", description="Commit DevilCoins to the infernal markets.")
@@ -34,6 +52,8 @@ class InvestmentCog(commands.Cog):
         await interaction.response.defer(ephemeral=False)
 
         if not await check_routing(interaction, "invest", getattr(self.bot, "config_service", None)):
+            return
+        if await self._check_frozen(interaction):
             return
 
         guild_id   = str(interaction.guild_id)
@@ -113,6 +133,8 @@ class InvestmentCog(commands.Cog):
 
         if not await check_routing(interaction, "collect", getattr(self.bot, "config_service", None)):
             return
+        if await self._check_frozen(interaction):
+            return
 
         guild_id   = str(interaction.guild_id)
         discord_id = str(interaction.user.id)
@@ -146,6 +168,18 @@ class InvestmentCog(commands.Cog):
             embed=card_embed, file=discord.File(card_buf, filename="collect_result.png")
         )
 
+        if self.ledger and result.get("total_payout", 0) > 0:
+            await self.ledger.log(
+                action          = "collect",
+                amount          = result["total_payout"],
+                from_label      = "Infernal Markets",
+                to_label        = f"<@{discord_id}>",
+                guild_id        = guild_id,
+                from_discord_id = discord_id,
+                wallet_after    = result["new_balance"],
+                action_type     = "grind",
+            )
+
     # ─── /withdraw ─────────────────────────────────────────────────────────────
 
     @app_commands.command(name="withdraw", description="Withdraw all active investments early. A 20% penalty applies.")
@@ -153,6 +187,8 @@ class InvestmentCog(commands.Cog):
         await interaction.response.defer(ephemeral=False)
 
         if not await check_routing(interaction, "withdraw", getattr(self.bot, "config_service", None)):
+            return
+        if await self._check_frozen(interaction):
             return
 
         guild_id   = str(interaction.guild_id)
@@ -186,3 +222,15 @@ class InvestmentCog(commands.Cog):
         await interaction.followup.send(
             embed=card_embed, file=discord.File(card_buf, filename="withdraw_result.png")
         )
+
+        if self.ledger and result.get("total_payout", 0) > 0:
+            await self.ledger.log(
+                action          = "withdraw",
+                amount          = result["total_payout"],
+                from_label      = "Infernal Markets (Early)",
+                to_label        = f"<@{discord_id}>",
+                guild_id        = guild_id,
+                from_discord_id = discord_id,
+                wallet_after    = result["new_balance"],
+                action_type     = "grind",
+            )

@@ -115,6 +115,8 @@ class EconomyCog(commands.Cog):
     def config_service(self):       return self.bot.config_service
     @property
     def ascension_announce(self):   return self.bot.ascension_announcement_service
+    @property
+    def ledger(self):               return getattr(self.bot, "ledger_service", None)
 
     # ─── Command access check ──────────────────────────────────────────────────
 
@@ -142,6 +144,23 @@ class EconomyCog(commands.Cog):
 
         return True
 
+    # ─── Freeze gate ──────────────────────────────────────────────────────────
+
+    async def _check_frozen(self, interaction: discord.Interaction) -> bool:
+        """Returns True (and sends denial) when the caller's ledger is sealed."""
+        guild_id   = str(interaction.guild_id)
+        discord_id = str(interaction.user.id)
+        user = await self.db.get_user(guild_id, discord_id)
+        if user and user.get("is_frozen"):
+            embed = discord.Embed(
+                description="*Cerberus has sealed your ledger.*",
+                color=0x0A0A0A,
+            )
+            embed.set_footer(text="Kingdom Treasury  ·  Kingdom of Hell")
+            await interaction.followup.send(embed=embed, ephemeral=True)
+            return True
+        return False
+
     # ─── Cerberus helper ──────────────────────────────────────
 
     async def _run_cerberus(self, inter: discord.Interaction, guild_id: str, discord_id: str):
@@ -167,6 +186,8 @@ class EconomyCog(commands.Cog):
         username   = interaction.user.display_name
 
         if not await self._check_access(interaction, "grind"):
+            return
+        if await self._check_frozen(interaction):
             return
 
         # ── Cooldown gate (checked before entry screen) ───────
@@ -301,6 +322,8 @@ class EconomyCog(commands.Cog):
 
         if not await self._check_access(interaction, "tribute"):
             return
+        if await self._check_frozen(interaction):
+            return
 
         ready, remaining = await self.cooldown.check_cooldown(guild_id, discord_id, "tribute")
         if not ready:
@@ -344,6 +367,18 @@ class EconomyCog(commands.Cog):
         await self.db.increment_tribute_count(guild_id, discord_id)
         await self._run_cerberus(interaction, guild_id, discord_id)
 
+        if self.ledger:
+            await self.ledger.log(
+                action          = "tribute",
+                amount          = result["net"],
+                from_label      = "Kingdom Realm",
+                to_label        = f"<@{discord_id}>",
+                guild_id        = guild_id,
+                from_discord_id = discord_id,
+                wallet_after    = result["new_balance"],
+                action_type     = "grind",
+            )
+
     # ─── /transfer ────────────────────────────────────────────
 
     @app_commands.command(name="transfer", description="Transfer DevilCoins to another soul.")
@@ -358,6 +393,8 @@ class EconomyCog(commands.Cog):
         recipient_name = recipient.display_name
 
         if not await self._check_access(interaction, "transfer"):
+            return
+        if await self._check_frozen(interaction):
             return
 
         try:
@@ -391,6 +428,18 @@ class EconomyCog(commands.Cog):
             embed=card_embed, file=discord.File(card_buf, filename="transfer_result.png")
         )
 
+        if self.ledger:
+            await self.ledger.log(
+                action          = "transfer",
+                amount          = result["amount"],
+                from_label      = f"<@{sender_id}>",
+                to_label        = f"<@{recipient_id}>",
+                guild_id        = guild_id,
+                from_discord_id = sender_id,
+                wallet_after    = result["sender_balance"],
+                action_type     = "transfer",
+            )
+
     # /vault removed — replaced by /treasury in AdminCog
 
     # ─── /ascend ──────────────────────────────────────────────
@@ -401,6 +450,8 @@ class EconomyCog(commands.Cog):
         await interaction.response.defer(ephemeral=True)
 
         if not await check_routing(interaction, "ascend", self.config_service):
+            return
+        if await self._check_frozen(interaction):
             return
 
         guild_id   = str(interaction.guild_id)

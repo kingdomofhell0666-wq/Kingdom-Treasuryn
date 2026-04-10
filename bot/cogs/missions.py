@@ -35,13 +35,17 @@ _RANK_SET = set(_ALL_RANKS)
 
 # ── Permission gate ───────────────────────────────────────────────────────────
 
+from ..utils.permissions import is_kingdom_staff, denied_generic as _denied_generic
+
+
 async def _is_admin(interaction: discord.Interaction) -> bool:
-    try:
-        app_info = await interaction.client.application_info()
-        if interaction.user.id == app_info.owner.id:
-            return True
-    except Exception:
-        pass
+    """
+    Mission commands are accessible to all Kingdom staff roles
+    (Sovereign, Consorts, Princes, Princesses, Chancellor, Legates).
+    Falls back to Discord admin check for server owners / app owners.
+    """
+    if is_kingdom_staff(interaction):
+        return True
     if not interaction.guild:
         return False
     if interaction.user.id == interaction.guild.owner_id:
@@ -52,11 +56,10 @@ async def _is_admin(interaction: discord.Interaction) -> bool:
 
 
 def _denied() -> discord.Embed:
-    return discord.Embed(
-        title       = "🔒  Access Denied",
-        description = "*You do not hold authority to issue Kingdom missions.*",
-        color       = _VOID,
-    )
+    return _denied_generic()
+
+
+
 
 
 def _err(msg: str) -> discord.Embed:
@@ -461,6 +464,19 @@ class MissionsCog(commands.Cog):
         embed.add_field(name="Recipient",   value=mention,                         inline=True)
         embed.set_footer(text="Kingdom Treasury  ·  Kingdom of Hell")
         await interaction.followup.send(embed=embed, ephemeral=True)
+
+        # Infernal Ledger — log mission reward payout
+        ledger = getattr(self.bot, "ledger_service", None)
+        if ledger and result.get("reward", 0) > 0:
+            asyncio.create_task(ledger.log(
+                action          = "mission_reward",
+                amount          = result["reward"],
+                from_label      = "Kingdom Treasury",
+                to_label        = mention,
+                guild_id        = str(interaction.guild_id),
+                from_discord_id = discord_id,
+                action_type     = "mission",
+            ))
 
         # Fetch the mission dict *before* hard-deleting it
         # (cinematic close uses stored channel_id + message_id, not DB queries)

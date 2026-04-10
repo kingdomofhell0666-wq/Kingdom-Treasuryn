@@ -29,6 +29,17 @@ class BlackMarketCog(commands.Cog):
         async def buy_callback(inter: discord.Interaction, item_id: int):
             discord_id = str(inter.user.id)
             username   = inter.user.display_name
+
+            # Freeze gate
+            user_row = await self.bot.db.get_user(guild_id, discord_id)
+            if user_row and user_row.get("is_frozen"):
+                frozen_embed = discord.Embed(
+                    description="*Cerberus has sealed your ledger.*",
+                    color=0x0A0A0A,
+                )
+                await inter.response.send_message(embed=frozen_embed, ephemeral=True)
+                return
+
             try:
                 result = await self.market.purchase(guild_id, discord_id, username, item_id)
             except ValueError as e:

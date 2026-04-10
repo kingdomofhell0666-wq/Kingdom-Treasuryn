@@ -82,6 +82,10 @@ class Database:
         additive = [
             "ALTER TABLE missions ADD COLUMN description TEXT",
             "ALTER TABLE missions ADD COLUMN repeat_limit INTEGER",
+            "ALTER TABLE users ADD COLUMN is_frozen INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE users ADD COLUMN freeze_reason TEXT",
+            "ALTER TABLE users ADD COLUMN frozen_by TEXT",
+            "ALTER TABLE users ADD COLUMN frozen_at TEXT",
         ]
         for stmt in additive:
             try:
@@ -793,3 +797,30 @@ class Database:
         )
         await self._db.commit()
         logger.info(f"[DB] Mission #{mission_id} hard-deleted (participants + mission row removed).")
+
+    # ── Freeze / Unfreeze ──────────────────────────────────────────────────────
+
+    async def freeze_user(
+        self, guild_id: str, discord_id: str, reason: str, frozen_by: str
+    ):
+        """Mark a user's ledger as frozen."""
+        now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+        await self._db.execute(
+            """UPDATE users
+               SET is_frozen = 1, freeze_reason = ?, frozen_by = ?, frozen_at = ?
+               WHERE guild_id = ? AND discord_id = ?""",
+            (reason, frozen_by, now_str, guild_id, discord_id),
+        )
+        await self._db.commit()
+        logger.info(f"[DB] User {discord_id} frozen in guild {guild_id}: {reason}")
+
+    async def unfreeze_user(self, guild_id: str, discord_id: str):
+        """Lift the freeze on a user's ledger."""
+        await self._db.execute(
+            """UPDATE users
+               SET is_frozen = 0, freeze_reason = NULL, frozen_by = NULL, frozen_at = NULL
+               WHERE guild_id = ? AND discord_id = ?""",
+            (guild_id, discord_id),
+        )
+        await self._db.commit()
+        logger.info(f"[DB] User {discord_id} unfrozen in guild {guild_id}")
