@@ -18,7 +18,7 @@ _GOLD    = 0xFFD700
 _DARK    = 0x0A0A0A
 
 _SEP = "━━━━━━━━━━━━━━━━━━━"
-_DC  = "<:devilcoins:1491713762217168916>"
+_DC  = "<:devilcoinStack:1492184333392412692>"
 
 # Discord embed description hard limit
 _EMBED_MAX = 4000

@@ -462,8 +462,11 @@ class MissionsCog(commands.Cog):
         embed.set_footer(text="Kingdom Treasury  ·  Kingdom of Hell")
         await interaction.followup.send(embed=embed, ephemeral=True)
 
+        # Fetch the mission dict *before* hard-deleting it
+        # (cinematic close uses stored channel_id + message_id, not DB queries)
         mission = await self.db.get_mission(mission_id)
         if mission:
+            await self.db.hard_delete_mission(mission_id)
             asyncio.create_task(
                 self._cinematic_close(mission),
                 name=f"mission_close_{mission_id}",

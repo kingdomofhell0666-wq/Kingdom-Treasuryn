@@ -782,3 +782,14 @@ class Database:
             (now_str, mission_id, discord_id),
         )
         await self._db.commit()
+
+    async def hard_delete_mission(self, mission_id: int):
+        """Permanently erase a mission and all its participant records from the database."""
+        await self._db.execute(
+            "DELETE FROM mission_participants WHERE mission_id = ?", (mission_id,)
+        )
+        await self._db.execute(
+            "DELETE FROM missions WHERE id = ?", (mission_id,)
+        )
+        await self._db.commit()
+        logger.info(f"[DB] Mission #{mission_id} hard-deleted (participants + mission row removed).")
