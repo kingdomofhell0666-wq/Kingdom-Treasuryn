@@ -93,6 +93,8 @@ class MissionService:
         max_participants: Optional[int],
         required_rank:    Optional[str],
         entry_cost:       int,
+        description:      Optional[str] = None,
+        repeat_limit:     Optional[int] = None,
     ) -> dict:
         """Create a new mission record and return it."""
         expires_at = None
@@ -106,14 +108,16 @@ class MissionService:
             expires_at = exp_dt.strftime("%Y-%m-%d %H:%M:%S")
 
         mission = await self.db.create_mission(
-            guild_id        = guild_id,
-            title           = title,
-            reward          = reward,
-            expires_at      = expires_at,
-            max_participants= max_participants,
-            required_rank   = required_rank,
-            entry_cost      = entry_cost,
-            channel_id      = MISSION_CHANNEL_ID,
+            guild_id         = guild_id,
+            title            = title,
+            reward           = reward,
+            expires_at       = expires_at,
+            max_participants = max_participants,
+            required_rank    = required_rank,
+            entry_cost       = entry_cost,
+            channel_id       = MISSION_CHANNEL_ID,
+            description      = description,
+            repeat_limit     = repeat_limit,
         )
         logger.info(
             f"[MISSION] created id={mission['id']} guild={guild_id} "

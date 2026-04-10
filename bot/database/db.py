@@ -74,6 +74,22 @@ class Database:
             # Tables already exist at correct version — just ensure they exist
             await self._create_economy_tables()
 
+        # Additive migrations — safe to run every startup (errors ignored)
+        await self._additive_migrations()
+
+    async def _additive_migrations(self):
+        """Add new columns to existing tables without wiping any data."""
+        additive = [
+            "ALTER TABLE missions ADD COLUMN description TEXT",
+            "ALTER TABLE missions ADD COLUMN repeat_limit INTEGER",
+        ]
+        for stmt in additive:
+            try:
+                await self._db.execute(stmt)
+                await self._db.commit()
+            except Exception:
+                pass  # column already exists — safe to ignore
+
     async def _drop_economy_tables(self):
         """Drop all live-economy tables so they can be recreated with guild_id."""
         for tbl in ("users", "transactions", "treasury", "cooldowns", "investments", "user_perks"):
@@ -162,9 +178,11 @@ class Database:
                 id               INTEGER PRIMARY KEY AUTOINCREMENT,
                 guild_id         TEXT NOT NULL,
                 title            TEXT NOT NULL,
+                description      TEXT,
                 reward           INTEGER NOT NULL,
                 expires_at       TEXT,
                 max_participants INTEGER,
+                repeat_limit     INTEGER,
                 required_rank    TEXT,
                 entry_cost       INTEGER NOT NULL DEFAULT 0,
                 status           TEXT NOT NULL DEFAULT 'active',
@@ -673,13 +691,17 @@ class Database:
         max_participants: Optional[int],
         required_rank:   Optional[str],
         entry_cost:      int,
-        channel_id:      str = "1488258105216209016",
+        channel_id:      str            = "1488258105216209016",
+        description:     Optional[str]  = None,
+        repeat_limit:    Optional[int]  = None,
     ) -> dict:
         cur = await self._db.execute(
             """INSERT INTO missions
-               (guild_id, title, reward, expires_at, max_participants, required_rank, entry_cost, channel_id)
-               VALUES (?,?,?,?,?,?,?,?)""",
-            (guild_id, title, reward, expires_at, max_participants, required_rank, entry_cost, channel_id),
+               (guild_id, title, description, reward, expires_at, max_participants,
+                repeat_limit, required_rank, entry_cost, channel_id)
+               VALUES (?,?,?,?,?,?,?,?,?,?)""",
+            (guild_id, title, description, reward, expires_at, max_participants,
+             repeat_limit, required_rank, entry_cost, channel_id),
         )
         await self._db.commit()
         return await self.get_mission(cur.lastrowid)
