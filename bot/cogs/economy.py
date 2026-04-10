@@ -294,6 +294,20 @@ class EconomyCog(commands.Cog):
             # ── Post-result: cerberus audit ───────────────────
             await self._run_cerberus(inter, guild_id, discord_id)
 
+            # ── Economy surveillance log ──────────────────────
+            if self.ledger and result.get("net", 0) > 0:
+                await self.ledger.log(
+                    action          = "grind",
+                    amount          = result["net"],
+                    from_label      = "Infernal Mines",
+                    to_label        = f"<@{discord_id}>",
+                    guild_id        = guild_id,
+                    from_discord_id = discord_id,
+                    wallet_before   = result["new_balance"] - result["net"],
+                    wallet_after    = result["new_balance"],
+                    action_type     = "grind",
+                )
+
         # ── Walk away callback ────────────────────────────────
 
         async def on_walk_away(inter: discord.Interaction):
@@ -564,6 +578,20 @@ class EconomyCog(commands.Cog):
                 origin_channel_id = str(inter.channel_id),
                 config_service    = self.config_service,
             )
+
+            # ── Economy surveillance log ──────────────────────────────────────
+            if self.ledger and cost > 0:
+                await self.ledger.log(
+                    action          = "ascend",
+                    amount          = cost,
+                    from_label      = f"<@{discord_id}>",
+                    to_label        = "Kingdom Treasury",
+                    guild_id        = guild_id,
+                    from_discord_id = discord_id,
+                    wallet_before   = new_balance + cost,
+                    wallet_after    = new_balance,
+                    action_type     = "transfer",
+                )
 
         # ── Direct buy path ────────────────────────────────────────────────────
         if buy:

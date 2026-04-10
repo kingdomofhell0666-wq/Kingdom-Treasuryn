@@ -90,6 +90,19 @@ class InvestmentCog(commands.Cog):
             embed=card_embed, file=discord.File(card_buf, filename="invest_result.png")
         )
 
+        if self.ledger and result.get("amount", 0) > 0:
+            await self.ledger.log(
+                action          = "invest",
+                amount          = result["amount"],
+                from_label      = f"<@{discord_id}>",
+                to_label        = "Infernal Markets",
+                guild_id        = guild_id,
+                from_discord_id = discord_id,
+                wallet_before   = result["new_balance"] + result["amount"],
+                wallet_after    = result["new_balance"],
+                action_type     = "invest",
+            )
+
     # ─── /portfolio ────────────────────────────────────────────────────────────
 
     @app_commands.command(name="portfolio", description="View your active and matured investments.")

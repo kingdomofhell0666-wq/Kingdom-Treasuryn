@@ -113,6 +113,20 @@ class CosmeticsCog(commands.Cog):
                     result = await self.cosmetics.buy_title(guild_id, discord_id, item.id)
                     cost, new_balance = result["cost"], result["new_balance"]
 
+                ledger = getattr(self.bot, "ledger_service", None)
+                if ledger and cost > 0:
+                    await ledger.log(
+                        action          = "market_purchase",
+                        amount          = cost,
+                        from_label      = f"<@{discord_id}>",
+                        to_label        = f"Kingdom Market — {item.name}",
+                        guild_id        = guild_id,
+                        from_discord_id = discord_id,
+                        wallet_before   = new_balance + cost,
+                        wallet_after    = new_balance,
+                        action_type     = "market",
+                    )
+
                 icon  = "🎨" if item.item_type == "skin" else "🎭"
                 hint  = "/equip-skin" if item.item_type == "skin" else "/equip-title"
                 embed = discord.Embed(

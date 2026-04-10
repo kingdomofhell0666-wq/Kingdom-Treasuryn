@@ -186,6 +186,20 @@ class MarketView(discord.ui.View):
                     cost        = result["cost"]
                     new_balance = result["new_balance"]
 
+                ledger = getattr(self.bot, "ledger_service", None)
+                if ledger and cost > 0:
+                    await ledger.log(
+                        action          = "market_purchase",
+                        amount          = cost,
+                        from_label      = f"<@{self.discord_id}>",
+                        to_label        = f"Kingdom Market — {item.name}",
+                        guild_id        = self.guild_id,
+                        from_discord_id = self.discord_id,
+                        wallet_before   = new_balance + cost,
+                        wallet_after    = new_balance,
+                        action_type     = "market",
+                    )
+
                 confirm = _success_embed(item, cost, new_balance)
             except ValueError as e:
                 confirm = _error_embed(str(e))

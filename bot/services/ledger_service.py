@@ -40,19 +40,21 @@ _GRAVITY_FOOTER = {
 # ── Action labels ─────────────────────────────────────────────────────────────
 
 _ACTION_LABELS: dict[str, str] = {
-    "grind":          "Extraction",
-    "tribute":        "Contract Fulfilled",
-    "cerberus":       "Tax",
-    "mission_reward": "Mission Completed",
-    "mission_entry":  "Purchase",
-    "invest":         "Treasury Shift",
-    "collect":        "Treasury Shift",
-    "withdraw":       "Treasury Shift",
-    "treasury_add":   "Treasury Shift",
-    "treasury_remove":"Treasury Shift",
-    "treasury_set":   "Treasury Shift",
-    "add_dc":         "Treasury Shift",
-    "remove_dc":      "Extraction",
+    "grind":           "Extraction",
+    "tribute":         "Contract Fulfilled",
+    "cerberus":        "Tax",
+    "mission_reward":  "Mission Completed",
+    "mission_entry":   "Purchase",
+    "invest":          "Treasury Shift",
+    "collect":         "Treasury Shift",
+    "withdraw":        "Treasury Shift",
+    "treasury_add":    "Treasury Shift",
+    "treasury_remove": "Treasury Shift",
+    "treasury_set":    "Treasury Shift",
+    "add_dc":          "Treasury Shift",
+    "remove_dc":       "Extraction",
+    "ascend":          "Ascension Cost",
+    "market_purchase": "Market Purchase",
 }
 
 
@@ -87,11 +89,13 @@ class LedgerService:
     async def _post(self, embed: discord.Embed) -> None:
         for ch_id in LEDGER_CHANNELS:
             ch = self.bot.get_channel(ch_id)
-            if ch:
-                try:
-                    await ch.send(embed=embed)
-                except Exception as exc:
-                    logger.warning(f"[Ledger] Failed to send to {ch_id}: {exc}")
+            if ch is None:
+                logger.warning(f"[Ledger] Channel {ch_id} not in cache — cannot post surveillance log")
+                continue
+            try:
+                await ch.send(embed=embed)
+            except Exception as exc:
+                logger.error(f"[Ledger] Failed to send to channel {ch_id}: {exc}")
 
     # ── Primary logging entry point ───────────────────────────────────────────
 
