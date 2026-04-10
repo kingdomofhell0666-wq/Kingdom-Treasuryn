@@ -5,7 +5,6 @@ from .transaction_service import TransactionService
 from .treasury_service import TreasuryService
 from .audit_service import AuditService
 from .cerberus_service import CerberusService
-from .blackmarket_service import BlackMarketService
 from .investment_service import InvestmentService
 from .cosmetic_service import CosmeticService
 from .ascension_announcement_service import AscensionAnnouncementService
@@ -18,7 +17,6 @@ __all__ = [
     "TreasuryService",
     "AuditService",
     "CerberusService",
-    "BlackMarketService",
     "InvestmentService",
     "CosmeticService",
     "AscensionAnnouncementService",

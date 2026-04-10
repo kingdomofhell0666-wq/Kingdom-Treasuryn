@@ -392,7 +392,7 @@ class EmbedFactory:
         )
         return embed
 
-    # ─── Black Market ─────────────────────────────────────────────────────────
+    # ─── Black Market (removed) ───────────────────────────────────────────────
 
     @staticmethod
     def blackmarket_page(

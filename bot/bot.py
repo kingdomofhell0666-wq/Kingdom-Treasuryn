@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from .database import Database
 from .services import (
     EconomyService, RankService, CooldownService, TransactionService,
-    TreasuryService, AuditService, CerberusService, BlackMarketService,
+    TreasuryService, AuditService, CerberusService,
     InvestmentService, CosmeticService, AscensionAnnouncementService,
 )
 from .services.config_service import ConfigService
@@ -40,7 +40,6 @@ class KingdomTreasuryBot(commands.Bot):
         self.treasury_service                = None
         self.audit_service                   = None
         self.cerberus_service                = None
-        self.blackmarket_service             = None
         self.investment_service              = None
         self.cosmetic_service                = None
         self.mission_service                 = None
@@ -74,7 +73,6 @@ class KingdomTreasuryBot(commands.Bot):
         self.treasury_service    = TreasuryService(self.db)
         self.audit_service       = AuditService(self.db)
         self.cerberus_service    = CerberusService(self.db)
-        self.blackmarket_service = BlackMarketService(self.db)
         self.investment_service  = InvestmentService(self.db)
         self.cosmetic_service    = CosmeticService(self.db)
         self.mission_service     = MissionService(self.db)
@@ -84,7 +82,6 @@ class KingdomTreasuryBot(commands.Bot):
         from .cogs.economy     import EconomyCog
         from .cogs.profile     import ProfileCog
         from .cogs.investment  import InvestmentCog
-        from .cogs.blackmarket import BlackMarketCog
         from .cogs.cosmetics   import CosmeticsCog
         from .cogs.admin       import AdminCog
         from .cogs.leaderboard import LeaderboardCog
@@ -94,7 +91,6 @@ class KingdomTreasuryBot(commands.Bot):
         await self.add_cog(EconomyCog(self))
         await self.add_cog(ProfileCog(self))
         await self.add_cog(InvestmentCog(self))
-        await self.add_cog(BlackMarketCog(self))
         await self.add_cog(CosmeticsCog(self))
         await self.add_cog(AdminCog(self))
         await self.add_cog(LeaderboardCog(self))

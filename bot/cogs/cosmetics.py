@@ -1,7 +1,5 @@
 """
-CosmeticsCog — /market, /equip-skin, /equip-title
-Removed: /skins, /buy-skin, /titles, /buy-title (replaced by /market)
-Removed: /badges (badges no longer displayed)
+CosmeticsCog — /market, /relics
 """
 from __future__ import annotations
 
@@ -187,93 +185,199 @@ class CosmeticsCog(commands.Cog):
                 break
         return choices
 
-    # ─── /equip-skin ──────────────────────────────────────────────────────────
+    # ─── /relics ──────────────────────────────────────────────────────────────
 
-    @app_commands.command(name="equip-skin", description="Equip an owned card skin.")
-    @app_commands.describe(skin_id="The skin to equip.")
-    @app_commands.choices(skin_id=[
-        app_commands.Choice(name=s.name, value=sid) for sid, s in SKINS.items()
-    ])
-    async def equip_skin(self, interaction: discord.Interaction, skin_id: str):
+    @app_commands.command(name="relics", description="View and equip your owned relics and marks.")
+    async def relics(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
 
-        if not await check_routing(interaction, "equip-skin", getattr(self.bot, "config_service", None)):
+        if not await check_routing(interaction, "relics", getattr(self.bot, "config_service", None)):
             return
 
         guild_id   = str(interaction.guild_id)
         discord_id = str(interaction.user.id)
         await self.db.upsert_user(guild_id, discord_id, interaction.user.display_name)
-        try:
-            result = await self.cosmetics.equip_skin(guild_id, discord_id, skin_id)
-        except ValueError as e:
-            embed = discord.Embed(description=f"*{e}*", color=VOID_BLACK)
-            embed.set_footer(text="Kingdom Treasury  ·  Kingdom of Hell")
-            await interaction.followup.send(embed=embed, ephemeral=True)
-            return
-        skin  = result["skin"]
-        embed = discord.Embed(
-            title=f"{skin.title_banner.split('  ')[0]}  Skin Equipped",
-            description=(
-                f"*You have equipped the **{skin.name}** card skin.*\n"
-                f"*Use `/identity` to see your updated card.*"
-            ),
-            color=skin.color,
+
+        owned_skins    = await self.cosmetics.get_owned_skins(guild_id, discord_id)
+        owned_titles   = await self.cosmetics.get_owned_titles(guild_id, discord_id)
+        equipped_skin  = await self.cosmetics.get_equipped_skin_id(guild_id, discord_id)
+        equipped_title = await self.cosmetics.get_equipped_title(guild_id, discord_id)
+
+        view = RelicsView(
+            bot            = self.bot,
+            guild_id       = guild_id,
+            discord_id     = discord_id,
+            owned_skins    = owned_skins,
+            owned_titles   = owned_titles,
+            equipped_skin  = equipped_skin,
+            equipped_title = equipped_title,
         )
-        embed.add_field(name="Theme",  value=skin.theme_tag,     inline=True)
-        embed.add_field(name="Flavor", value=skin.footer_flavor, inline=False)
-        embed.set_footer(text="Kingdom Treasury  ·  Kingdom of Hell")
-        await interaction.followup.send(embed=embed, ephemeral=True)
-
-    # ─── /equip-title ─────────────────────────────────────────────────────────
-
-    @app_commands.command(name="equip-title", description="Equip a title you own.")
-    @app_commands.describe(title="The title to equip.")
-    @app_commands.choices(title=[
-        app_commands.Choice(name=t.name, value=t.name) for t in TITLES_CATALOG.values()
-    ])
-    async def equip_title(self, interaction: discord.Interaction, title: str):
-        await interaction.response.defer(ephemeral=True)
-
-        if not await check_routing(interaction, "equip-title", getattr(self.bot, "config_service", None)):
-            return
-
-        guild_id   = str(interaction.guild_id)
-        discord_id = str(interaction.user.id)
-        await self.db.upsert_user(guild_id, discord_id, interaction.user.display_name)
-        try:
-            await self.cosmetics.equip_title(guild_id, discord_id, title)
-        except ValueError as e:
-            embed = discord.Embed(description=f"*{e}*", color=VOID_BLACK)
-            embed.set_footer(text="Kingdom Treasury  ·  Kingdom of Hell")
-            await interaction.followup.send(embed=embed, ephemeral=True)
-            return
-        t_obj = TITLES_CATALOG.get(title)
-        embed = discord.Embed(
-            title="🎭  Title Equipped",
-            description=(
-                f"*You now bear the title **{title}**.*\n"
-                f"*It is displayed on your `/identity` card.*"
-            ),
-            color=RARITY_EMBED_COLORS.get(t_obj.rarity if t_obj else "Common", BLOOD_RED),
-        )
-        embed.set_footer(text="Kingdom Treasury  ·  Kingdom of Hell")
-        await interaction.followup.send(embed=embed, ephemeral=True)
+        await interaction.followup.send(embed=view.build_embed(), view=view, ephemeral=True)
 
 
 # ── item resolution helper ────────────────────────────────────────────────────
 
 def _resolve_item(raw: str) -> Optional[MarketItem]:
-    """
-    Parse the autocomplete value (type:id) or fall back to name search.
-    """
+    """Parse the autocomplete value (type:id) or fall back to name search."""
     if ":" in raw:
         item_type, item_id = raw.split(":", 1)
         for item in _MARKET_ITEMS:
             if item.item_type == item_type and item.id == item_id:
                 return item
-    # Fallback: name match (case-insensitive)
     q = raw.lower()
     for item in _MARKET_ITEMS:
         if item.name.lower() == q:
             return item
     return None
+
+
+# ── Relics View ────────────────────────────────────────────────────────────────
+
+class RelicsView(discord.ui.View):
+    """
+    A private, ephemeral panel showing a user's owned relics (skins) and marks
+    (titles), with dropdown menus to equip either instantly.
+    """
+
+    def __init__(
+        self,
+        *,
+        bot,
+        guild_id:       str,
+        discord_id:     str,
+        owned_skins:    List[str],
+        owned_titles:   List[str],
+        equipped_skin:  str,
+        equipped_title: str,
+    ):
+        super().__init__(timeout=120)
+        self.bot            = bot
+        self.guild_id       = guild_id
+        self.discord_id     = discord_id
+        self.owned_skins    = owned_skins
+        self.owned_titles   = owned_titles
+        self.equipped_skin  = equipped_skin
+        self.equipped_title = equipped_title
+        self._rebuild()
+
+    # ── internal helpers ───────────────────────────────────────────────────────
+
+    def _rebuild(self):
+        self.clear_items()
+
+        # ── Relic (skin) select ────────────────────────────────────────────────
+        skin_options: List[discord.SelectOption] = []
+        for skin_id in self.owned_skins:
+            skin = SKINS.get(skin_id)
+            if not skin:
+                continue
+            equipped = skin_id == self.equipped_skin
+            label    = (f"✦ {skin.name}" if equipped else skin.name)[:100]
+            skin_options.append(discord.SelectOption(
+                label       = label,
+                value       = skin_id,
+                description = f"{skin.rarity}  ·  {skin.theme_tag}"[:100],
+                default     = equipped,
+            ))
+
+        if skin_options:
+            sel = discord.ui.Select(
+                placeholder = "Bind a relic to your card…",
+                options     = skin_options[:25],
+                min_values  = 1,
+                max_values  = 1,
+            )
+            sel.callback = self._skin_cb
+            self.add_item(sel)
+
+        # ── Mark (title) select ────────────────────────────────────────────────
+        title_options: List[discord.SelectOption] = []
+        for title_name, title in TITLES_CATALOG.items():
+            if title.price_dc > 0 and title_name not in self.owned_titles:
+                continue
+            equipped = title_name == self.equipped_title
+            label    = (f"✦ {title.name}" if equipped else title.name)[:100]
+            title_options.append(discord.SelectOption(
+                label       = label,
+                value       = title_name,
+                description = title.rarity[:100],
+                default     = equipped,
+            ))
+
+        if title_options:
+            sel = discord.ui.Select(
+                placeholder = "Bear a mark upon your card…",
+                options     = title_options[:25],
+                min_values  = 1,
+                max_values  = 1,
+            )
+            sel.callback = self._title_cb
+            self.add_item(sel)
+
+    # ── callbacks ──────────────────────────────────────────────────────────────
+
+    async def _skin_cb(self, interaction: discord.Interaction):
+        if str(interaction.user.id) != self.discord_id:
+            await interaction.response.send_message(
+                "*This collection belongs to another soul.*", ephemeral=True
+            )
+            return
+        skin_id = interaction.data["values"][0]
+        try:
+            await self.bot.cosmetic_service.equip_skin(self.guild_id, self.discord_id, skin_id)
+            self.equipped_skin = skin_id
+            self._rebuild()
+            await interaction.response.edit_message(embed=self.build_embed(), view=self)
+        except ValueError as e:
+            await interaction.response.send_message(f"*{e}*", ephemeral=True)
+
+    async def _title_cb(self, interaction: discord.Interaction):
+        if str(interaction.user.id) != self.discord_id:
+            await interaction.response.send_message(
+                "*This collection belongs to another soul.*", ephemeral=True
+            )
+            return
+        title_name = interaction.data["values"][0]
+        try:
+            await self.bot.cosmetic_service.equip_title(self.guild_id, self.discord_id, title_name)
+            self.equipped_title = title_name
+            self._rebuild()
+            await interaction.response.edit_message(embed=self.build_embed(), view=self)
+        except ValueError as e:
+            await interaction.response.send_message(f"*{e}*", ephemeral=True)
+
+    # ── embed ──────────────────────────────────────────────────────────────────
+
+    def build_embed(self) -> discord.Embed:
+        eq_skin  = SKINS.get(self.equipped_skin) or SKINS[DEFAULT_SKIN_ID]
+        eq_title = self.equipped_title or "Unmarked"
+
+        embed = discord.Embed(
+            title       = "🗝️  Relics & Marks",
+            description = (
+                "*Relics reshape your card. Marks define your name.*\n"
+                "*Select from the menus below to equip.*"
+            ),
+            color = eq_skin.color,
+        )
+        embed.add_field(
+            name  = "Bound Relic",
+            value = f"**{eq_skin.name}**\n*{eq_skin.rarity}  ·  {eq_skin.theme_tag}*",
+            inline = True,
+        )
+        embed.add_field(
+            name  = "Worn Mark",
+            value = f"**{eq_title}**",
+            inline = True,
+        )
+        embed.add_field(
+            name  = "━━━━━━━━━━━━━━━━━━━━━━━━━━",
+            value = (
+                f"Relics in collection: **{len(self.owned_skins)}**\n"
+                f"Marks in collection: **{len(self.owned_titles)}** owned"
+                f" + {sum(1 for t in TITLES_CATALOG.values() if t.price_dc == 0)} free"
+            ),
+            inline = False,
+        )
+        embed.set_footer(text="Use /market to acquire relics and marks  ·  Kingdom Treasury")
+        return embed
