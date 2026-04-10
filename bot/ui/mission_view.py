@@ -9,6 +9,7 @@ Buttons survive bot restarts because:
 
 import discord
 import logging
+from typing import List
 
 logger = logging.getLogger("kingdom_treasury")
 
@@ -19,9 +20,17 @@ _DARK    = 0x0A0A0A
 _SEP = "━━━━━━━━━━━━━━━━━━━"
 _DC  = "<:devilcoins:1491713762217168916>"
 
+# Discord embed description hard limit
+_EMBED_MAX = 4000
 
-def build_mission_embed(mission: dict, participant_count: int) -> discord.Embed:
-    """Build the premium mission card embed from a mission record."""
+
+def build_mission_embed(mission: dict, participants: List[str]) -> discord.Embed:
+    """
+    Build the premium mission card embed.
+
+    participants — list of discord_id strings (accepted + not yet completed).
+    Slot count is derived from len(participants).
+    """
     from ..services.mission_service import format_remaining, is_expired
 
     status = mission.get("status", "active")
@@ -33,7 +42,7 @@ def build_mission_embed(mission: dict, participant_count: int) -> discord.Embed:
             "📜  **KINGDOM MISSION**",
             _SEP,
             "",
-            f"🩸  **Task:**",
+            "🩸  **Task:**",
             f"{mission['title']}",
             "",
             _SEP,
@@ -56,7 +65,7 @@ def build_mission_embed(mission: dict, participant_count: int) -> discord.Embed:
             "📜  **KINGDOM MISSION**",
             _SEP,
             "",
-            f"🩸  **Task:**",
+            "🩸  **Task:**",
             f"{mission['title']}",
             "",
             _SEP,
@@ -81,16 +90,18 @@ def build_mission_embed(mission: dict, participant_count: int) -> discord.Embed:
     reward       = mission.get("reward", 0)
     remaining    = format_remaining(mission)
 
-    slots_val = f"{participant_count}/{max_p}" if max_p is not None else "Unlimited"
+    count      = len(participants)
+    is_full    = (max_p is not None and count >= max_p)
+    slots_val  = f"{count}/{max_p}  {'⛔ FULL' if is_full else ''}" if max_p is not None else "Unlimited"
     repeat_val = str(repeat_limit) if repeat_limit is not None else "Unlimited"
-    entry_val  = f"{entry_cost:,} {_DC}" if entry_cost > 0 else f"Free"
+    entry_val  = f"{entry_cost:,} {_DC}" if entry_cost > 0 else "Free"
 
     lines = [
         _SEP,
         "📜  **KINGDOM MISSION**",
         _SEP,
         "",
-        f"🩸  **Task:**",
+        "🩸  **Task:**",
         f"{mission['title']}",
     ]
 
@@ -121,16 +132,36 @@ def build_mission_embed(mission: dict, participant_count: int) -> discord.Embed:
         "💰  **REWARD**",
         _SEP,
         "",
-        f"Reward:",
+        "Reward:",
         f"**{reward:,}** {_DC}",
         "",
-        f"Entry Cost:",
+        "Entry Cost:",
         entry_val,
         "",
         _SEP,
+        "👥  **PARTICIPANTS**",
+        _SEP,
+        "",
     ]
 
-    embed = discord.Embed(description="\n".join(lines), color=_CRIMSON)
+    if participants:
+        # Cap at 20 to avoid embed overflow
+        shown  = participants[:20]
+        plines = [f"{i + 1}. <@{uid}>" for i, uid in enumerate(shown)]
+        if len(participants) > 20:
+            plines.append(f"*... and {len(participants) - 20} more.*")
+        lines += plines
+    else:
+        lines.append("*No participants yet.*")
+
+    lines += ["", _SEP]
+
+    description_text = "\n".join(lines)
+    # Hard safety trim — Discord rejects >4096 chars
+    if len(description_text) > _EMBED_MAX:
+        description_text = description_text[:_EMBED_MAX - 3] + "..."
+
+    embed = discord.Embed(description=description_text, color=_CRIMSON)
     embed.set_footer(text=f"Mission #{mission['id']}  ·  Kingdom Treasury  ·  Kingdom of Hell")
     return embed
 
@@ -211,6 +242,7 @@ class MissionView(discord.ui.View):
         embed.set_footer(text="Kingdom Treasury  ·  Kingdom of Hell")
         await interaction.followup.send(embed=embed, ephemeral=True)
 
+        # Refresh the live mission card (participants + slot count)
         await self._refresh_post(interaction, mission_id)
 
     async def _decline_callback(self, interaction: discord.Interaction):
@@ -227,17 +259,20 @@ class MissionView(discord.ui.View):
     # ──────────────────────────────────────────────────────────────────────────
 
     async def _refresh_post(self, interaction: discord.Interaction, mission_id: int):
-        """Edit the mission post to reflect the updated slot count."""
+        """Edit the mission post with updated participants list and slot count."""
         try:
             db      = interaction.client.db
             mission = await db.get_mission(mission_id)
             if not mission or not mission.get("message_id"):
                 return
-            count   = await db.count_mission_participants(mission_id)
-            embed   = build_mission_embed(mission, count)
+
+            rows        = await db.get_mission_participants(mission_id)
+            discord_ids = [r["discord_id"] for r in rows]
+
+            embed   = build_mission_embed(mission, discord_ids)
             channel = interaction.client.get_channel(int(mission["channel_id"]))
             if channel is None:
-                return
+                channel = await interaction.client.fetch_channel(int(mission["channel_id"]))
             msg = await channel.fetch_message(int(mission["message_id"]))
             await msg.edit(embed=embed)
         except Exception as exc:
