@@ -883,18 +883,15 @@ def generate_card(
     balance: int,
     kingdom_rank: int,
     taxes_paid: int,
-    risk_score: int,
     skin_id: Optional[str],
     avatar_bytes: Optional[bytes],
     footer_flavor: str,
-    audit_state: str = "neutral",
     card_variant: Optional[EffectiveCardVariant] = None,
     relic_id: Optional[str] = None,
     equipped_badges: Optional[List[str]] = None,
 ) -> io.BytesIO:
 
-    t    = _t(skin_id)
-    tier = get_risk_tier(risk_score)
+    t = _t(skin_id)
 
     is_special   = bool(card_variant and card_variant.variant_type == "special")
     display_role = card_variant.primary_display_role if card_variant else rank
@@ -915,9 +912,6 @@ def generate_card(
 
     # ── Wealth zone highlight ──────────────────────────────────────────────
     _wealth_highlight(card, t)
-
-    # ── Risk tier overlay (vignette + danger border) ───────────────────────
-    _risk_tier_overlay(card, risk_score)
 
     draw = ImageDraw.Draw(card)
 
@@ -1079,214 +1073,137 @@ def generate_card(
     # ────────────────────────────────────────────────────────────────────────
 
     lbl_f = _font(11, cinzel=True)
-    val_f  = _font(28, bold=True)
-    val_f2 = _font(18, bold=True)
+    val_f  = _font(32, bold=True)
 
-    cols = [W // 6, W // 2, 5 * W // 6]
+    # Two stats — Kingdom Rank (left) and Taxes Paid (right)
+    stat_cols = [W // 3, 2 * W // 3]
 
-    def _stat(cx_: int, label: str, value: str, large: bool = True,
-              currency: bool = False):
+    def _stat2(cx_: int, label: str, value: str, currency: bool = False):
         lw_ = _tw(draw, label, lbl_f)
         draw.text((cx_ - lw_ // 2, STATS_Y + 6), label,
                   font=lbl_f, fill=(*t["text2"][:3], 178))
-        vf   = val_f if large else val_f2
-        vf_h = getattr(vf, "size", 28)
-        csz  = max(int(vf_h * 0.82), 18)
-        cgap = 6
-        vw_  = _tw(draw, value, vf)
+        vf_h = getattr(val_f, "size", 32)
+        csz  = max(int(vf_h * 0.80), 22)
+        cgap = 8
+        vw_  = _tw(draw, value, val_f)
         total_w = vw_ + (csz + cgap if currency else 0)
-        tx_ = cx_ - total_w // 2
-        _glow(card, (tx_, STATS_Y + 26), value, vf,
-              (*t["accent"][:3], 232), t["glow"], blur=7, spread=2)
+        tx_  = cx_ - total_w // 2
+        _glow(card, (tx_, STATS_Y + 28), value, val_f,
+              (*t["accent"][:3], 238), t["glow"], blur=9, spread=3)
         if currency:
             _composite_coin(card, tx_ + vw_ + cgap,
-                            STATS_Y + 26 + (vf_h - csz) // 2, csz)
+                            STATS_Y + 28 + (vf_h - csz) // 2, csz)
 
-    _stat(cols[0], "KINGDOM RANK", f"#{kingdom_rank}")
-    _stat(cols[1], "TAXES FILED", _fmt_dc(taxes_paid), currency=True)
+    _stat2(stat_cols[0], "KINGDOM RANK", f"#{kingdom_rank}")
+    _stat2(stat_cols[1], "TAXES PAID", _fmt_dc(taxes_paid), currency=True)
 
-    # Risk Score stat — shows number + tier label in tier color
-    rs_lbl_w = _tw(draw, "RISK SCORE", lbl_f)
-    draw.text((cols[2] - rs_lbl_w // 2, STATS_Y + 6), "RISK SCORE",
-              font=lbl_f, fill=(*t["text2"][:3], 178))
-    rs_num_str = f"{risk_score} / 100"
-    rs_num_f = val_f2
-    rs_num_w = _tw(draw, rs_num_str, rs_num_f)
-    tc = tier["color"]
-    _glow(card, (cols[2] - rs_num_w // 2, STATS_Y + 26), rs_num_str, rs_num_f,
-          (*tc, 235), t["glow"], blur=6, spread=2)
-    draw = ImageDraw.Draw(card)
-    tier_lbl_f = _font(13, bold=True)
-    tier_lw = _tw(draw, tier["label"], tier_lbl_f)
-    _glow(card, (cols[2] - tier_lw // 2, STATS_Y + 60), tier["label"], tier_lbl_f,
-          (*tc, 240), (*tc, 200), blur=5, spread=1)
     draw = ImageDraw.Draw(card)
 
-    # Risk score mini-bar
-    _risk_bar(draw, risk_score, t, STATS_Y + 112)
+    # Vertical divider between the two stats
+    mid_x = W // 2
+    draw.line([(mid_x, STATS_Y + 10), (mid_x, STATS_Y + 120)],
+              fill=(*t["border"][:3], 38), width=1)
 
     _double_line(draw, DIV4, t)
 
     # ────────────────────────────────────────────────────────────────────────
-    # ZONE 5 — CERBERUS AUDIT STATE
+    # ZONE 5 — EQUIPPED RECORD
     # ────────────────────────────────────────────────────────────────────────
+
+    _SKIN_NAMES = {
+        "default":      "Infernal Standard",
+        "blood_crown":  "Blood Crown",
+        "abyss_smoke":  "Abyss Smoke",
+        "infernal_gold": "Infernal Gold",
+        "royal_dark":   "Royal Dark",
+        "black_throne": "Black Throne",
+        "crimson_sigil": "Crimson Sigil",
+    }
 
     draw = ImageDraw.Draw(card)
     az = AUDIT_Y
-    az_h = DIV5 - az
 
-    if audit_state == "flagged":
-        # Red warning overlay
-        warn_layer = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-        wd = ImageDraw.Draw(warn_layer)
-        wd.rounded_rectangle([(PAD, az + 4), (W - PAD, az + az_h - 4)],
-                              radius=12, fill=(90, 0, 0, 65))
-        card.alpha_composite(warn_layer)
-        draw = ImageDraw.Draw(card)
+    # Zone header
+    eq_hdr = "EQUIPPED  RECORD"
+    eq_hf  = _font(11, cinzel=True)
+    eq_hw  = _tw(draw, eq_hdr, eq_hf)
+    draw.text(((W - eq_hw) // 2, az + 14), eq_hdr,
+              font=eq_hf, fill=(*t["text2"][:3], 155))
 
-        # Warning triangle (Cerberus)
-        tri_cx, tri_cy = 80, az + az_h // 2
-        tri_r = 28
-        tri_pts = [(tri_cx, tri_cy - tri_r),
-                   (tri_cx + tri_r * 0.88, tri_cy + tri_r * 0.5),
-                   (tri_cx - tri_r * 0.88, tri_cy + tri_r * 0.5)]
-        draw.polygon(tri_pts, outline=(220, 40, 40, 220), width=2)
-        # Cerberus triple dot (3 heads)
-        for ox in [-8, 0, 8]:
-            draw.ellipse([(tri_cx + ox - 3, tri_cy - 6), (tri_cx + ox + 3, tri_cy)],
-                          fill=(220, 40, 40, 200))
-        draw.line([(tri_cx, tri_cy + 4), (tri_cx, tri_cy + 12)],
-                  fill=(220, 40, 40, 220), width=2)
+    # Decorative separator with diamond
+    div_cx = W // 2
+    draw.line([(PAD + 30, az + 34), (div_cx - 12, az + 34)],
+              fill=(*t["border"][:3], 50), width=1)
+    draw.line([(div_cx + 12, az + 34), (W - PAD - 30, az + 34)],
+              fill=(*t["border"][:3], 50), width=1)
+    draw.polygon([(div_cx, az + 28), (div_cx + 7, az + 34),
+                  (div_cx, az + 40), (div_cx - 7, az + 34)],
+                 fill=(*t["accent"][:3], 155))
 
-        at_f = _font(18, bold=True)
-        at_w = _tw(draw, "CERBERUS AUDIT  —  ACTIVE", at_f)
-        _glow(card, ((W - at_w) // 2, az + 12),
-              "CERBERUS AUDIT  —  ACTIVE", at_f,
-              (225, 42, 42, 245), (180, 0, 0), blur=9, spread=2)
-        draw = ImageDraw.Draw(card)
+    # Three loadout columns
+    slot_y   = az + 52
+    slot_lf  = _font(10, cinzel=True)
+    slot_vf  = _font(16, bold=True)
+    slot_cols = [W // 4, W // 2, 3 * W // 4]
 
-        rs_f = _font(13)
-        rs_str = f"Risk Level: {risk_score}/100   ·   Immediate attention required."
-        rs_w = _tw(draw, rs_str, rs_f)
-        draw.text(((W - rs_w) // 2, az + 40), rs_str,
-                  font=rs_f, fill=(208, 140, 140, 205))
+    relic_name = (RELICS_CATALOG[relic_id].name
+                  if relic_id and relic_id in RELICS_CATALOG else "—")
+    relic_col  = (*t["accent"][:3], 225) if relic_id else (*t["text2"][:3], 90)
 
-        # Red risk bar
-        _risk_bar(draw, risk_score, t, az + 68)
-        _line(draw, az + 68 + 10 + 14, t, alpha=30)
+    skin_name  = _SKIN_NAMES.get(skin_id or "default", "Infernal Standard")
+    skin_col   = (*t["gold"][:3], 220) if (skin_id and skin_id != "default") \
+                 else (*t["text2"][:3], 120)
 
-        warn_f = _font(10)
-        wt = "Cerberus is watching. Every DevilCoin is accounted for."
-        wtw = _tw(draw, wt, warn_f)
-        draw.text(((W - wtw) // 2, az + 104), wt,
-                  font=warn_f, fill=(195, 100, 100, 165))
+    title_name = equipped_title if (
+        equipped_title and equipped_title.lower() not in ("unmarked", "")
+    ) else "—"
+    title_col  = (*t["accent"][:3], 210) if title_name != "—" \
+                 else (*t["text2"][:3], 90)
 
-    elif audit_state == "cleared":
-        # Gold seal overlay
-        seal_layer = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-        sd = ImageDraw.Draw(seal_layer)
-        sd.rounded_rectangle([(PAD, az + 4), (W - PAD, az + az_h - 4)],
-                              radius=12, fill=(*t["gold"][:3], 20))
-        card.alpha_composite(seal_layer)
-        draw = ImageDraw.Draw(card)
+    def _slot(cx_: int, label: str, value: str, vcol: tuple):
+        lw_ = _tw(draw, label, slot_lf)
+        draw.text((cx_ - lw_ // 2, slot_y),
+                  label, font=slot_lf, fill=(*t["text2"][:3], 135))
+        vv  = (value[:13] + "…") if len(value) > 14 else value
+        vw_ = _tw(draw, vv, slot_vf)
+        _glow(card, (cx_ - vw_ // 2, slot_y + 18), vv, slot_vf,
+              vcol, t["glow"], blur=6, spread=1)
 
-        # Seal circle (left)
-        sc_cx, sc_cy = 78, az + az_h // 2
-        draw.ellipse([(sc_cx - 26, sc_cy - 26), (sc_cx + 26, sc_cy + 26)],
-                     outline=(*t["gold"][:3], 180), width=2)
-        draw.ellipse([(sc_cx - 20, sc_cy - 20), (sc_cx + 20, sc_cy + 20)],
-                     outline=(*t["gold"][:3], 100), width=1)
-        # Checkmark
-        draw.line([(sc_cx - 10, sc_cy + 2), (sc_cx - 3, sc_cy + 10)],
-                  fill=(*t["gold"][:3], 210), width=3)
-        draw.line([(sc_cx - 3, sc_cy + 10), (sc_cx + 12, sc_cy - 10)],
-                  fill=(*t["gold"][:3], 210), width=3)
+    _slot(slot_cols[0], "RELIC",  relic_name, relic_col)
+    _slot(slot_cols[1], "SKIN",   skin_name,  skin_col)
+    _slot(slot_cols[2], "TITLE",  title_name, title_col)
 
-        clr_f = _font(18, bold=True)
-        clr_str = "RECORD VERIFIED  —  CERBERUS CLEARED"
-        clr_w = _tw(draw, clr_str, clr_f)
-        _glow(card, ((W - clr_w) // 2, az + 12), clr_str, clr_f,
-              (*t["gold"][:3], 234), t["glow"], blur=7, spread=1)
-        draw = ImageDraw.Draw(card)
-
-        cf2 = _font(13)
-        cm = f"Risk Score: {risk_score}/100   ·   Kingdom record in good standing."
-        cmw = _tw(draw, cm, cf2)
-        draw.text(((W - cmw) // 2, az + 42), cm,
-                  font=cf2, fill=(*t["text2"][:3], 175))
-
-        _line(draw, az + 70, t, alpha=35)
-        cf3 = _font(10)
-        ct = '"Your ledger is clean. The Kingdom acknowledges your compliance."'
-        ctw = _tw(draw, ct, cf3)
-        draw.text(((W - ctw) // 2, az + 86), ct,
-                  font=cf3, fill=(*t["text2"][:3], 140))
-
-    else:
-        # Neutral kingdom status
-        ns_f = _font(14, cinzel=True)
-        ns = "KINGDOM STATUS"
-        nsw = _tw(draw, ns, ns_f)
-        draw.text(((W - nsw) // 2, az + 16), ns,
-                  font=ns_f, fill=(*t["text2"][:3], 155))
-
-        div_cx = W // 2
-        draw.line([(div_cx - 80, az + 38), (div_cx - 12, az + 38)],
-                  fill=(*t["border"][:3], 60), width=1)
-        draw.line([(div_cx + 12, az + 38), (div_cx + 80, az + 38)],
-                  fill=(*t["border"][:3], 60), width=1)
-
-        # Small diamond center
-        draw.polygon([(div_cx, az + 32), (div_cx + 7, az + 38),
-                      (div_cx, az + 44), (div_cx - 7, az + 38)],
-                     fill=(*t["accent"][:3], 160))
-
-        st_f = _font(16, bold=True)
-        st = "STANDING MEMBER  ·  NO AUDIT PENDING"
-        stw = _tw(draw, st, st_f)
-        draw.text(((W - stw) // 2, az + 54), st,
-                  font=st_f, fill=(*t["accent"][:3], 190))
-
-        sf2 = _font(12)
-        sv = "All records nominal. Cerberus rests."
-        svw = _tw(draw, sv, sf2)
-        draw.text(((W - svw) // 2, az + 82), sv,
-                  font=sf2, fill=(*t["text2"][:3], 140))
-
-        # Skin indicator
-        skin_names = {
-            "default": "Infernal Standard", "blood_crown": "Blood Crown",
-            "abyss_smoke": "Abyss Smoke",   "infernal_gold": "Infernal Gold",
-            "royal_dark": "Royal Dark",     "black_throne": "Black Throne",
-            "crimson_sigil": "Crimson Sigil",
-        }
-        sk = skin_names.get(skin_id or "default", "Infernal Standard")
-        sk_f = _font(9)
-        sk_str = f"Active Skin:  {sk}"
-        sk_w = _tw(draw, sk_str, sk_f)
-        draw.text(((W - sk_w) // 2, az + 108), sk_str,
-                  font=sk_f, fill=(*t["text2"][:3], 105))
-
-    # ── Badges + relic summary in lower audit zone ────────────────────────────
     draw = ImageDraw.Draw(card)
-    badges_y = az + 158   # safe below all three audit states
 
-    # Relic summary line
-    if relic_id and relic_id in RELICS_CATALOG:
-        relic_obj = RELICS_CATALOG[relic_id]
-        _line(draw, badges_y - 10, t, alpha=28)
-        rl_f = _font(9)
-        rl_str = f"RELIC ACTIVE:  {relic_obj.name}"
-        rl_w = _tw(draw, rl_str, rl_f)
-        draw.text(((W - rl_w) // 2, badges_y - 8),
-                  rl_str, font=rl_f, fill=(*t["accent"][:3], 160))
-        badges_y += 20
+    # Thin separator below slots
+    _line(draw, slot_y + 54, t, alpha=38)
 
-    # Badge seals
+    # Badge seals row
+    badge_section_y = slot_y + 68
     if badges_list:
-        _line(draw, badges_y, t, alpha=28)
-        _render_badges_card(card, badges_list, badges_y + 10, t)
+        seal_hf  = _font(10, cinzel=True)
+        seal_str = "SEALS  OF  RECOGNITION"
+        seal_w   = _tw(draw, seal_str, seal_hf)
+        draw.text(((W - seal_w) // 2, badge_section_y), seal_str,
+                  font=seal_hf, fill=(*t["text2"][:3], 135))
+        _render_badges_card(card, badges_list, badge_section_y + 18, t)
         draw = ImageDraw.Draw(card)
+    else:
+        nb_f  = _font(11)
+        nb_str = "No seals registered."
+        nb_w  = _tw(draw, nb_str, nb_f)
+        draw.text(((W - nb_w) // 2, badge_section_y + 6), nb_str,
+                  font=nb_f, fill=(*t["text2"][:3], 65))
+
+    # Kingdom inscription — skin flavor text
+    insc_y = DIV5 - 56
+    _line(draw, insc_y, t, alpha=22)
+    insc_flavor = footer_flavor or "The Abyss remembers your name."
+    insc_f = _font(10)
+    insc_w = _tw(draw, f'"{insc_flavor}"', insc_f)
+    draw.text(((W - insc_w) // 2, insc_y + 10),
+              f'"{insc_flavor}"', font=insc_f,
+              fill=(*t["text2"][:3], 128))
 
     _double_line(draw, DIV5, t)
 
@@ -1294,25 +1211,13 @@ def generate_card(
     # ZONE 6 — FOOTER
     # ────────────────────────────────────────────────────────────────────────
 
-    # Footer: show Cerberus warning if risk is elevated, else flavor text
-    cerberus_line = tier.get("cerberus_line")
-    if cerberus_line:
-        ff_warn = _font(12, bold=True)
-        fw_w = _tw(draw, cerberus_line, ff_warn)
-        tc_warn = tier["color"]
-        _glow(card, ((W - fw_w) // 2, FOOTER_Y + 10), cerberus_line, ff_warn,
-              (*tc_warn, 220), (*tc_warn, 180), blur=6, spread=1)
-        draw = ImageDraw.Draw(card)
-        # Subtle flavor below
-        ff2 = _font(9)
-        fw2 = _tw(draw, footer_flavor, ff2)
-        draw.text(((W - fw2) // 2, FOOTER_Y + 32), footer_flavor,
-                  font=ff2, fill=(*t["text2"][:3], 110))
-    else:
-        ff = _font(11)
-        fw = _tw(draw, footer_flavor, ff)
-        draw.text(((W - fw) // 2, FOOTER_Y + 18), footer_flavor,
-                  font=ff, fill=(*t["text2"][:3], 152))
+    # Primary footer inscription
+    footer_main = "The Abyss remembers your name."
+    ff = _font(12)
+    fw = _tw(draw, footer_main, ff)
+    _glow(card, ((W - fw) // 2, FOOTER_Y + 12), footer_main, ff,
+          (*t["text2"][:3], 175), t["glow"], blur=5, spread=1)
+    draw = ImageDraw.Draw(card)
 
     # Card ID / watermark
     wm_f = _font(8)

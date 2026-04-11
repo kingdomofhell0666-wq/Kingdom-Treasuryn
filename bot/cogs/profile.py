@@ -56,15 +56,6 @@ class ProfileCog(commands.Cog):
         member_role_ids = [str(r.id) for r in target.roles]
         card_variant = resolve_identity_card_variant(member_role_ids, public_rank)
 
-        risk  = user_data.get("risk_score", 0)
-        taxes = user_data.get("taxes_paid", 0)
-        if risk >= 51:
-            audit_state = "flagged"
-        elif risk <= 20 and taxes > 0:
-            audit_state = "cleared"
-        else:
-            audit_state = "neutral"
-
         avatar_url = None
         try:
             avatar_url = target.display_avatar.with_size(128).url
@@ -81,11 +72,9 @@ class ProfileCog(commands.Cog):
                 balance=user_data.get("balance", 0),
                 kingdom_rank=kingdom_rank,
                 taxes_paid=user_data.get("taxes_paid", 0),
-                risk_score=risk,
                 skin_id=skin_id,
                 avatar_bytes=avatar_bytes,
                 footer_flavor=skin.footer_flavor.strip('"'),
-                audit_state=audit_state,
                 card_variant=card_variant,
                 relic_id=equipped_relic,
                 equipped_badges=equipped_badges,
