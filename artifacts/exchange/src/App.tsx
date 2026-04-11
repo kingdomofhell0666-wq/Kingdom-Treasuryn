@@ -53,7 +53,11 @@ export default function App() {
   if (stage.id === "loading") return <LoadingScreen />;
   if (stage.id === "unregistered") return <UnregisteredScreen />;
   if (stage.id === "error") return <ErrorScreen msg={stage.msg} />;
-  if (stage.id === "exit") return <ExitFlow />;
+  if (stage.id === "exit") return (
+    <ExitFlow onDone={() => {
+      window.location.href = "https://discord.com/channels/1290484661318975499";
+    }} />
+  );
 
   if (stage.id === "cinematic") {
     const snap = stage;

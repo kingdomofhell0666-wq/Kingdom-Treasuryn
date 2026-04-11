@@ -3,19 +3,18 @@ import type { Catalog, UserData, DiscordUser, ItemCategory, CatalogItem } from "
 import { getItemStatus, RANK_ORDER, RARITY_RANK } from "../types";
 import { api, ApiError } from "../api";
 
-import CategoryNav  from "./CategoryNav";
+import TavernBackground from "./TavernBackground";
+import CategoryNav   from "./CategoryNav";
 import ItemShowcase  from "./ItemShowcase";
 import PlayerPanel   from "./PlayerPanel";
 import PreviewOverlay from "./PreviewOverlay";
 import PurchaseModal  from "./PurchaseModal";
 
-const DC_ICON = "https://cdn.discordapp.com/emojis/1492184333392412692.webp?size=32&quality=lossless";
-
 const CATEGORY_TABS = [
-  { id: "relics" as ItemCategory,  icon: "🔮", label: "Relics" },
-  { id: "titles" as ItemCategory,  icon: "👑", label: "Titles" },
-  { id: "skins"  as ItemCategory,  icon: "🎭", label: "Skins"  },
-  { id: "badges" as ItemCategory,  icon: "🎖️", label: "Badges" },
+  { id: "relics"  as ItemCategory, icon: "⬡", label: "Relics"  },
+  { id: "titles"  as ItemCategory, icon: "◈", label: "Titles"  },
+  { id: "skins"   as ItemCategory, icon: "▣", label: "Skins"   },
+  { id: "badges"  as ItemCategory, icon: "⬟", label: "Badges"  },
 ];
 
 interface Props {
@@ -26,40 +25,31 @@ interface Props {
   onRefresh:   () => void;
 }
 
-export default function MarketHub({
-  discordUser, userData, catalog, onLeave, onRefresh,
-}: Props) {
-  const [activeTab, setActiveTab]   = useState<ItemCategory>("relics");
-  const [balance,   setBalance]     = useState(userData.balance);
-  const [ownedMap,  setOwnedMap]    = useState({
+export default function MarketHub({ discordUser, userData, catalog, onLeave, onRefresh }: Props) {
+  const [activeTab,   setActiveTab]   = useState<ItemCategory>("relics");
+  const [balance,     setBalance]     = useState(userData.balance);
+  const [ownedMap,    setOwnedMap]    = useState({
     relics: userData.owned_relics,
     titles: userData.owned_titles,
     skins:  userData.owned_skins,
     badges: userData.owned_badges,
   });
-
-  const [preview,  setPreview]  = useState<CatalogItem | null>(null);
-  const [purchase, setPurchase] = useState<CatalogItem | null>(null);
-
-  // Mobile sidebar toggle
+  const [preview,     setPreview]     = useState<CatalogItem | null>(null);
+  const [purchase,    setPurchase]    = useState<CatalogItem | null>(null);
   const [mobileCatOpen, setMobileCatOpen] = useState(false);
 
   const userRankIdx = RANK_ORDER[userData.rank] ?? 0;
-
   const mergedUser: UserData = {
-    ...userData,
-    balance,
-    owned_relics: ownedMap.relics,
-    owned_titles: ownedMap.titles,
-    owned_skins:  ownedMap.skins,
-    owned_badges: ownedMap.badges,
+    ...userData, balance,
+    owned_relics: ownedMap.relics, owned_titles: ownedMap.titles,
+    owned_skins: ownedMap.skins,   owned_badges: ownedMap.badges,
   };
 
   const items = (catalog[activeTab] as CatalogItem[])
     .slice()
     .sort((a, b) => (RARITY_RANK[a.rarity] ?? 0) - (RARITY_RANK[b.rarity] ?? 0));
 
-  const statusMap = new Map<string, ReturnType<typeof getItemStatus>>(
+  const statusMap = new Map(
     items.map(item => [item.id, getItemStatus(item, activeTab, mergedUser, userRankIdx)])
   );
 
@@ -77,35 +67,44 @@ export default function MarketHub({
     onRefresh();
   }
 
-  const previewItem = preview;
-  const previewStatus = previewItem ? (statusMap.get(previewItem.id) ?? "available") : "available";
+  const previewStatus = preview ? (statusMap.get(preview.id) ?? "available") : "available";
 
   return (
     <div className="hub-root">
-      {/* ── Tavern fog / ambient layers ──────────────────────────── */}
-      <div className="hub-bg-fog fog-1" />
-      <div className="hub-bg-fog fog-2" />
-      <div className="hub-bg-vignette" />
+      {/* ── Live 3D tavern background ─────────────────── */}
+      <div className="hub-bg">
+        <TavernBackground />
+        <div className="hub-bg-overlay" />
+      </div>
 
-      {/* ── Mobile top bar ───────────────────────────────────────── */}
-      <div className="hub-mobile-bar">
+      {/* ── Mobile top bar ────────────────────────────── */}
+      <div className="hub-topbar">
         <button
-          className="hub-mobile-cat-btn"
+          className="hub-topbar-cat"
           onClick={() => setMobileCatOpen(o => !o)}
         >
-          ☰ {CATEGORY_TABS.find(t => t.id === activeTab)?.icon}{" "}
-          {CATEGORY_TABS.find(t => t.id === activeTab)?.label}
+          ☰ {CATEGORY_TABS.find(t => t.id === activeTab)?.label}
         </button>
-        <div className="hub-mobile-balance">
-          <img src={DC_ICON} alt="DC" className="dc-icon" />
-          {balance.toLocaleString()}
+        <span className="hub-topbar-title">Kingdom Exchange</span>
+        <div className="hub-topbar-bal">
+          <img
+            src="https://cdn.discordapp.com/emojis/1492184333392412692.webp?size=32&quality=lossless"
+            alt="dc" className="hub-topbar-dc"
+          />
+          <span>{balance.toLocaleString()}</span>
         </div>
       </div>
 
-      {/* ── 3-panel layout ───────────────────────────────────────── */}
-      <div className="hub-layout">
+      {/* ── Sacrifice banner ──────────────────────────── */}
+      {userData.sacrifice_active && (
+        <div className="hub-sacrifice-banner">
+          🩸 The gates are sealed by debt. All purchases are suspended.
+        </div>
+      )}
 
-        {/* LEFT — Category nav */}
+      {/* ── 3-panel layout ────────────────────────────── */}
+      <div className="hub-layout">
+        {/* Left — categories */}
         <div className={`hub-left ${mobileCatOpen ? "hub-left-open" : ""}`}>
           <CategoryNav
             active={activeTab}
@@ -113,32 +112,24 @@ export default function MarketHub({
             onChange={cat => { setActiveTab(cat); setMobileCatOpen(false); }}
           />
         </div>
-
-        {/* Mobile overlay */}
         {mobileCatOpen && (
           <div className="hub-mobile-overlay" onClick={() => setMobileCatOpen(false)} />
         )}
 
-        {/* CENTER — Item showcase */}
+        {/* Center — item showcase */}
         <main className="hub-center">
-          {userData.sacrifice_active && (
-            <div className="hub-debt-banner">
-              🩸 The gates are sealed by debt. All purchases are suspended.
-            </div>
-          )}
-
           <ItemShowcase
             key={activeTab}
             items={items}
             category={activeTab}
             statusMap={statusMap}
+            userBalance={balance}
             onPreview={setPreview}
             onAcquire={item => !userData.sacrifice_active && setPurchase(item)}
-            userBalance={balance}
           />
         </main>
 
-        {/* RIGHT — Player panel */}
+        {/* Right — player panel */}
         <div className="hub-right">
           <PlayerPanel
             discordUser={discordUser}
@@ -149,31 +140,28 @@ export default function MarketHub({
         </div>
       </div>
 
-      {/* ── Preview overlay ─────────────────────────────────────── */}
-      {previewItem && (
+      {/* ── Preview overlay ───────────────────────────── */}
+      {preview && (
         <PreviewOverlay
-          item={previewItem}
+          item={preview}
           category={activeTab}
           discordUser={discordUser}
           userData={mergedUser}
-          canAfford={balance >= previewItem.price_dc}
+          canAfford={balance >= preview.price_dc}
           isAvailable={previewStatus === "available"}
           onBack={() => setPreview(null)}
-          onAcquire={() => {
-            setPreview(null);
-            setPurchase(previewItem);
-          }}
+          onAcquire={() => { setPreview(null); setPurchase(preview); }}
         />
       )}
 
-      {/* ── Purchase modal ──────────────────────────────────────── */}
+      {/* ── Purchase modal ────────────────────────────── */}
       {purchase && (
         <PurchaseModal
           item={purchase}
           category={activeTab}
           userBalance={balance}
           onClose={() => setPurchase(null)}
-          onSuccess={(newBalance) => {
+          onSuccess={newBalance => {
             handlePurchaseSuccess(purchase, newBalance);
             setPurchase(null);
           }}

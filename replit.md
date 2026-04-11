@@ -167,6 +167,44 @@ cd artifacts/dashboard && PORT=5000 BASE_PATH=/dashboard/ pnpm run build
 - Guild configs stored in PostgreSQL `guild_configs` table
 - Bot stats read from `kingdom_treasury.db` SQLite via better-sqlite3
 
+## Kingdom Exchange (Premium Web Marketplace)
+
+An immersive 3D web marketplace for purchasing cosmetics — relics, titles, skins, badges — with DevilCoins.
+
+### Flow
+`/market` Discord command → embed with "Enter the Exchange" button → Discord OAuth → **18-second R3F cinematic intro** (void approach → tavern facade → door glow → door opens) → 3-panel dark luxury market UI with live ambient 3D tavern background → item preview / purchase ritual → immersive exit door sequence → redirect to Discord
+
+### Architecture
+```
+artifacts/exchange/          # React + Vite + Three.js SPA (port 5001)
+  src/
+    App.tsx                  # Stage machine: loading → cinematic → market → exit
+    api.ts                   # Typed fetch wrappers for /api/auth/me, /api/market/*
+    types.ts                 # CatalogItem, UserData, getItemStatus, RANK_ORDER
+    components/
+      CinematicEntrance.tsx  # R3F 8-waypoint camera path, procedural tavern facade, Bloom+Vignette
+      TavernBackground.tsx   # Ambient 3D interior (torchlight, relic pedestals, ember particles)
+      MarketHub.tsx          # 3-panel hub: CategoryNav | ItemShowcase | PlayerPanel
+      CategoryNav.tsx        # Left sidebar — relics / titles / skins / badges
+      ItemShowcase.tsx       # Item list + detail panel, status-aware (owned/locked/available)
+      PlayerPanel.tsx        # Right sidebar — avatar, balance, rank progress
+      PreviewOverlay.tsx     # Identity card manifestation preview
+      PurchaseModal.tsx      # Ritual purchase flow (confirm → sealing → success)
+      ExitFlow.tsx           # Door-close exit animation → redirect to Discord
+    index.css                # Dark luxury design system (~900 lines)
+artifacts/api-server/src/routes/market.ts   # /api/market/* proxy to bot HTTP API (port 8091)
+bot/market_http.py           # Bot aiohttp HTTP API serving catalog + purchase
+bot/cogs/cosmetics.py        # /market Discord command (URL button embed)
+```
+
+### Key Notes
+- Exchange Vite dev server runs on port 5001; proxy routes `/api` to port 8080
+- Discord OAuth flow: `/api/auth/discord?returnTo=/exchange/` → callback → session cookie
+- Currency emoji: `https://cdn.discordapp.com/emojis/1492184333392412692.webp?size=32&quality=lossless`
+- Sacrifice (debt) gate: if `sacrifice_active=true`, all purchases are suspended in the UI
+- Exit redirects to `https://discord.com/channels/1290484661318975499`
+- R3F fog must use `args` prop: `<fog attach="fog" args={["#040101", 2, 38]} />` (not color/near/far props)
+
 ## Setup
 
 1. Add `DISCORD_BOT_TOKEN` as a secret in the Secrets panel

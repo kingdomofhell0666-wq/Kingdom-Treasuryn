@@ -1,290 +1,429 @@
-import { useEffect, useRef, useState } from "react";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
+import { EffectComposer, Bloom, Vignette } from "@react-three/postprocessing";
+import { BlendFunction } from "postprocessing";
+import { useRef, useState, useEffect, useMemo, useCallback, Suspense } from "react";
+import * as THREE from "three";
 
-interface Props {
-  onComplete: () => void;
+const isMobile =
+  typeof window !== "undefined" &&
+  (window.innerWidth < 768 || navigator.maxTouchPoints > 0);
+
+// ── Timeline (seconds) ────────────────────────────────────────────────────────
+const T1 = 0.8;   // void line 1
+const T2 = 2.5;   // void line 2
+const T3 = 4.5;   // ground + approach
+const T4 = 7.0;   // tavern visible
+const T5 = 9.5;   // door close-up, glow
+const T6 = 11.0;  // door text
+const T7 = 12.5;  // door opens
+const T8 = 15.0;  // enter
+const T9 = 17.0;  // inside / accept
+const TDONE = 19.0;
+
+// ── Camera waypoints ─────────────────────────────────────────────────────────
+interface WP { t: number; pos: [number, number, number]; look: [number, number, number] }
+const WPS: WP[] = [
+  { t: 0,    pos: [0, 1.5,  16],  look: [0, 3,    -8] },
+  { t: T3,   pos: [0, 2.2,   8],  look: [0, 4.0, -18] },
+  { t: T4,   pos: [0, 3.0,   2],  look: [0, 4.5, -18] },
+  { t: T5,   pos: [0, 3.2,  -4],  look: [0, 3.8, -17] },
+  { t: T7,   pos: [0, 3.0,  -9],  look: [0, 3.5, -17] },
+  { t: T8,   pos: [0, 2.8, -15],  look: [0, 2.5, -25] },
+  { t: T9,   pos: [0, 2.0, -21],  look: [0, 2.0, -30] },
+  { t: TDONE, pos: [0, 2.0, -23], look: [0, 2.0, -30] },
+];
+
+function smooth(t: number) { return t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t; }
+
+function lerp3(elapsed: number) {
+  const p = new THREE.Vector3(); const l = new THREE.Vector3();
+  if (elapsed <= WPS[0].t) { p.set(...WPS[0].pos); l.set(...WPS[0].look); return { p, l }; }
+  for (let i = 1; i < WPS.length; i++) {
+    const a = WPS[i - 1]; const b = WPS[i];
+    if (elapsed <= b.t) {
+      const s = smooth((elapsed - a.t) / (b.t - a.t));
+      p.lerpVectors(new THREE.Vector3(...a.pos), new THREE.Vector3(...b.pos), s);
+      l.lerpVectors(new THREE.Vector3(...a.look), new THREE.Vector3(...b.look), s);
+      return { p, l };
+    }
+  }
+  p.set(...WPS[WPS.length - 1].pos); l.set(...WPS[WPS.length - 1].look);
+  return { p, l };
 }
 
-type Phase = "warning" | "door" | "done";
+// ── Ember particles ─────────────────────────────────────────────────────────
+function Embers({ count, elapsed }: { count: number; elapsed: number }) {
+  const ref = useRef<THREE.Points>(null!);
+  const data = useMemo(() => Array.from({ length: count }, () => ({
+    x: (Math.random() - 0.5) * 35, y: Math.random() * 14,
+    z: (Math.random() - 0.5) * 35 - 10,
+    vy: 0.025 + Math.random() * 0.07, vx: (Math.random() - 0.5) * 0.018,
+    life: Math.random(), maxLife: 0.8 + Math.random() * 0.4,
+  })), [count]);
 
-export default function CinematicEntrance({ onComplete }: Props) {
-  const canvasRef   = useRef<HTMLCanvasElement>(null);
-  const rafRef      = useRef<number>(0);
-  const skipped     = useRef(false);
-  const startedAt   = useRef(Date.now());
+  const geo = useMemo(() => {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.BufferAttribute(new Float32Array(count * 3), 3));
+    g.setAttribute("color",    new THREE.BufferAttribute(new Float32Array(count * 3), 3));
+    return g;
+  }, [count]);
 
-  const [phase,    setPhase]    = useState<Phase>("warning");
-  const [line1,    setLine1]    = useState(false);
-  const [line2,    setLine2]    = useState(false);
-  const [line3,    setLine3]    = useState(false);
-  const [doorOpen, setDoorOpen] = useState(false);
-  const [fadeOut,  setFadeOut]  = useState(false);
-
-  // Canvas particle system
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d")!;
-
-    function resize() {
-      canvas!.width  = window.innerWidth;
-      canvas!.height = window.innerHeight;
-    }
-    resize();
-    window.addEventListener("resize", resize);
-
-    // Embers
-    interface Ember {
-      x: number; y: number; vx: number; vy: number;
-      size: number; life: number; maxLife: number;
-      hue: number;
-    }
-    const embers: Ember[] = [];
-
-    function spawnEmber() {
-      const cx = canvas!.width * 0.5;
-      const cy = canvas!.height * 0.5;
-      embers.push({
-        x: cx + (Math.random() - 0.5) * 120,
-        y: cy + 80 + Math.random() * 60,
-        vx: (Math.random() - 0.5) * 1.2,
-        vy: -(0.6 + Math.random() * 1.4),
-        size: 1 + Math.random() * 2.5,
-        life: 0,
-        maxLife: 90 + Math.random() * 120,
-        hue: 15 + Math.random() * 25,
-      });
-    }
-
-    // Smoke particles
-    interface Smoke {
-      x: number; y: number; vx: number; vy: number;
-      size: number; life: number; maxLife: number; alpha: number;
-    }
-    const smokes: Smoke[] = [];
-
-    function spawnSmoke() {
-      const cx = canvas!.width * 0.5;
-      const cy = canvas!.height * 0.5;
-      smokes.push({
-        x: cx + (Math.random() - 0.5) * 200,
-        y: cy - 40 + Math.random() * 80,
-        vx: (Math.random() - 0.5) * 0.4,
-        vy: -(0.2 + Math.random() * 0.5),
-        size: 20 + Math.random() * 60,
-        life: 0,
-        maxLife: 180 + Math.random() * 160,
-        alpha: 0,
-      });
-    }
-
-    let frame = 0;
-    function tick() {
-      frame++;
-      const W = canvas!.width;
-      const H = canvas!.height;
-      const cx = W * 0.5;
-      const cy = H * 0.5;
-      const t = (Date.now() - startedAt.current) / 1000;
-
-      ctx.clearRect(0, 0, W, H);
-
-      // Background gradient
-      const bg = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(W, H) * 0.7);
-      bg.addColorStop(0, "#180A04");
-      bg.addColorStop(0.5, "#0D0402");
-      bg.addColorStop(1, "#050202");
-      ctx.fillStyle = bg;
-      ctx.fillRect(0, 0, W, H);
-
-      // Door glow (from behind)
-      const phaseSince = t - (phase === "door" ? 0 : 999);
-      const glowIntensity = phase === "door" ? Math.min(1, phaseSince * 0.5) : 0;
-      const flickerA = 0.85 + Math.sin(t * 7.3) * 0.08 + Math.sin(t * 13.1) * 0.05;
-      const flickerB = 0.9  + Math.sin(t * 5.7) * 0.07 + Math.cos(t * 11.3) * 0.04;
-
-      if (glowIntensity > 0) {
-        const doorW = Math.min(W * 0.38, 340);
-        const doorH = Math.min(H * 0.65, 480);
-        const doorX = cx - doorW / 2;
-        const doorY = cy - doorH / 2;
-
-        // Central light spill
-        const glow = ctx.createRadialGradient(cx, cy - 20, 0, cx, cy - 20, doorW * 1.4);
-        glow.addColorStop(0, `rgba(255,120,20,${0.55 * glowIntensity * flickerA})`);
-        glow.addColorStop(0.3, `rgba(220,60,5,${0.35 * glowIntensity * flickerB})`);
-        glow.addColorStop(0.7, `rgba(160,20,0,${0.15 * glowIntensity})`);
-        glow.addColorStop(1, "rgba(0,0,0,0)");
-        ctx.fillStyle = glow;
-        ctx.fillRect(0, 0, W, H);
-
-        // Crack light seams
-        ctx.save();
-        ctx.shadowBlur = 18;
-        ctx.shadowColor = `rgba(255,140,30,${0.9 * flickerA})`;
-        ctx.strokeStyle = `rgba(255,160,40,${0.7 * glowIntensity * flickerA})`;
-        ctx.lineWidth = 1.5;
-        // Left door crack
-        ctx.beginPath();
-        ctx.moveTo(cx - 2, doorY + 12);
-        ctx.lineTo(cx - 2, doorY + doorH - 12);
-        ctx.stroke();
-        // Right door crack
-        ctx.beginPath();
-        ctx.moveTo(cx + 2, doorY + 12);
-        ctx.lineTo(cx + 2, doorY + doorH - 12);
-        ctx.stroke();
-        // Top gap
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(doorX + 8, doorY + 4);
-        ctx.lineTo(doorX + doorW - 8, doorY + 4);
-        ctx.stroke();
-        ctx.restore();
+  useFrame((_, dt) => {
+    const pos = geo.attributes.position as THREE.BufferAttribute;
+    const col = geo.attributes.color    as THREE.BufferAttribute;
+    const intensity = Math.min(1, elapsed / 3);
+    for (let i = 0; i < count; i++) {
+      const d = data[i];
+      d.y += d.vy * dt * 60; d.x += d.vx * dt * 60; d.life += dt * 0.25;
+      if (d.y > 15 || d.life > d.maxLife) {
+        d.y = -0.5 + Math.random(); d.x = (Math.random() - 0.5) * 35;
+        d.z = (Math.random() - 0.5) * 35 - 10; d.life = 0;
       }
-
-      // Spawn embers
-      if (frame % 3 === 0 && phase === "door") spawnEmber();
-      if (frame % 18 === 0 && phase === "door") spawnSmoke();
-
-      // Draw & update smoke
-      for (let i = smokes.length - 1; i >= 0; i--) {
-        const s = smokes[i];
-        s.life++;
-        s.x += s.vx;
-        s.y += s.vy;
-        s.size += 0.3;
-        const prog = s.life / s.maxLife;
-        s.alpha = prog < 0.2
-          ? prog / 0.2
-          : prog < 0.7
-            ? 1
-            : 1 - (prog - 0.7) / 0.3;
-
-        ctx.save();
-        ctx.globalAlpha = s.alpha * 0.06;
-        ctx.fillStyle = "#331208";
-        ctx.beginPath();
-        ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
-
-        if (s.life >= s.maxLife) smokes.splice(i, 1);
-      }
-
-      // Draw & update embers
-      for (let i = embers.length - 1; i >= 0; i--) {
-        const e = embers[i];
-        e.life++;
-        e.x += e.vx + Math.sin(e.life * 0.08) * 0.3;
-        e.y += e.vy;
-        e.vy *= 0.99;
-
-        const prog  = e.life / e.maxLife;
-        const alpha = prog < 0.15
-          ? prog / 0.15
-          : prog > 0.75
-            ? 1 - (prog - 0.75) / 0.25
-            : 1;
-
-        ctx.save();
-        ctx.globalAlpha = alpha * 0.9;
-        ctx.shadowBlur  = e.size * 4;
-        ctx.shadowColor = `hsl(${e.hue}, 100%, 60%)`;
-        ctx.fillStyle   = `hsl(${e.hue}, 100%, 72%)`;
-        ctx.beginPath();
-        ctx.arc(e.x, e.y, e.size * (1 - prog * 0.5), 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
-
-        if (e.life >= e.maxLife) embers.splice(i, 1);
-      }
-
-      // Vignette
-      const vig = ctx.createRadialGradient(cx, cy, H * 0.15, cx, cy, H * 0.8);
-      vig.addColorStop(0, "rgba(0,0,0,0)");
-      vig.addColorStop(1, "rgba(0,0,0,0.75)");
-      ctx.fillStyle = vig;
-      ctx.fillRect(0, 0, W, H);
-
-      rafRef.current = requestAnimationFrame(tick);
+      pos.setXYZ(i, d.x, d.y, d.z);
+      const f = Math.sin(d.life / d.maxLife * Math.PI) * intensity;
+      const warm = Math.random() > 0.6;
+      col.setXYZ(i, f, f * (warm ? 0.35 : 0.15), 0);
     }
-
-    rafRef.current = requestAnimationFrame(tick);
-    return () => {
-      cancelAnimationFrame(rafRef.current);
-      window.removeEventListener("resize", resize);
-    };
-  }, [phase]);
-
-  // Sequence
-  useEffect(() => {
-    const t: ReturnType<typeof setTimeout>[] = [];
-    t.push(setTimeout(() => setLine1(true),  700));
-    t.push(setTimeout(() => setLine2(true),  2100));
-    t.push(setTimeout(() => {
-      setPhase("door");
-      setTimeout(() => setLine3(true),  600);
-      setTimeout(() => setDoorOpen(true), 900);
-      setTimeout(() => {
-        setFadeOut(true);
-        setTimeout(onComplete, 900);
-      }, 4400);
-    }, 4000));
-    return () => t.forEach(clearTimeout);
-  }, [onComplete]);
-
-  function skip() {
-    if (skipped.current) return;
-    skipped.current = true;
-    setFadeOut(true);
-    setTimeout(onComplete, 700);
-  }
+    pos.needsUpdate = true; col.needsUpdate = true;
+  });
 
   return (
-    <div className="cin-wrap">
-      <canvas ref={canvasRef} className="cin-canvas" />
+    <points ref={ref} geometry={geo}>
+      <pointsMaterial size={0.055} vertexColors transparent opacity={1}
+        depthWrite={false} blending={THREE.AdditiveBlending} />
+    </points>
+  );
+}
 
-      <button className="cin-skip" onClick={skip}>Skip ›</button>
+// ── Ash rain ──────────────────────────────────────────────────────────────────
+function Ash({ count }: { count: number }) {
+  const data = useMemo(() => Array.from({ length: count }, () => ({
+    x: (Math.random() - 0.5) * 45, y: 1 + Math.random() * 14,
+    z: (Math.random() - 0.5) * 45 - 10,
+    vy: -(0.005 + Math.random() * 0.012), vx: (Math.random() - 0.5) * 0.006,
+  })), [count]);
+  const geo = useMemo(() => {
+    const g = new THREE.BufferGeometry();
+    const pos = new Float32Array(count * 3);
+    data.forEach((d, i) => { pos[i*3]=d.x; pos[i*3+1]=d.y; pos[i*3+2]=d.z; });
+    g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+    return g;
+  }, [count, data]);
+  const ref = useRef<THREE.Points>(null!);
+  useFrame((_, dt) => {
+    const pos = ref.current.geometry.attributes.position as THREE.BufferAttribute;
+    for (let i = 0; i < count; i++) {
+      data[i].y += data[i].vy * dt * 60; data[i].x += data[i].vx * dt * 60;
+      if (data[i].y < 0) { data[i].y = 14; data[i].x = (Math.random()-0.5)*45; }
+      pos.setXYZ(i, data[i].x, data[i].y, data[i].z);
+    }
+    pos.needsUpdate = true;
+  });
+  return (
+    <points ref={ref} geometry={geo}>
+      <pointsMaterial size={0.025} color="#2a1010" transparent opacity={0.4} depthWrite={false} />
+    </points>
+  );
+}
 
-      {/* Warning phase */}
-      <div className={`cin-warning ${phase === "warning" ? "cin-vis" : "cin-fade"}`}>
-        <span className={`cin-line ${line1 ? "cin-line-in" : ""}`}>You were warned.</span>
-        <span className={`cin-line cin-line-2 ${line2 ? "cin-line-in" : ""}`}>Yet… you came.</span>
+// ── Ground ────────────────────────────────────────────────────────────────────
+function Ground({ fadeIn }: { fadeIn: number }) {
+  return (
+    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.05, -5]}>
+      <planeGeometry args={[100, 100]} />
+      <meshStandardMaterial color="#060108" roughness={0.88} metalness={0.22}
+        transparent opacity={fadeIn} />
+    </mesh>
+  );
+}
+
+// ── Tavern building ────────────────────────────────────────────────────────────
+function Tavern({ elapsed }: { elapsed: number }) {
+  const leftRef  = useRef<THREE.Group>(null!);
+  const rightRef = useRef<THREE.Group>(null!);
+  const crackMat = useRef<THREE.MeshStandardMaterial>(null!);
+  const interiorLight = useRef<THREE.PointLight>(null!);
+
+  const fadeIn = Math.min(1, Math.max(0, (elapsed - T4) / 2.5));
+  const doorProg = Math.min(1, Math.max(0, (elapsed - T7) / 2.8));
+  const glowProg = Math.min(1, Math.max(0, (elapsed - T5) / 3.5));
+
+  useFrame(({ clock }) => {
+    const t = clock.getElapsedTime();
+    if (leftRef.current)  leftRef.current.rotation.y  =  doorProg * 1.45;
+    if (rightRef.current) rightRef.current.rotation.y = -doorProg * 1.45;
+    if (crackMat.current) {
+      const fl = 0.82 + Math.sin(t*7.1)*0.1 + Math.sin(t*12.7)*0.06;
+      crackMat.current.emissiveIntensity = glowProg * 4.0 * fl;
+    }
+    if (interiorLight.current) {
+      const fl = 0.9 + Math.sin(t*4.8)*0.08;
+      interiorLight.current.intensity = doorProg * 18 * fl;
+    }
+  });
+
+  if (fadeIn === 0) return null;
+  const o = fadeIn;
+
+  return (
+    <group position={[0, 0, -20]}>
+      {/* Main body */}
+      <mesh position={[0, 5.5, 0]}>
+        <boxGeometry args={[22, 11, 7]} />
+        <meshStandardMaterial color="#060102" roughness={0.94} metalness={0.08} transparent opacity={o} />
+      </mesh>
+      {/* Roof */}
+      <mesh position={[0, 12, 0]}>
+        <boxGeometry args={[25, 3, 8.5]} />
+        <meshStandardMaterial color="#040101" roughness={0.96} metalness={0.05} transparent opacity={o} />
+      </mesh>
+      {/* Left tower */}
+      <mesh position={[-12.5, 9, 0]}>
+        <boxGeometry args={[4.5, 18, 6]} />
+        <meshStandardMaterial color="#050101" roughness={0.94} metalness={0.07} transparent opacity={o} />
+      </mesh>
+      {/* Right tower */}
+      <mesh position={[12.5, 9, 0]}>
+        <boxGeometry args={[4.5, 18, 6]} />
+        <meshStandardMaterial color="#050101" roughness={0.94} metalness={0.07} transparent opacity={o} />
+      </mesh>
+      {/* Upper detail cornice */}
+      <mesh position={[0, 11.2, 3.6]}>
+        <boxGeometry args={[20, 0.5, 0.4]} />
+        <meshStandardMaterial color="#0a0303" roughness={0.9} metalness={0.3} transparent opacity={o} />
+      </mesh>
+
+      {/* Windows emissive */}
+      {([ [-5.5,7.5,3.65], [5.5,7.5,3.65], [-5.5,4.2,3.65], [5.5,4.2,3.65] ] as [number,number,number][]).map(([wx,wy,wz],idx) => (
+        <group key={idx}>
+          <mesh position={[wx, wy, wz]}>
+            <planeGeometry args={[2.4, 1.9]} />
+            <meshStandardMaterial color="#000" emissive="#ff5800" emissiveIntensity={2.8} transparent opacity={o} />
+          </mesh>
+          <pointLight position={[wx, wy, wz-1]} color="#ff6420" intensity={4} distance={14} decay={2} />
+        </group>
+      ))}
+
+      {/* Hanging sign */}
+      <mesh position={[0, 13, 3.7]}>
+        <boxGeometry args={[7, 1.4, 0.15]} />
+        <meshStandardMaterial color="#080203" roughness={0.96} transparent opacity={o} />
+      </mesh>
+      <mesh position={[0, 13, 3.8]}>
+        <planeGeometry args={[6.5, 1.1]} />
+        <meshStandardMaterial color="#000" emissive="#cc2200" emissiveIntensity={0.4} transparent opacity={o * 0.8} />
+      </mesh>
+
+      {/* Lanterns */}
+      {([ [-2.8, 8.5, 3.8], [2.8, 8.5, 3.8] ] as [number,number,number][]).map(([lx,ly,lz],i) => (
+        <group key={i}>
+          <mesh position={[lx, ly, lz]}>
+            <sphereGeometry args={[0.22, 6, 6]} />
+            <meshStandardMaterial color="#000" emissive="#ff8800" emissiveIntensity={5} transparent opacity={o} />
+          </mesh>
+          <pointLight position={[lx, ly, lz]} color="#ff6600" intensity={3} distance={7} decay={2} />
+        </group>
+      ))}
+
+      {/* Door arch / frame */}
+      <mesh position={[0, 4.0, 3.55]}>
+        <boxGeometry args={[4.8, 8.2, 0.5]} />
+        <meshStandardMaterial color="#040101" roughness={0.97} metalness={0.15} transparent opacity={o} />
+      </mesh>
+
+      {/* Door crack glow overlay */}
+      <mesh position={[0, 4.0, 3.83]}>
+        <planeGeometry args={[4.2, 7.8]} />
+        <meshStandardMaterial ref={crackMat} color="#000" emissive="#bb1100"
+          emissiveIntensity={0} transparent opacity={0.9} depthWrite={false} />
+      </mesh>
+
+      {/* Left door panel — pivot at left hinge x=-2 */}
+      <group ref={leftRef} position={[-2.0, 4.0, 3.7]}>
+        <mesh position={[0.95, 0, 0]}>
+          <boxGeometry args={[1.9, 7.7, 0.22]} />
+          <meshStandardMaterial color="#080202" roughness={0.92} metalness={0.28} transparent opacity={o} />
+        </mesh>
+        {[-2.8, 0, 2.8].map((by, i) => (
+          <mesh key={i} position={[0.95, by, 0.14]}>
+            <boxGeometry args={[1.85, 0.13, 0.06]} />
+            <meshStandardMaterial color="#180606" roughness={0.55} metalness={0.85} transparent opacity={o} />
+          </mesh>
+        ))}
+      </group>
+
+      {/* Right door panel — pivot at right hinge x=+2 */}
+      <group ref={rightRef} position={[2.0, 4.0, 3.7]}>
+        <mesh position={[-0.95, 0, 0]}>
+          <boxGeometry args={[1.9, 7.7, 0.22]} />
+          <meshStandardMaterial color="#080202" roughness={0.92} metalness={0.28} transparent opacity={o} />
+        </mesh>
+        {[-2.8, 0, 2.8].map((by, i) => (
+          <mesh key={i} position={[-0.95, by, 0.14]}>
+            <boxGeometry args={[1.85, 0.13, 0.06]} />
+            <meshStandardMaterial color="#180606" roughness={0.55} metalness={0.85} transparent opacity={o} />
+          </mesh>
+        ))}
+      </group>
+
+      {/* Interior warm flood light */}
+      <pointLight ref={interiorLight} position={[0, 3.5, 5.5]} color="#ff7030"
+        intensity={0} distance={22} decay={1.6} />
+
+      {/* Deep interior box suggestion */}
+      <mesh position={[0, 4.0, 8]}>
+        <boxGeometry args={[3.5, 7.5, 0.3]} />
+        <meshStandardMaterial color="#000" emissive="#442200" emissiveIntensity={1.5} transparent opacity={doorProg * 0.7} />
+      </mesh>
+    </group>
+  );
+}
+
+// ── Camera rig ────────────────────────────────────────────────────────────────
+function CameraRig({ elapsed }: { elapsed: number }) {
+  const { camera } = useThree();
+  const tPos = useRef(new THREE.Vector3());
+  const tLook = useRef(new THREE.Vector3());
+
+  useFrame((_, dt) => {
+    const { p, l } = lerp3(elapsed);
+    tPos.current.copy(p); tLook.current.copy(l);
+    camera.position.lerp(tPos.current, Math.min(1, dt * 2.8));
+    const dir = new THREE.Vector3();
+    camera.getWorldDirection(dir);
+    const desired = tLook.current.clone().sub(camera.position).normalize();
+    dir.lerp(desired, Math.min(1, dt * 2.5));
+    camera.lookAt(camera.position.clone().add(dir));
+  });
+  return null;
+}
+
+// ── Lighting ──────────────────────────────────────────────────────────────────
+function Lighting({ elapsed }: { elapsed: number }) {
+  const ref = useRef<THREE.AmbientLight>(null!);
+  useFrame(() => {
+    if (ref.current) ref.current.intensity = 0.015 + Math.min(0.06, elapsed / TDONE * 0.06);
+  });
+  return (
+    <>
+      <ambientLight ref={ref} color="#1a0305" intensity={0.015} />
+      <fog attach="fog" args={["#040101", 2, 38]} />
+    </>
+  );
+}
+
+// ── Full 3D scene ──────────────────────────────────────────────────────────────
+function InfernalScene({ elapsed }: { elapsed: number }) {
+  const emberCount = isMobile ? 160 : 320;
+  const ashCount   = isMobile ? 50  : 100;
+  const groundFade = Math.min(1, Math.max(0, (elapsed - T3) / 2));
+
+  return (
+    <>
+      <Lighting elapsed={elapsed} />
+      <Ground fadeIn={groundFade} />
+      <Tavern elapsed={elapsed} />
+      <Embers count={emberCount} elapsed={elapsed} />
+      {elapsed > T3 && <Ash count={ashCount} />}
+      <CameraRig elapsed={elapsed} />
+      {!isMobile && (
+        <EffectComposer>
+          <Bloom intensity={2.4} luminanceThreshold={0.18} luminanceSmoothing={0.87} mipmapBlur />
+          <Vignette eskil={false} offset={0.12} darkness={1.25} blendFunction={BlendFunction.NORMAL} />
+        </EffectComposer>
+      )}
+    </>
+  );
+}
+
+// ── Main component ────────────────────────────────────────────────────────────
+interface Props { onComplete: () => void }
+
+export default function CinematicEntrance({ onComplete }: Props) {
+  const startRef = useRef(performance.now());
+  const [elapsed, setElapsed] = useState(0);
+  const [fadeOut, setFadeOut] = useState(false);
+  const doneRef = useRef(false);
+  const rafRef  = useRef<number>(0);
+
+  const tick = useCallback(() => {
+    const now = (performance.now() - startRef.current) / 1000;
+    setElapsed(now);
+    if (now >= TDONE && !doneRef.current) {
+      doneRef.current = true;
+      setFadeOut(true);
+      setTimeout(onComplete, 900);
+      return;
+    }
+    rafRef.current = requestAnimationFrame(tick);
+  }, [onComplete]);
+
+  useEffect(() => {
+    rafRef.current = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [tick]);
+
+  const skip = useCallback(() => {
+    if (doneRef.current) return;
+    doneRef.current = true;
+    cancelAnimationFrame(rafRef.current);
+    setFadeOut(true);
+    setTimeout(onComplete, 500);
+  }, [onComplete]);
+
+  const v1 = elapsed >= T1 && elapsed < T5;
+  const v2 = elapsed >= T2 && elapsed < T5;
+  const v3 = elapsed >= T6 && elapsed < T7 + 1;
+  const v4 = elapsed >= T8 && elapsed < T9;
+
+  return (
+    <div className={`cin-root ${fadeOut ? "cin-fadeout" : ""}`}>
+      <Canvas
+        className="cin-canvas"
+        camera={{ position: [0, 1.5, 16], fov: 58, near: 0.1, far: 85 }}
+        gl={{ antialias: !isMobile, alpha: false, powerPreference: "high-performance" }}
+        dpr={isMobile ? 1 : Math.min(window.devicePixelRatio, 2)}
+      >
+        <color attach="background" args={["#040101"]} />
+        <Suspense fallback={null}>
+          <InfernalScene elapsed={elapsed} />
+        </Suspense>
+      </Canvas>
+
+      {/* Initial black overlay */}
+      <div className="cin-black" style={{ opacity: Math.max(0, 1 - elapsed / 0.8) }} />
+
+      {/* Text layer */}
+      <div className="cin-texts">
+        <div className={`cin-line cin-lg ${v1 ? "cin-show" : ""}`}>You were warned.</div>
+        <div className={`cin-line cin-lg cin-red ${v2 ? "cin-show" : ""}`} style={{ transitionDelay: "200ms" }}>
+          Yet… you came.
+        </div>
       </div>
 
-      {/* Door CSS (positioned in center, behind canvas text layer) */}
-      {phase === "door" && (
-        <div className="cin-door-wrap">
-          <div className="cin-door-scene">
-            {/* Lanterns */}
-            <div className="cin-lantern cin-lantern-l" />
-            <div className="cin-lantern cin-lantern-r" />
-
-            {/* Door frame */}
-            <div className={`cin-door-frame ${doorOpen ? "cin-door-opening" : ""}`}>
-              <div className="cin-panel cin-panel-l">
-                <div className="cin-panel-inset" />
-                <div className="cin-panel-knocker" />
-              </div>
-              <div className="cin-door-seam" />
-              <div className="cin-panel cin-panel-r">
-                <div className="cin-panel-inset" />
-              </div>
-            </div>
-
-            {/* Floor light spill */}
-            <div className="cin-light-spill" />
-          </div>
-
-          {/* Door text */}
-          <p className={`cin-door-text ${line3 ? "cin-vis" : ""}`}>
+      {v3 && (
+        <div className="cin-texts">
+          <div className="cin-line cin-sm cin-amber cin-show" style={{ letterSpacing: "0.28em" }}>
             The Exchange recognizes you.
-          </p>
+          </div>
         </div>
       )}
 
-      {/* Fade overlay */}
-      <div className={`cin-fade-overlay ${fadeOut ? "cin-fade-overlay-vis" : ""}`} />
+      {v4 && (
+        <div className="cin-texts">
+          <div className="cin-line cin-xs cin-show" style={{ letterSpacing: "0.35em", color: "rgba(180,55,20,0.65)" }}>
+            Step forward.
+          </div>
+        </div>
+      )}
+
+      {/* Bottom burn gradient */}
+      <div className="cin-bottom-burn" />
+
+      {/* Skip */}
+      {elapsed > 0.8 && !fadeOut && (
+        <button className="cin-skip" onClick={skip}>Skip ›</button>
+      )}
     </div>
   );
 }

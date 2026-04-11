@@ -1,41 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { CatalogItem, ItemCategory } from "../types";
 import { api, ApiError } from "../api";
 
 const DC_ICON = "https://cdn.discordapp.com/emojis/1492184333392412692.webp?size=32&quality=lossless";
-
-const RELIC_ICONS: Record<string, string> = {
-  soul_aura:       "🌌",
-  infernal_crown:  "👑",
-  void_drift:      "🌀",
-  crimson_chains:  "⛓️",
-  abyssal_veil:    "🌑",
-  sanguine_halo:   "💫",
-};
-
-const CATEGORY_LABEL: Record<ItemCategory, string> = {
-  relics: "Relic",
-  titles: "Title",
-  skins:  "Skin",
-  badges: "Badge",
-};
-
-const RARITY_CLASS: Record<string, string> = {
-  Common: "rarity-common",
-  Uncommon: "rarity-uncommon",
-  Rare: "rarity-rare",
-  Epic: "rarity-epic",
-  Legendary: "rarity-legendary",
-};
-
-function getVisual(item: CatalogItem, category: ItemCategory): string {
-  if (category === "badges") return item.icon ?? "🔮";
-  if (category === "relics") return RELIC_ICONS[item.id] ?? "🔮";
-  if (category === "skins") return item.stat_icon ?? "✦";
-  return "📜";
-}
-
-type ModalState = "confirm" | "sealing" | "success" | "error";
 
 interface Props {
   item: CatalogItem;
@@ -45,170 +12,133 @@ interface Props {
   onSuccess: (newBalance: number) => void;
 }
 
-export default function PurchaseModal({
-  item,
-  category,
-  userBalance,
-  onClose,
-  onSuccess,
-}: Props) {
-  const [state, setState]   = useState<ModalState>("confirm");
-  const [error, setError]   = useState("");
-  const [acquired, setAcquired] = useState("");
+type State = "confirm" | "sealing" | "success" | "error";
+
+export default function PurchaseModal({ item, userBalance, onClose, onSuccess }: Props) {
+  const [state, setState] = useState<State>("confirm");
+  const [error, setError] = useState("");
   const [newBal, setNewBal] = useState(0);
+  const [pulseRing, setPulseRing] = useState(false);
 
   const canAfford = userBalance >= item.price_dc;
-  const balAfter  = userBalance - item.price_dc;
 
-  async function handlePurchase() {
+  useEffect(() => {
+    if (state === "sealing") {
+      const t = setInterval(() => setPulseRing(p => !p), 600);
+      return () => clearInterval(t);
+    }
+  }, [state]);
+
+  async function seal() {
+    if (!canAfford) return;
     setState("sealing");
-    // Minimum dramatic delay — the kingdom does not rush
-    await new Promise(r => setTimeout(r, 1800));
     try {
-      const result = await api.purchase(category, item.id);
-      setAcquired(result.name);
+      const result = await api.purchase(item.id.split(":")[0] ?? "relics", item.id);
       setNewBal(result.new_balance);
       setState("success");
-      onSuccess(result.new_balance);
     } catch (err) {
-      const msg = err instanceof ApiError ? err.message : "The Exchange rejected this transaction.";
+      const msg = err instanceof ApiError ? err.message : "The sealing failed.";
       setError(msg);
       setState("error");
     }
   }
 
-  function handleBackdropClick(e: React.MouseEvent<HTMLDivElement>) {
-    if (e.target === e.currentTarget && state !== "sealing") onClose();
-  }
-
-  const visual      = getVisual(item, category);
-  const visualBg    = category === "skins" && item.color ? `${item.color}22` : "";
-  const rarityClass = RARITY_CLASS[item.rarity] ?? "rarity-uncommon";
-
   return (
-    <div className="modal-backdrop" onClick={handleBackdropClick}>
-      <div className="modal-box">
-        {state !== "sealing" && state !== "success" && (
-          <button className="modal-close" onClick={onClose} aria-label="Close">✕</button>
-        )}
+    <div className="modal-root" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className={`modal-box ${state === "sealing" ? "modal-sealing-mode" : ""}`}>
 
-        {/* Visual */}
-        <div
-          className="modal-item-visual"
-          style={visualBg ? { background: visualBg } : undefined}
-        >
-          {visualBg && (
-            <div style={{
-              position: "absolute",
-              inset: 0,
-              background: `radial-gradient(ellipse at center, ${item.color}44 0%, transparent 70%)`,
-            }} />
-          )}
-          <div style={{ position: "relative", zIndex: 1, fontSize: category === "skins" ? "3rem" : "4.5rem" }}>
-            {category === "skins" ? (
-              <span style={{ color: item.color ?? "#C8B8A0", fontWeight: 800, textShadow: `0 0 20px ${item.color}` }}>
-                {visual}
-              </span>
-            ) : <span>{visual}</span>}
-          </div>
-        </div>
-
-        {/* ── CONFIRM ─────────────────────────────────────────────────── */}
+        {/* ── Confirm ──────────────────────────────────── */}
         {state === "confirm" && (
-          <div className="modal-body">
-            <div>
-              <div className="modal-item-name">{item.name}</div>
-              <div className={`modal-item-type ${rarityClass}`}>
-                {item.rarity} · {CATEGORY_LABEL[category]}
+          <>
+            <div className="modal-glyph">⛧</div>
+            <h2 className="modal-title">Seal the Exchange</h2>
+            <p className="modal-subtitle">
+              You are about to claim possession of this artifact.
+            </p>
+
+            <div className="modal-item-preview">
+              <span className="modal-item-icon">{item.stat_icon ?? item.icon ?? "⬡"}</span>
+              <div className="modal-item-info">
+                <span className="modal-item-name">{item.name}</span>
+                <span className="modal-item-desc">{item.description}</span>
               </div>
             </div>
 
-            <p className="modal-desc">{item.description}</p>
-
-            {item.effect_desc && (
-              <blockquote className="modal-effect">{item.effect_desc}</blockquote>
-            )}
-
-            <hr className="modal-divider" />
-
-            <div className="modal-cost-row">
+            <div className="modal-cost">
               <span className="modal-cost-label">Cost</span>
-              <span className="modal-cost-value">
-                <img src={DC_ICON} alt="DC" className="dc-icon" />
-                {item.price_dc.toLocaleString()} DC
+              <div className="modal-cost-amount">
+                <img src={DC_ICON} alt="dc" className="modal-dc" />
+                <span className={canAfford ? "modal-cost-ok" : "modal-cost-low"}>
+                  {item.price_dc.toLocaleString()}
+                </span>
+              </div>
+              {!canAfford && (
+                <span className="modal-insufficient">Insufficient treasury funds.</span>
+              )}
+            </div>
+
+            <div className="modal-warning">
+              <span className="modal-warning-text">
+                The Kingdom does not offer refunds.<br />
+                Once sealed, the offering is complete.
               </span>
             </div>
 
-            <div className="modal-cost-row">
-              <span className="modal-cost-label">Your balance</span>
-              <span className="modal-cost-value" style={{ fontSize: "0.82rem", color: canAfford ? "var(--gold)" : "#FF6B6B" }}>
-                <img src={DC_ICON} alt="DC" className="dc-icon" />
-                {userBalance.toLocaleString()} DC
-              </span>
+            <div className="modal-actions">
+              <button className="modal-back-btn" onClick={onClose}>Step Back</button>
+              <button
+                className="modal-seal-btn"
+                disabled={!canAfford}
+                onClick={seal}
+              >
+                🩸 Seal the Exchange
+              </button>
             </div>
-
-            {canAfford && (
-              <div className="modal-balance-after">
-                After purchase: {balAfter.toLocaleString()} DC
-              </div>
-            )}
-
-            {!canAfford && (
-              <div className="modal-error">
-                Insufficient funds. You need{" "}
-                <strong>{(item.price_dc - userBalance).toLocaleString()} DC</strong> more.
-              </div>
-            )}
-
-            <button
-              className="modal-seal-btn"
-              disabled={!canAfford}
-              onClick={handlePurchase}
-            >
-              Seal the Exchange
-            </button>
-          </div>
+          </>
         )}
 
-        {/* ── SEALING ─────────────────────────────────────────────────── */}
+        {/* ── Sealing ──────────────────────────────────── */}
         {state === "sealing" && (
-          <div className="modal-sealing">
-            <div className="seal-spinner" />
+          <div className="modal-sealing-body">
+            <div className={`modal-seal-ring ${pulseRing ? "modal-seal-ring-pulse" : ""}`} />
+            <div className="modal-seal-inner" />
             <p className="modal-sealing-text">Sealing the exchange…</p>
+            <p className="modal-sealing-sub">The Kingdom acknowledges your offering.</p>
           </div>
         )}
 
-        {/* ── SUCCESS ─────────────────────────────────────────────────── */}
+        {/* ── Success ──────────────────────────────────── */}
         {state === "success" && (
-          <div className="modal-success">
-            <span className="modal-success-glyph">🩸</span>
-            <p className="modal-success-title">Acquisition Complete</p>
-            <p className="modal-success-item">{acquired}</p>
+          <div className="modal-success-body">
+            <div className="modal-success-glyph">🩸</div>
+            <h2 className="modal-success-title">Acquisition Complete</h2>
+            <p className="modal-success-name">{item.name}</p>
             <p className="modal-success-flavor">
               The Kingdom acknowledges your offering.<br />
               It is now yours.
             </p>
-            <p className="modal-success-balance">
-              <img src={DC_ICON} alt="DC" className="dc-icon" style={{ width: 14, height: 14 }} />
-              New balance: {newBal.toLocaleString()} DC
-            </p>
-            <button className="modal-close-btn" onClick={onClose}>
+            <div className="modal-success-bal">
+              <img src={DC_ICON} alt="dc" className="modal-dc" />
+              <span>New balance: {newBal.toLocaleString()}</span>
+            </div>
+            <button className="modal-done-btn" onClick={() => { onSuccess(newBal); }}>
               Return to the Exchange
             </button>
           </div>
         )}
 
-        {/* ── ERROR ───────────────────────────────────────────────────── */}
+        {/* ── Error ────────────────────────────────────── */}
         {state === "error" && (
-          <div className="modal-body">
-            <p className="modal-error">{error}</p>
-            <button
-              className="modal-seal-btn"
-              style={{ marginTop: "1rem" }}
-              onClick={() => setState("confirm")}
-            >
-              Try Again
-            </button>
+          <div className="modal-error-body">
+            <div className="modal-error-glyph">🔥</div>
+            <h2 className="modal-error-title">The Seal Failed</h2>
+            <p className="modal-error-msg">{error}</p>
+            <div className="modal-actions">
+              <button className="modal-back-btn" onClick={onClose}>Leave</button>
+              <button className="modal-seal-btn" onClick={() => setState("confirm")}>
+                Try Again
+              </button>
+            </div>
           </div>
         )}
       </div>
