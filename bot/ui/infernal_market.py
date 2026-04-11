@@ -805,7 +805,7 @@ class InfernalMarketHub(discord.ui.View):
             name  = "\u200b",
             value = (
                 f"\n*This is a simulation only.*\n"
-                "*Use `/relics` to equip after purchase.*"
+                "*Use `/inventory` to equip after purchase.*"
             ),
             inline = False,
         )
@@ -937,7 +937,7 @@ class InfernalMarketHub(discord.ui.View):
             embed.add_field(name="\u200b", value=_SEP_SHORT, inline=False)
             embed.add_field(
                 name  = "\u200b",
-                value = "*You are marked.*\n*Use `/relics` to equip your acquisition.*",
+                value = "*You are marked.*\n*Use `/inventory` to manage your acquisition.*",
                 inline = False,
             )
             if img := _IMG.get("acquire"):
