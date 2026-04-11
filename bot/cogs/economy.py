@@ -117,6 +117,8 @@ class EconomyCog(commands.Cog):
     def ascension_announce(self):   return self.bot.ascension_announcement_service
     @property
     def ledger(self):               return getattr(self.bot, "ledger_service", None)
+    @property
+    def pressure(self):             return getattr(self.bot, "pressure_service", None)
 
     # ─── Command access check ──────────────────────────────────────────────────
 
@@ -154,6 +156,26 @@ class EconomyCog(commands.Cog):
         if user and user.get("is_frozen"):
             embed = discord.Embed(
                 description="*Cerberus has sealed your ledger.*",
+                color=0x0A0A0A,
+            )
+            embed.set_footer(text="Kingdom Treasury  ·  Kingdom of Hell")
+            await interaction.followup.send(embed=embed, ephemeral=True)
+            return True
+        return False
+
+    # ─── Sacrifice gate ────────────────────────────────────────────────────────
+
+    async def _check_sacrifice(self, interaction: discord.Interaction) -> bool:
+        """
+        Returns True (and sends denial) when the caller is under sacrifice penalty.
+        Must be called AFTER interaction.response.defer().
+        """
+        guild_id   = str(interaction.guild_id)
+        discord_id = str(interaction.user.id)
+        user = await self.db.get_user(guild_id, discord_id)
+        if user and user.get("sacrifice_active"):
+            embed = discord.Embed(
+                description="*You are under restriction. Settle your debt.*",
                 color=0x0A0A0A,
             )
             embed.set_footer(text="Kingdom Treasury  ·  Kingdom of Hell")
@@ -308,6 +330,17 @@ class EconomyCog(commands.Cog):
                     action_type     = "grind",
                 )
 
+            # ── Pressure: debt / sacrifice state machine ──────
+            if self.pressure and result.get("net", 0) != 0:
+                await self.pressure.after_balance_change(
+                    bot         = self.bot,
+                    guild_id    = guild_id,
+                    discord_id  = discord_id,
+                    username    = username,
+                    old_balance = result["new_balance"] - result["net"],
+                    new_balance = result["new_balance"],
+                )
+
         # ── Walk away callback ────────────────────────────────
 
         async def on_walk_away(inter: discord.Interaction):
@@ -393,6 +426,16 @@ class EconomyCog(commands.Cog):
                 action_type     = "grind",
             )
 
+        if self.pressure and result.get("net", 0) != 0:
+            await self.pressure.after_balance_change(
+                bot         = self.bot,
+                guild_id    = guild_id,
+                discord_id  = discord_id,
+                username    = username,
+                old_balance = result["new_balance"] - result["net"],
+                new_balance = result["new_balance"],
+            )
+
     # ─── /transfer ────────────────────────────────────────────
 
     @app_commands.command(name="transfer", description="Transfer DevilCoins to another soul.")
@@ -409,6 +452,19 @@ class EconomyCog(commands.Cog):
         if not await self._check_access(interaction, "transfer"):
             return
         if await self._check_frozen(interaction):
+            return
+        if await self._check_sacrifice(interaction):
+            return
+
+        # ── Recipient sacrifice gate ───────────────────────────────────────────
+        recipient_data = await self.db.get_user(guild_id, recipient_id)
+        if recipient_data and recipient_data.get("sacrifice_active"):
+            embed = discord.Embed(
+                description="*The target is under restriction. The Kingdom does not permit intervention.*",
+                color=0x0A0A0A,
+            )
+            embed.set_footer(text="Kingdom Treasury  ·  Kingdom of Hell")
+            await interaction.followup.send(embed=embed, ephemeral=True)
             return
 
         try:
@@ -466,6 +522,8 @@ class EconomyCog(commands.Cog):
         if not await check_routing(interaction, "ascend", self.config_service):
             return
         if await self._check_frozen(interaction):
+            return
+        if await self._check_sacrifice(interaction):
             return
 
         guild_id   = str(interaction.guild_id)

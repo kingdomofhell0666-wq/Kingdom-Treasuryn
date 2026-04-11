@@ -16,6 +16,7 @@ from .services.guild_sync_service import GuildSyncService
 from .services.cerberus_aggression import CerberusAggression
 from .services.mission_service import MissionService
 from .services.ledger_service import LedgerService
+from .services.pressure_service import PressureService
 
 logger = logging.getLogger("kingdom_treasury")
 
@@ -43,7 +44,8 @@ class KingdomTreasuryBot(commands.Bot):
         self.investment_service              = None
         self.cosmetic_service                = None
         self.mission_service                 = None
-        self.ledger_service: LedgerService   = None
+        self.ledger_service: LedgerService    = None
+        self.pressure_service: PressureService = None
 
     async def setup_hook(self):
         await self.db.connect()
@@ -77,6 +79,7 @@ class KingdomTreasuryBot(commands.Bot):
         self.cosmetic_service    = CosmeticService(self.db)
         self.mission_service     = MissionService(self.db)
         self.ledger_service      = LedgerService(self)   # must come after bot is usable
+        self.pressure_service    = PressureService()     # stateless — only needs bot.db at runtime
 
         # ── Cogs ─────────────────────────────────────────────────────────────
         from .cogs.economy     import EconomyCog
@@ -87,6 +90,7 @@ class KingdomTreasuryBot(commands.Bot):
         from .cogs.leaderboard import LeaderboardCog
         from .cogs.missions    import MissionsCog
         from .cogs.freeze      import FreezeCog
+        from .cogs.pressure    import PressureCog
 
         await self.add_cog(EconomyCog(self))
         await self.add_cog(ProfileCog(self))
@@ -96,6 +100,7 @@ class KingdomTreasuryBot(commands.Bot):
         await self.add_cog(LeaderboardCog(self))
         await self.add_cog(MissionsCog(self))
         await self.add_cog(FreezeCog(self))
+        await self.add_cog(PressureCog(self))
 
         await self.tree.sync()
         logger.info("Command tree synchronized.")

@@ -193,6 +193,18 @@ class InvestmentCog(commands.Cog):
                 action_type     = "grind",
             )
 
+        pressure = getattr(self.bot, "pressure_service", None)
+        if pressure and result.get("total_payout", 0) != 0:
+            old_bal = result["new_balance"] - result["total_payout"]
+            await pressure.after_balance_change(
+                bot         = self.bot,
+                guild_id    = guild_id,
+                discord_id  = discord_id,
+                username    = username,
+                old_balance = old_bal,
+                new_balance = result["new_balance"],
+            )
+
     # ─── /withdraw ─────────────────────────────────────────────────────────────
 
     @app_commands.command(name="withdraw", description="Withdraw all active investments early. A 20% penalty applies.")
@@ -246,4 +258,16 @@ class InvestmentCog(commands.Cog):
                 from_discord_id = discord_id,
                 wallet_after    = result["new_balance"],
                 action_type     = "grind",
+            )
+
+        pressure = getattr(self.bot, "pressure_service", None)
+        if pressure and result.get("total_payout", 0) != 0:
+            old_bal = result["new_balance"] - result["total_payout"]
+            await pressure.after_balance_change(
+                bot         = self.bot,
+                guild_id    = guild_id,
+                discord_id  = discord_id,
+                username    = username,
+                old_balance = old_bal,
+                new_balance = result["new_balance"],
             )

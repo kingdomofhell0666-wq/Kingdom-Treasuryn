@@ -91,6 +91,17 @@ class CosmeticsCog(commands.Cog):
 
         await self.db.upsert_user(guild_id, discord_id, username)
 
+        # ── Sacrifice gate: market access revoked while under penalty ─────────
+        user_row = await self.db.get_user(guild_id, discord_id)
+        if user_row and user_row.get("sacrifice_active"):
+            embed = discord.Embed(
+                description="*You are under restriction. Settle your debt.*",
+                color=0x0A0A0A,
+            )
+            embed.set_footer(text="Kingdom Treasury  ·  Kingdom of Hell")
+            await interaction.followup.send(embed=embed, ephemeral=True)
+            return
+
         # ── Direct purchase path ───────────────────────────────────────────────
         if buy:
             item = _resolve_item(buy)

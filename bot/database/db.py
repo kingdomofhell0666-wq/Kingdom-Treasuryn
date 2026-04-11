@@ -86,6 +86,9 @@ class Database:
             "ALTER TABLE users ADD COLUMN freeze_reason TEXT",
             "ALTER TABLE users ADD COLUMN frozen_by TEXT",
             "ALTER TABLE users ADD COLUMN frozen_at TEXT",
+            # Economy pressure system
+            "ALTER TABLE users ADD COLUMN sacrifice_active INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE users ADD COLUMN last_downgrade_at TEXT",
         ]
         for stmt in additive:
             try:
@@ -824,3 +827,51 @@ class Database:
         )
         await self._db.commit()
         logger.info(f"[DB] User {discord_id} unfrozen in guild {guild_id}")
+
+    # ── Pressure System ────────────────────────────────────────────────────────
+
+    async def get_all_users_for_guild(self, guild_id: str) -> List[dict]:
+        """Return every user row for the given guild (for tax collection)."""
+        async with self._db.execute(
+            "SELECT discord_id, username, balance, rank, sacrifice_active, last_downgrade_at "
+            "FROM users WHERE guild_id = ?",
+            (guild_id,),
+        ) as cur:
+            rows = await cur.fetchall()
+            return [dict(r) for r in rows]
+
+    async def get_sacrifice_users(self, guild_id: str) -> List[dict]:
+        """Return all users in the guild currently flagged as sacrifice_active=1."""
+        async with self._db.execute(
+            "SELECT discord_id, username, balance, rank, sacrifice_active, last_downgrade_at "
+            "FROM users WHERE guild_id = ? AND sacrifice_active = 1",
+            (guild_id,),
+        ) as cur:
+            rows = await cur.fetchall()
+            return [dict(r) for r in rows]
+
+    async def set_sacrifice_active(self, guild_id: str, discord_id: str, active: bool):
+        """Enable or disable sacrifice penalty for a user."""
+        val = 1 if active else 0
+        await self._db.execute(
+            "UPDATE users SET sacrifice_active = ? WHERE guild_id = ? AND discord_id = ?",
+            (val, guild_id, discord_id),
+        )
+        await self._db.commit()
+
+    async def set_last_downgrade_at(self, guild_id: str, discord_id: str, ts: str):
+        """Record the ISO-format UTC timestamp of the most recent rank downgrade."""
+        await self._db.execute(
+            "UPDATE users SET last_downgrade_at = ? WHERE guild_id = ? AND discord_id = ?",
+            (ts, guild_id, discord_id),
+        )
+        await self._db.commit()
+
+    async def set_rank(self, guild_id: str, discord_id: str, rank: str):
+        """Directly set a user's rank (used by the downgrade system)."""
+        await self._db.execute(
+            "UPDATE users SET rank = ? WHERE guild_id = ? AND discord_id = ?",
+            (rank, guild_id, discord_id),
+        )
+        await self._db.commit()
+        logger.info(f"[DB] Rank set for user {discord_id} in guild {guild_id}: {rank}")
