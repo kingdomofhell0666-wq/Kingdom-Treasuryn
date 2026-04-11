@@ -42,9 +42,8 @@ DEFAULT_CHANNEL_ROUTING: dict[str, str] = {
     "transfer":    "1491893908840648724",   # #💸┃transferts
     "ascend":      "1488240921572282368",   # #⛩️┃ascension
     # Market / cosmetics
-    "market":      "1290512527238631509",   # #⚓┃underworld-exchange
-    "equip-skin":  "1290512527238631509",   # #⚓┃underworld-exchange
-    "equip-title": "1290512527238631509",   # #⚓┃underworld-exchange
+    "market":      "1492396305782407238",   # #🛍️┃exchange
+    "relics":      "1492396305782407238",   # #🛍️┃exchange
     # Investments
     "invest":      "1491892584786825266",   # #🪙┃hell-bourse
     "portfolio":   "1491892584786825266",   # #🪙┃hell-bourse
