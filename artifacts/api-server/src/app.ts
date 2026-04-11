@@ -52,4 +52,11 @@ app.get("/dashboard/*splat", (_req, res) => {
   res.sendFile(path.join(dashboardDist, "index.html"));
 });
 
+// Serve the Kingdom Exchange SPA at /exchange/
+const exchangeDist = path.join(workspaceRoot, "artifacts", "exchange", "dist", "public");
+app.use("/exchange", express.static(exchangeDist));
+app.get("/exchange/*splat", (_req, res) => {
+  res.sendFile(path.join(exchangeDist, "index.html"));
+});
+
 export default app;

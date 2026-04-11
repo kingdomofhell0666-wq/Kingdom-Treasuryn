@@ -3,6 +3,7 @@ CosmeticsCog — /market, /relics
 """
 from __future__ import annotations
 
+import os
 import json
 from typing import Optional, List
 
@@ -22,6 +23,46 @@ from ..ui.infernal_market import InfernalMarketHub
 VOID_BLACK = 0x0A0A0A
 GOLD       = 0xFFD700
 
+_SEP = "━━━━━━━━━━━━━━━━━━━━━━━"
+
+
+def _get_exchange_url() -> str:
+    domains = os.environ.get("REPLIT_DOMAINS") or os.environ.get("REPLIT_DEV_DOMAIN") or "localhost:80"
+    primary = domains.split(",")[0].strip()
+    if "localhost" in primary:
+        return f"http://{primary}/exchange/"
+    return f"https://{primary}/exchange/"
+
+
+# ── Market entry view ─────────────────────────────────────────────────────────
+
+class MarketEntryView(discord.ui.View):
+    """Shown when a user types /market — links to the web Exchange."""
+
+    def __init__(self, exchange_url: str):
+        super().__init__(timeout=300)
+        self.add_item(discord.ui.Button(
+            label  = "Enter the Exchange",
+            style  = discord.ButtonStyle.link,
+            url    = exchange_url,
+            emoji  = "🩸",
+        ))
+
+    @discord.ui.button(label="Step back", style=discord.ButtonStyle.secondary, emoji="🚪")
+    async def step_back(self, interaction: discord.Interaction, _button: discord.ui.Button):
+        embed = discord.Embed(
+            description=(
+                f"{_SEP}\n\n"
+                "*You stepped back.*\n\n"
+                "*The threshold remains.*\n\n"
+                "*Return when you are ready.*\n\n"
+                f"{_SEP}"
+            ),
+            color=VOID_BLACK,
+        )
+        embed.set_footer(text="Kingdom Treasury  ·  Kingdom of Hell")
+        await interaction.response.edit_message(embed=embed, view=None)
+
 
 # ── Cog ────────────────────────────────────────────────────────────────────────
 
@@ -38,7 +79,7 @@ class CosmeticsCog(commands.Cog):
 
     @app_commands.command(
         name="market",
-        description="Enter the Infernal Market — browse and acquire cosmetics.",
+        description="Enter the Kingdom Exchange — the private cosmetics marketplace.",
     )
     async def market(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
@@ -55,10 +96,10 @@ class CosmeticsCog(commands.Cog):
         if user_row and user_row.get("sacrifice_active"):
             embed = discord.Embed(
                 description=(
-                    "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                    f"{_SEP}\n\n"
                     "*The gates are sealed.*\n\n"
                     "*Settle your debt before you may enter.*\n\n"
-                    "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                    f"{_SEP}"
                 ),
                 color=VOID_BLACK,
             )
@@ -66,35 +107,24 @@ class CosmeticsCog(commands.Cog):
             await interaction.followup.send(embed=embed, ephemeral=True)
             return
 
-        # Fetch full ownership state
-        owned_skins     = await self.cosmetics.get_owned_skins(guild_id, discord_id)
-        owned_titles    = await self.cosmetics.get_owned_titles(guild_id, discord_id)
-        owned_relics    = await self.cosmetics.get_owned_relics(guild_id, discord_id)
-        owned_badges    = await self.cosmetics.get_owned_badges_list(guild_id, discord_id)
-        equipped_skin   = await self.cosmetics.get_equipped_skin_id(guild_id, discord_id)
-        equipped_title  = await self.cosmetics.get_equipped_title(guild_id, discord_id)
-        equipped_relic  = await self.cosmetics.get_equipped_relic(guild_id, discord_id)
-        equipped_badges = await self.cosmetics.get_equipped_badges(guild_id, discord_id)
-        user_rank       = (user_row.get("rank") or "Forsaken") if user_row else "Forsaken"
+        exchange_url = _get_exchange_url()
 
-        hub = InfernalMarketHub(
-            owner_id        = interaction.user.id,
-            bot             = self.bot,
-            guild_id        = guild_id,
-            discord_id      = discord_id,
-            user_rank       = user_rank,
-            owned_skins     = owned_skins,
-            owned_titles    = owned_titles,
-            owned_relics    = owned_relics,
-            owned_badges    = owned_badges,
-            equipped_skin   = equipped_skin,
-            equipped_title  = equipped_title,
-            equipped_relic  = equipped_relic,
-            equipped_badges = equipped_badges,
+        embed = discord.Embed(
+            title="💀  Kingdom Exchange",
+            description=(
+                f"{_SEP}\n\n"
+                "*You stand before a threshold not meant for the weak.*\n\n"
+                "*Beyond this point… nothing is given.*\n\n"
+                "*Everything is taken.*\n\n"
+                "*The Kingdom does not guarantee your return unchanged.*\n\n"
+                f"{_SEP}"
+            ),
+            color=VOID_BLACK,
         )
-        await interaction.followup.send(
-            embed=hub.build_embed(), view=hub, ephemeral=True
-        )
+        embed.set_footer(text="Kingdom Treasury  ·  Kingdom of Hell")
+
+        view = MarketEntryView(exchange_url=exchange_url)
+        await interaction.followup.send(embed=embed, view=view, ephemeral=True)
 
     # ─── /relics ──────────────────────────────────────────────────────────────
 

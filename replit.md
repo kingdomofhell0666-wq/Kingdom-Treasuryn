@@ -57,7 +57,7 @@ main.py                  # Entry point
 | `/tribute` | Daily realm tribute (24h cooldown, +200 DC bonus for 5+ grinds) |
 | `/transfer @user amount` | Transfer DC with 2% treasury levy |
 | `/vault` | View total Kingdom Treasury reserves |
-| `/market` | Enter the Infernal Market hub — browse Relics/Titles/Skins/Badges with rank-lock + acquire flow |
+| `/market` | Enter the Kingdom Exchange — shows immersive embed with "Enter the Exchange" URL button linking to web marketplace |
 | `/relics` | Manage equipped Identity loadout (skin, title, relic, badges) via dropdown menus |
 | `/ascend <rank>` | Purchase next rank with 45s confirmation; 10% treasury, 90% burned |
 | `/blackmarket` | Browse 4 rotating forbidden items (6h rotation, risk-increasing) |

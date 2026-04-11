@@ -21,6 +21,13 @@ const router = Router();
 router.get("/auth/discord", (req, res) => {
   const state = crypto.randomBytes(16).toString("hex");
   req.session.oauthState = state;
+
+  // Store return destination (only allow relative paths starting with /)
+  const returnTo = req.query.returnTo as string | undefined;
+  if (returnTo && returnTo.startsWith("/")) {
+    req.session.returnTo = returnTo;
+  }
+
   const url = buildOAuthUrl(state);
   res.redirect(url);
 });
@@ -65,7 +72,15 @@ router.get("/auth/discord/callback", async (req, res) => {
     };
     req.session.accessToken = tokens.access_token;
 
-    res.redirect(`${dashboardBase}/guilds`);
+    // Redirect to stored returnTo (exchange, dashboard, etc.)
+    const returnTo = req.session.returnTo;
+    delete req.session.returnTo;
+
+    if (returnTo && returnTo.startsWith("/")) {
+      res.redirect(returnTo);
+    } else {
+      res.redirect(`${dashboardBase}/guilds`);
+    }
   } catch (err) {
     req.log.error({ err }, "OAuth exchange failed");
     res.redirect(`${dashboardBase}/?error=auth_failed`);

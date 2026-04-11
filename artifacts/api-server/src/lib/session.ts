@@ -15,6 +15,7 @@ declare module "express-session" {
     };
     accessToken?:  string;
     oauthState?:   string;
+    returnTo?:     string;
   }
 }
 
