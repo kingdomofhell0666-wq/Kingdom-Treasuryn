@@ -7,6 +7,7 @@ Zones: Header · Identity · Wealth · Stats · Audit · Footer
 import io
 import math
 import random as _random
+import urllib.request
 from typing import Optional, List, Tuple
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 
@@ -469,8 +470,42 @@ def _risk_bar(draw: ImageDraw.ImageDraw, risk: int, theme: dict, y: int):
 
 # ─── Main generator ───────────────────────────────────────────────────────────
 
+_COIN_EMOJI_URL   = "https://cdn.discordapp.com/emojis/1492184333392412692.png"
+_coin_icon_cache: dict = {}   # size (int) → Image.Image
+
+
+def _get_coin_icon(size: int) -> Optional[Image.Image]:
+    """Fetch the DevilCoin emoji PNG from Discord CDN and cache by size."""
+    if size in _coin_icon_cache:
+        return _coin_icon_cache[size]
+    try:
+        req = urllib.request.Request(_COIN_EMOJI_URL, headers={"User-Agent": "KingdomBot/1.0"})
+        with urllib.request.urlopen(req, timeout=4) as resp:
+            data = resp.read()
+        icon = Image.open(io.BytesIO(data)).convert("RGBA")
+        icon = icon.resize((size, size), Image.LANCZOS)
+        _coin_icon_cache[size] = icon
+        return icon
+    except Exception:
+        return None
+
+
+def _composite_coin(card: Image.Image, x: int, y: int, size: int,
+                    alpha: int = 240) -> None:
+    """Paste the DevilCoin icon onto the card at (x, y) with given pixel size."""
+    icon = _get_coin_icon(size)
+    if icon is None:
+        return
+    # Apply alpha multiplier so icon blends with card atmosphere
+    r, g, b, a = icon.split()
+    a = a.point(lambda v: int(v * alpha / 255))
+    icon_mod = Image.merge("RGBA", (r, g, b, a))
+    card.alpha_composite(icon_mod, dest=(int(x), int(y)))
+
+
 def _fmt_dc(n: int) -> str:
-    return f"{n:,} DC"
+    """Number string only — coin icon is stamped separately on the card."""
+    return f"{n:,}"
 
 
 def _apply_relic_effect(card: Image.Image, relic_id: Optional[str], theme: dict):
@@ -1010,15 +1045,22 @@ def generate_card(
     draw.text(((W - wlw) // 2, WEALTH_Y + 10), "WEALTH",
               font=wlf, fill=(*t["text2"][:3], 180))
 
-    bal_str = _fmt_dc(balance)
-    bal_font = _fit_font(draw, bal_str, W - 60, 92, 50, bold=True)
-    bal_w = _tw(draw, bal_str, bal_font)
-    bal_y = WEALTH_Y + 30
-    _glow(card, ((W - bal_w) // 2, bal_y), bal_str, bal_font,
+    bal_str  = _fmt_dc(balance)
+    bal_font = _fit_font(draw, bal_str, W - 140, 92, 50, bold=True)
+    bal_h    = getattr(bal_font, "size", 82)
+    _coin_sz = max(int(bal_h * 0.82), 28)
+    _coin_gap = 10
+    bal_w  = _tw(draw, bal_str, bal_font)
+    total_bal_w = bal_w + _coin_gap + _coin_sz
+    bal_x  = (W - total_bal_w) // 2
+    bal_y  = WEALTH_Y + 30
+    _glow(card, (bal_x, bal_y), bal_str, bal_font,
           (*t["gold"][:3], 255), t["glow"], blur=24, spread=6)
+    # Stamp coin icon vertically centred with the number baseline
+    _composite_coin(card, bal_x + bal_w + _coin_gap,
+                    bal_y + (bal_h - _coin_sz) // 2, _coin_sz)
     draw = ImageDraw.Draw(card)
 
-    bal_h = getattr(bal_font, "size", 82)
     accent_y = bal_y + bal_h + 14
     draw.line([(W // 5, accent_y), (2 * W // 5, accent_y)],
               fill=(*t["border"][:3], 60), width=1)
@@ -1042,17 +1084,26 @@ def generate_card(
 
     cols = [W // 6, W // 2, 5 * W // 6]
 
-    def _stat(cx_: int, label: str, value: str, large: bool = True):
+    def _stat(cx_: int, label: str, value: str, large: bool = True,
+              currency: bool = False):
         lw_ = _tw(draw, label, lbl_f)
         draw.text((cx_ - lw_ // 2, STATS_Y + 6), label,
                   font=lbl_f, fill=(*t["text2"][:3], 178))
-        vf = val_f if large else val_f2
-        vw_ = _tw(draw, value, vf)
-        _glow(card, (cx_ - vw_ // 2, STATS_Y + 26), value, vf,
+        vf   = val_f if large else val_f2
+        vf_h = getattr(vf, "size", 28)
+        csz  = max(int(vf_h * 0.82), 18)
+        cgap = 6
+        vw_  = _tw(draw, value, vf)
+        total_w = vw_ + (csz + cgap if currency else 0)
+        tx_ = cx_ - total_w // 2
+        _glow(card, (tx_, STATS_Y + 26), value, vf,
               (*t["accent"][:3], 232), t["glow"], blur=7, spread=2)
+        if currency:
+            _composite_coin(card, tx_ + vw_ + cgap,
+                            STATS_Y + 26 + (vf_h - csz) // 2, csz)
 
     _stat(cols[0], "KINGDOM RANK", f"#{kingdom_rank}")
-    _stat(cols[1], "TAXES FILED", _fmt_dc(taxes_paid))
+    _stat(cols[1], "TAXES FILED", _fmt_dc(taxes_paid), currency=True)
 
     # Risk Score stat — shows number + tier label in tier color
     rs_lbl_w = _tw(draw, "RISK SCORE", lbl_f)

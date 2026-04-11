@@ -163,7 +163,7 @@ class MissionCreateModal(discord.ui.Modal, title="📜  Kingdom Mission Decree")
         max_length  = 500,
     )
     reward = discord.ui.TextInput(
-        label       = "Reward  (DC amount)",
+        label       = "Reward  (DevilCoins amount)",
         placeholder = "e.g. 5000",
         required    = True,
         max_length  = 20,

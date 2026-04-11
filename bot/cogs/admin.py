@@ -14,6 +14,8 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+_DC = "<:devilcoinStack:1492184333392412692>"
+
 from ..utils.permissions import (
     is_admin_user,
     is_extended_staff,
@@ -194,7 +196,7 @@ class AdminCog(commands.Cog):
         await self.db.log_transaction(
             guild_id, "admin_set_dc",
             f"admin:{admin_id}", f"user:{discord_id}",
-            abs(delta), f"Admin ledger rewrite for {user.display_name} → {amount:,} DC",
+            abs(delta), f"Admin ledger rewrite for {user.display_name} → {amount:,} {_DC}",
         )
 
         embed = discord.Embed(

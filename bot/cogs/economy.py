@@ -19,6 +19,8 @@ from ..utils.card_generator import fetch_avatar
 from ..ui import AscendView, MineEntryView
 
 
+_DC = "<:devilcoinStack:1492184333392412692>"
+
 # ── Infernal Mines copy ────────────────────────────────────────────────────────
 
 _ASSETS     = os.path.join(os.path.dirname(__file__), "..", "assets")
@@ -713,7 +715,7 @@ class EconomyCog(commands.Cog):
         for name, cost, rate in self.rank_service.get_purchasable_ranks():
             if q in name.lower():
                 choices.append(app_commands.Choice(
-                    name  = f"{name} — {cost:,} DC  ({int(rate * 100)}% tax)",
+                    name  = f"{name} — {cost:,} {_DC}  ({int(rate * 100)}% tax)",
                     value = name,
                 ))
             if len(choices) >= 25:
