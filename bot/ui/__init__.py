@@ -4,6 +4,7 @@ from .identity_view import IdentityView
 from .ascend_confirm_view import AscendConfirmView
 from .mine_entry_view import MineEntryView
 from .mission_view import MissionView, build_mission_embed
+from .infernal_market import InfernalMarketHub
 
 __all__ = [
     "MarketView", "MarketItem",
@@ -13,4 +14,5 @@ __all__ = [
     "MineEntryView",
     "MissionView",
     "build_mission_embed",
+    "InfernalMarketHub",
 ]

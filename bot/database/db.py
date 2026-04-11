@@ -89,6 +89,10 @@ class Database:
             # Economy pressure system
             "ALTER TABLE users ADD COLUMN sacrifice_active INTEGER NOT NULL DEFAULT 0",
             "ALTER TABLE users ADD COLUMN last_downgrade_at TEXT",
+            # Infernal Market — relics + badge equipping
+            "ALTER TABLE users ADD COLUMN owned_relics TEXT NOT NULL DEFAULT '[]'",
+            "ALTER TABLE users ADD COLUMN equipped_relic TEXT DEFAULT ''",
+            "ALTER TABLE users ADD COLUMN equipped_badges TEXT NOT NULL DEFAULT '[]'",
         ]
         for stmt in additive:
             try:
@@ -626,6 +630,27 @@ class Database:
     async def set_owned_badges(self, guild_id: str, discord_id: str, badges_json: str):
         await self._db.execute(
             "UPDATE users SET owned_badges = ? WHERE guild_id = ? AND discord_id = ?",
+            (badges_json, guild_id, discord_id),
+        )
+        await self._db.commit()
+
+    async def set_owned_relics(self, guild_id: str, discord_id: str, relics_json: str):
+        await self._db.execute(
+            "UPDATE users SET owned_relics = ? WHERE guild_id = ? AND discord_id = ?",
+            (relics_json, guild_id, discord_id),
+        )
+        await self._db.commit()
+
+    async def set_equipped_relic(self, guild_id: str, discord_id: str, relic_id: str):
+        await self._db.execute(
+            "UPDATE users SET equipped_relic = ? WHERE guild_id = ? AND discord_id = ?",
+            (relic_id, guild_id, discord_id),
+        )
+        await self._db.commit()
+
+    async def set_equipped_badges(self, guild_id: str, discord_id: str, badges_json: str):
+        await self._db.execute(
+            "UPDATE users SET equipped_badges = ? WHERE guild_id = ? AND discord_id = ?",
             (badges_json, guild_id, discord_id),
         )
         await self._db.commit()

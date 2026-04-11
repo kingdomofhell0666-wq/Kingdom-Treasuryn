@@ -4,6 +4,7 @@ from ..database import Database
 from ..utils.skins import (
     get_skin, get_all_skins, SKINS, TITLES_CATALOG,
     DEFAULT_TITLE, DEFAULT_SKIN_ID,
+    RELICS_CATALOG, BADGES_CATALOG,
 )
 
 
@@ -106,3 +107,94 @@ class CosmeticService:
         if title.price_dc > 0 and title_name not in owned:
             raise ValueError(f"You do not own **{title_name}**. Purchase it first.")
         await self.db.set_equipped_title(guild_id, discord_id, title_name)
+
+    # ─── Relics ───────────────────────────────────────────────────────────────
+
+    async def get_owned_relics(self, guild_id: str, discord_id: str) -> List[str]:
+        user = await self._get_user(guild_id, discord_id)
+        return self._parse_owned(user.get("owned_relics", "[]"))
+
+    async def get_equipped_relic(self, guild_id: str, discord_id: str) -> str:
+        user = await self._get_user(guild_id, discord_id)
+        return user.get("equipped_relic") or ""
+
+    async def buy_relic(self, guild_id: str, discord_id: str, relic_id: str) -> Dict[str, Any]:
+        if relic_id not in RELICS_CATALOG:
+            raise ValueError(f"Unknown relic: **{relic_id}**.")
+        relic = RELICS_CATALOG[relic_id]
+        user  = await self._get_user(guild_id, discord_id)
+        owned = self._parse_owned(user.get("owned_relics", "[]"))
+        if relic_id in owned:
+            raise ValueError(f"You already own **{relic.name}**.")
+        if user["balance"] < relic.price_dc:
+            needed = relic.price_dc - user["balance"]
+            raise ValueError(f"Insufficient funds. You need **{needed:,}** <:devilcoinStack:1492184333392412692> more.")
+        owned.append(relic_id)
+        await self.db.update_balance(guild_id, discord_id, -relic.price_dc)
+        await self.db.set_owned_relics(guild_id, discord_id, json.dumps(owned))
+        await self.db.log_transaction(guild_id, "relic_purchase", f"user:{discord_id}", "void", relic.price_dc, f"Relic purchased: {relic_id}")
+        updated = await self.db.get_user(guild_id, discord_id)
+        return {"relic": relic, "cost": relic.price_dc, "new_balance": updated["balance"] if updated else 0}
+
+    async def equip_relic(self, guild_id: str, discord_id: str, relic_id: str) -> Dict[str, Any]:
+        if relic_id not in RELICS_CATALOG:
+            raise ValueError(f"Unknown relic: **{relic_id}**.")
+        user  = await self._get_user(guild_id, discord_id)
+        owned = self._parse_owned(user.get("owned_relics", "[]"))
+        if relic_id not in owned:
+            raise ValueError(f"You do not own **{RELICS_CATALOG[relic_id].name}**. Purchase it first.")
+        await self.db.set_equipped_relic(guild_id, discord_id, relic_id)
+        return {"relic": RELICS_CATALOG[relic_id]}
+
+    async def unequip_relic(self, guild_id: str, discord_id: str) -> None:
+        await self.db.set_equipped_relic(guild_id, discord_id, "")
+
+    # ─── Badges ───────────────────────────────────────────────────────────────
+
+    async def get_owned_badges_list(self, guild_id: str, discord_id: str) -> List[str]:
+        user = await self._get_user(guild_id, discord_id)
+        return self._parse_owned(user.get("owned_badges", "[]"))
+
+    async def get_equipped_badges(self, guild_id: str, discord_id: str) -> List[str]:
+        user = await self._get_user(guild_id, discord_id)
+        return self._parse_owned(user.get("equipped_badges", "[]"))
+
+    async def buy_badge(self, guild_id: str, discord_id: str, badge_id: str) -> Dict[str, Any]:
+        if badge_id not in BADGES_CATALOG:
+            raise ValueError(f"Unknown badge: **{badge_id}**.")
+        badge = BADGES_CATALOG[badge_id]
+        user  = await self._get_user(guild_id, discord_id)
+        owned = self._parse_owned(user.get("owned_badges", "[]"))
+        if badge_id in owned:
+            raise ValueError(f"You already own **{badge.name}**.")
+        if user["balance"] < badge.price_dc:
+            needed = badge.price_dc - user["balance"]
+            raise ValueError(f"Insufficient funds. You need **{needed:,}** <:devilcoinStack:1492184333392412692> more.")
+        owned.append(badge_id)
+        await self.db.update_balance(guild_id, discord_id, -badge.price_dc)
+        await self.db.set_owned_badges(guild_id, discord_id, json.dumps(owned))
+        await self.db.log_transaction(guild_id, "badge_purchase", f"user:{discord_id}", "void", badge.price_dc, f"Badge purchased: {badge_id}")
+        updated = await self.db.get_user(guild_id, discord_id)
+        return {"badge": badge, "cost": badge.price_dc, "new_balance": updated["balance"] if updated else 0}
+
+    async def equip_badge(self, guild_id: str, discord_id: str, badge_id: str) -> Dict[str, Any]:
+        if badge_id not in BADGES_CATALOG:
+            raise ValueError(f"Unknown badge: **{badge_id}**.")
+        user  = await self._get_user(guild_id, discord_id)
+        owned = self._parse_owned(user.get("owned_badges", "[]"))
+        if badge_id not in owned:
+            raise ValueError(f"You do not own **{BADGES_CATALOG[badge_id].name}**. Purchase it first.")
+        equipped = self._parse_owned(user.get("equipped_badges", "[]"))
+        if badge_id not in equipped:
+            if len(equipped) >= 3:
+                raise ValueError("You can equip at most **3 badges** at once. Unequip one first.")
+            equipped.append(badge_id)
+            await self.db.set_equipped_badges(guild_id, discord_id, json.dumps(equipped))
+        return {"badge": BADGES_CATALOG[badge_id]}
+
+    async def unequip_badge(self, guild_id: str, discord_id: str, badge_id: str) -> None:
+        user    = await self._get_user(guild_id, discord_id)
+        equipped = self._parse_owned(user.get("equipped_badges", "[]"))
+        if badge_id in equipped:
+            equipped.remove(badge_id)
+            await self.db.set_equipped_badges(guild_id, discord_id, json.dumps(equipped))

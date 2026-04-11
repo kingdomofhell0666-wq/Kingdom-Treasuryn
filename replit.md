@@ -28,13 +28,15 @@ bot/
 │   ├── blackmarket_service.py   # rotating 4/8 item black market
 │   └── investment_service.py    # safe/medium/risky time-locked investments
 ├── ui/                  # Discord Views
-│   ├── market_view.py           # paginated rank market
+│   ├── infernal_market.py       # AAA hub market (hub→category→acquire→preview)
+│   ├── market_view.py           # legacy paginated market (kept for compat)
 │   ├── identity_view.py         # identity card action buttons
 │   ├── ascend_confirm_view.py   # 2-button ascension confirmation
 │   └── blackmarket_view.py      # paginated buy interface
 ├── cogs/                # Command groups
 │   ├── economy.py       # /grind /tribute /transfer /vault /market /ascend
-│   ├── profile.py       # /identity /wealth
+│   ├── profile.py       # /identity /wealth (passes relic_id + badges to card)
+│   ├── cosmetics.py     # /market (InfernalMarketHub) + /relics (equip loadout)
 │   ├── investment.py    # /invest /portfolio /collect /withdraw
 │   └── blackmarket.py   # /blackmarket
 └── utils/               # Embeds + formatting
@@ -55,7 +57,8 @@ main.py                  # Entry point
 | `/tribute` | Daily realm tribute (24h cooldown, +200 DC bonus for 5+ grinds) |
 | `/transfer @user amount` | Transfer DC with 2% treasury levy |
 | `/vault` | View total Kingdom Treasury reserves |
-| `/market` | Browse all purchasable ranks with pagination |
+| `/market` | Enter the Infernal Market hub — browse Relics/Titles/Skins/Badges with rank-lock + acquire flow |
+| `/relics` | Manage equipped Identity loadout (skin, title, relic, badges) via dropdown menus |
 | `/ascend <rank>` | Purchase next rank with 45s confirmation; 10% treasury, 90% burned |
 | `/blackmarket` | Browse 4 rotating forbidden items (6h rotation, risk-increasing) |
 | `/invest safe/medium/risky amount` | Time-locked investments with variable returns |

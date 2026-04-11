@@ -8,7 +8,7 @@ from ..services.cosmetic_service import CosmeticService
 from ..utils.embeds import EmbedFactory
 from ..utils.card_generator import generate_card, fetch_avatar
 from ..utils.result_cards import generate_wealth_card
-from ..utils.skins import get_skin
+from ..utils.skins import get_skin, BADGES_CATALOG
 from ..utils.identity_variant import resolve_identity_card_variant
 from ..utils.routing import check_routing
 from ..ui import IdentityView
@@ -42,9 +42,16 @@ class ProfileCog(commands.Cog):
         user_data    = await self.db.upsert_user(guild_id, discord_id, username)
         kingdom_rank = await self.audit.get_kingdom_rank(guild_id, discord_id)
 
-        skin_id        = user_data.get("equipped_skin") or "default"
-        skin           = get_skin(skin_id)
-        equipped_title = user_data.get("equipped_title") or "Unmarked"
+        skin_id         = user_data.get("equipped_skin") or "default"
+        skin            = get_skin(skin_id)
+        equipped_title  = user_data.get("equipped_title") or "Unmarked"
+        equipped_relic  = user_data.get("equipped_relic") or ""
+        equipped_badges = []
+        try:
+            import json as _json
+            equipped_badges = _json.loads(user_data.get("equipped_badges") or "[]")
+        except Exception:
+            equipped_badges = []
 
         public_rank = user_data.get("rank", "Forsaken")
         member_role_ids = [str(r.id) for r in target.roles]
@@ -81,10 +88,20 @@ class ProfileCog(commands.Cog):
                 footer_flavor=skin.footer_flavor.strip('"'),
                 audit_state=audit_state,
                 card_variant=card_variant,
+                relic_id=equipped_relic,
             )
             card_file = discord.File(card_buf, filename="identity.png")
             embed     = discord.Embed(color=skin.color)
             embed.set_image(url="attachment://identity.png")
+            # Show active badges as icons in embed
+            if equipped_badges:
+                badge_icons = " ".join(
+                    BADGES_CATALOG[b].icon
+                    for b in equipped_badges[:3]
+                    if b in BADGES_CATALOG
+                )
+                if badge_icons:
+                    embed.add_field(name="Badges", value=badge_icons, inline=True)
             if not is_own_card:
                 embed.set_footer(text=f"Identity of {username}  ·  Kingdom Treasury")
             view = IdentityView(is_own_card=is_own_card)

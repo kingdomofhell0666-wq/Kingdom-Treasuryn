@@ -292,3 +292,157 @@ DEFAULT_TITLE = "Unmarked"
 
 # Flat list for backward-compat choice lists
 TITLES: List[str] = list(TITLES_CATALOG.keys())
+
+
+# ─── Rank Order ───────────────────────────────────────────────────────────────
+
+RANK_ORDER: Dict[str, int] = {
+    "Forsaken": 0, "Vermin": 1, "Corrupted": 2, "Folklore": 3, "Mythology": 4,
+    "Demonology": 5, "Eschatology": 6, "Archangel": 7, "Archdemon": 8,
+    "Knight": 9, "Baron": 10, "Viscount": 11, "Count": 12, "Marquis": 13, "Duke": 14,
+    "Chancellor": 15,
+}
+
+
+def rank_idx(rank: str) -> int:
+    return RANK_ORDER.get(rank, 0)
+
+
+# ─── Relic ────────────────────────────────────────────────────────────────────
+
+@dataclass(frozen=True)
+class Relic:
+    id:          str
+    name:        str
+    description: str
+    effect_desc: str
+    price_dc:    int
+    rarity:      str
+    min_rank:    str   # "" = all ranks
+
+
+RELICS_CATALOG: Dict[str, Relic] = {
+    "soul_aura": Relic(
+        id="soul_aura",
+        name="Soul Aura",
+        description="A pale luminescence extends beyond the card's edge. It watches.",
+        effect_desc="A pale luminescence surrounds your presence. The air grows cold where you stand.",
+        price_dc=35_000,
+        rarity="Uncommon",
+        min_rank="",
+    ),
+    "infernal_crown": Relic(
+        id="infernal_crown",
+        name="Infernal Crown",
+        description="A crown of pure sin floats above. It is not worn. It hovers.",
+        effect_desc="A crown of burning obsidian hovers above your form. It does not touch you. It does not need to.",
+        price_dc=80_000,
+        rarity="Rare",
+        min_rank="Demonology",
+    ),
+    "void_drift": Relic(
+        id="void_drift",
+        name="Void Drift",
+        description="The void leaks through the card. Particles of nothing orbit your presence.",
+        effect_desc="Fragments of the void drift around you like dark snow. They do not fall. They orbit.",
+        price_dc=120_000,
+        rarity="Rare",
+        min_rank="Eschatology",
+    ),
+    "crimson_chains": Relic(
+        id="crimson_chains",
+        name="Crimson Chains",
+        description="Chains of blood-red energy bind the border. They are not locked. They choose to hold.",
+        effect_desc="Blood-forged chains orbit the edges of your identity. They are decorative. They are also real.",
+        price_dc=200_000,
+        rarity="Epic",
+        min_rank="Archangel",
+    ),
+    "abyssal_veil": Relic(
+        id="abyssal_veil",
+        name="Abyssal Veil",
+        description="A translucent shroud of darkness descends. Even the card seems afraid.",
+        effect_desc="A shroud of the deep abyss falls across your form. The darkness does not conceal you. It announces you.",
+        price_dc=300_000,
+        rarity="Epic",
+        min_rank="Archdemon",
+    ),
+    "sanguine_halo": Relic(
+        id="sanguine_halo",
+        name="Sanguine Halo",
+        description="Above all others. The halo does not bless. It marks a debt.",
+        effect_desc="A halo of deep crimson and gold crowns your silhouette. It is not a reward. It is a warning.",
+        price_dc=500_000,
+        rarity="Legendary",
+        min_rank="Knight",
+    ),
+}
+
+
+def get_relic(relic_id: Optional[str]) -> Optional[Relic]:
+    if not relic_id:
+        return None
+    return RELICS_CATALOG.get(relic_id)
+
+
+# ─── Badge ────────────────────────────────────────────────────────────────────
+
+@dataclass(frozen=True)
+class Badge:
+    id:          str
+    name:        str
+    description: str
+    price_dc:    int
+    rarity:      str
+    icon:        str   # emoji displayed on identity
+    min_rank:    str   # "" = all ranks
+
+
+BADGES_CATALOG: Dict[str, Badge] = {
+    "haunted": Badge(
+        id="haunted", name="Haunted",
+        description="Something follows this soul everywhere it goes. No one else can see it.",
+        price_dc=5_000, rarity="Common", icon="🕯️", min_rank="",
+    ),
+    "void_sworn": Badge(
+        id="void_sworn", name="Void Sworn",
+        description="An oath was made to the void. The void did not forget.",
+        price_dc=10_000, rarity="Common", icon="🌑", min_rank="",
+    ),
+    "bloodpact": Badge(
+        id="bloodpact", name="Bloodpact",
+        description="Sealed in something older than ink. The pact holds both ways.",
+        price_dc=15_000, rarity="Uncommon", icon="🩸", min_rank="Corrupted",
+    ),
+    "infernal_mark": Badge(
+        id="infernal_mark", name="Infernal Mark",
+        description="The Kingdom burned its seal into their record. It does not fade.",
+        price_dc=25_000, rarity="Uncommon", icon="🔥", min_rank="Folklore",
+    ),
+    "wraith_touched": Badge(
+        id="wraith_touched", name="Wraith-Touched",
+        description="Something from the other side reached through. Left a mark. Then retreated.",
+        price_dc=40_000, rarity="Rare", icon="👁️", min_rank="Mythology",
+    ),
+    "cerberus_marked": Badge(
+        id="cerberus_marked", name="Cerberus Marked",
+        description="The three-headed guardian looked directly at this soul. And nodded.",
+        price_dc=60_000, rarity="Rare", icon="🐺", min_rank="Demonology",
+    ),
+    "throne_carved": Badge(
+        id="throne_carved", name="Throne Carved",
+        description="Their name was cut directly into the Black Throne. Not as an honor. As a record.",
+        price_dc=100_000, rarity="Epic", icon="⛓️", min_rank="Archangel",
+    ),
+    "kingdom_ascendant": Badge(
+        id="kingdom_ascendant", name="Kingdom Ascendant",
+        description="They have risen so far, the Kingdom itself took note. The Abyss watches.",
+        price_dc=200_000, rarity="Legendary", icon="👑", min_rank="Knight",
+    ),
+}
+
+
+def get_badge(badge_id: Optional[str]) -> Optional[Badge]:
+    if not badge_id:
+        return None
+    return BADGES_CATALOG.get(badge_id)

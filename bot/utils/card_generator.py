@@ -6,6 +6,7 @@ Zones: Header · Identity · Wealth · Stats · Audit · Footer
 
 import io
 import math
+import random as _random
 from typing import Optional, List, Tuple
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 
@@ -471,6 +472,151 @@ def _fmt_dc(n: int) -> str:
     return f"{n:,} DC"
 
 
+def _apply_relic_effect(card: Image.Image, relic_id: Optional[str], theme: dict):
+    """Overlay a relic's visual effect onto the identity card (RGBA, 900×1100)."""
+    if not relic_id:
+        return
+
+    # ── soul_aura — glowing luminescent border ─────────────────────────────
+    if relic_id == "soul_aura":
+        layer = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+        d     = ImageDraw.Draw(layer)
+        gc    = (*theme["glow"][:3], 60)
+        for offset in range(1, 8):
+            d.rounded_rectangle(
+                [(offset, offset), (W - 1 - offset, H - 1 - offset)],
+                radius=RADIUS, outline=gc, width=1,
+            )
+        layer = layer.filter(ImageFilter.GaussianBlur(4))
+        card.alpha_composite(layer)
+        # Sharp bright outer ring
+        d2 = ImageDraw.Draw(card)
+        d2.rounded_rectangle(
+            [(2, 2), (W - 3, H - 3)],
+            radius=RADIUS, outline=(*theme["accent"][:3], 140), width=2,
+        )
+        d2.rounded_rectangle(
+            [(6, 6), (W - 7, H - 7)],
+            radius=RADIUS - 3, outline=(*theme["accent"][:3], 50), width=1,
+        )
+
+    # ── infernal_crown — gold crown above avatar ───────────────────────────
+    elif relic_id == "infernal_crown":
+        cx  = AV_X + AV_SZ // 2
+        cy  = AV_Y + 2
+        gold = theme["gold"][:3]
+
+        # Glow layer
+        layer = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+        d     = ImageDraw.Draw(layer)
+        for spike_x, tip_y in [(cx - 24, cy - 26), (cx, cy - 38), (cx + 24, cy - 26)]:
+            d.polygon(
+                [(spike_x - 10, cy - 6), (spike_x + 10, cy - 6), (spike_x, tip_y)],
+                fill=(*gold, 90),
+            )
+        d.rectangle([(cx - 42, cy - 9), (cx + 42, cy - 1)], fill=(*gold, 90))
+        layer = layer.filter(ImageFilter.GaussianBlur(5))
+        card.alpha_composite(layer)
+
+        # Sharp crown
+        d2 = ImageDraw.Draw(card)
+        for spike_x, tip_y in [(cx - 24, cy - 26), (cx, cy - 38), (cx + 24, cy - 26)]:
+            d2.polygon(
+                [(spike_x - 10, cy - 6), (spike_x + 10, cy - 6), (spike_x, tip_y)],
+                fill=(*gold, 210),
+            )
+        d2.rectangle([(cx - 42, cy - 9), (cx + 42, cy - 1)], fill=(*gold, 200))
+        # Gem dots on crown tips
+        for gx, gy in [(cx - 24, cy - 26), (cx, cy - 38), (cx + 24, cy - 26)]:
+            d2.ellipse([(gx - 3, gy - 3), (gx + 3, gy + 3)],
+                       fill=(*theme["accent"][:3], 230))
+
+    # ── void_drift — scattered void particles ─────────────────────────────
+    elif relic_id == "void_drift":
+        # Deterministic particle positions based on fixed seeds
+        layer = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+        d     = ImageDraw.Draw(layer)
+        vc    = (88, 42, 180)  # void purple
+        rng   = _random.Random(42)
+        for _ in range(22):
+            px   = rng.randint(PAD + 10, W - PAD - 10)
+            py   = rng.randint(HEADER_H + 10, H - 60)
+            r    = rng.randint(1, 4)
+            alpha= rng.randint(80, 200)
+            d.ellipse([(px - r, py - r), (px + r, py + r)], fill=(*vc, alpha))
+        # Some larger faint orbs
+        for _ in range(6):
+            px   = rng.randint(PAD + 20, W - PAD - 20)
+            py   = rng.randint(100, H - 100)
+            r    = rng.randint(5, 10)
+            d.ellipse([(px - r, py - r), (px + r, py + r)], fill=(*vc, 35))
+        layer = layer.filter(ImageFilter.GaussianBlur(1))
+        card.alpha_composite(layer)
+
+    # ── crimson_chains — chain links along left/right borders ─────────────
+    elif relic_id == "crimson_chains":
+        layer = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+        d     = ImageDraw.Draw(layer)
+        cc    = (185, 0, 0)
+        # Left edge chain
+        for y in range(60, H - 60, 32):
+            d.ellipse([(PAD, y), (PAD + 16, y + 20)],   outline=(*cc, 180), width=2)
+            d.ellipse([(PAD + 4, y + 14), (PAD + 20, y + 34)], outline=(*cc, 140), width=2)
+        # Right edge chain
+        for y in range(60, H - 60, 32):
+            d.ellipse([(W - PAD - 16, y), (W - PAD, y + 20)],     outline=(*cc, 180), width=2)
+            d.ellipse([(W - PAD - 20, y + 14), (W - PAD - 4, y + 34)], outline=(*cc, 140), width=2)
+        layer = layer.filter(ImageFilter.GaussianBlur(0.8))
+        card.alpha_composite(layer)
+
+    # ── abyssal_veil — diagonal dark translucent bands ────────────────────
+    elif relic_id == "abyssal_veil":
+        layer = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+        d     = ImageDraw.Draw(layer)
+        for i, (y_off, alpha) in enumerate([(100, 28), (350, 20), (650, 24), (900, 18)]):
+            offset = 180
+            d.polygon(
+                [
+                    (0, y_off), (W, y_off - offset),
+                    (W, y_off - offset + 70), (0, y_off + 70),
+                ],
+                fill=(0, 0, 0, alpha),
+            )
+        layer = layer.filter(ImageFilter.GaussianBlur(12))
+        card.alpha_composite(layer)
+
+    # ── sanguine_halo — crimson/gold arc above avatar ─────────────────────
+    elif relic_id == "sanguine_halo":
+        cx = AV_X + AV_SZ // 2
+        cy = AV_Y + 8
+
+        # Glow halo
+        layer = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+        d     = ImageDraw.Draw(layer)
+        gold  = theme["gold"][:3]
+        acc   = theme["accent"][:3]
+        rx, ry = 60, 18
+        for expand in range(0, 10, 2):
+            d.arc(
+                [(cx - rx - expand, cy - ry - 30 - expand),
+                 (cx + rx + expand, cy - ry - 30 + ry * 2 + expand)],
+                start=200, end=340, fill=(*gold, max(0, 80 - expand * 8)), width=2,
+            )
+        layer = layer.filter(ImageFilter.GaussianBlur(4))
+        card.alpha_composite(layer)
+
+        # Sharp halo arc
+        d2 = ImageDraw.Draw(card)
+        d2.arc(
+            [(cx - rx, cy - ry - 30), (cx + rx, cy - ry - 30 + ry * 2)],
+            start=200, end=340, fill=(*gold, 220), width=3,
+        )
+        d2.arc(
+            [(cx - rx + 3, cy - ry - 27), (cx + rx - 3, cy - ry - 27 + ry * 2 - 6)],
+            start=205, end=335, fill=(*acc, 100), width=1,
+        )
+
+
 def generate_card(
     username: str,
     display_name: str,
@@ -485,6 +631,7 @@ def generate_card(
     footer_flavor: str,
     audit_state: str = "neutral",
     card_variant: Optional[EffectiveCardVariant] = None,
+    relic_id: Optional[str] = None,
 ) -> io.BytesIO:
 
     t    = _t(skin_id)
@@ -859,6 +1006,9 @@ def generate_card(
     sw_w = _tw(draw, skin_wm, wm_f)
     draw.text((W - PAD - sw_w, FOOTER_Y + 44), skin_wm,
               font=wm_f, fill=(*t["text2"][:3], 70))
+
+    # ── Relic effect overlay ─────────────────────────────────────────────────
+    _apply_relic_effect(card, relic_id, t)
 
     # ── Apply rounded clip mask ──────────────────────────────────────────────
     card.putalpha(_card_mask(W, H, RADIUS))
