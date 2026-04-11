@@ -209,12 +209,21 @@ _ITEM_LORE: Dict[str, str] = {
     "kingdom_ascendant": "The Kingdom itself took note. The Abyss watches.",
 }
 
+def _item_key(item) -> str:
+    """
+    Stable lookup key for any market item type.
+    Relics, Skins, Badges all have an `.id` field.
+    Titles do NOT — they use `.name` as the DB key (the TITLES_CATALOG dict key).
+    Using getattr fallback keeps this safe and consistent for all types.
+    """
+    return getattr(item, "id", None) or getattr(item, "name", "")
+
 def _item_lore(item) -> str:
-    key = getattr(item, "id", None) or getattr(item, "name", "")
+    key = _item_key(item)
     return _ITEM_LORE.get(key, "")
 
 def _item_image(item, cat: str) -> Optional[str]:
-    key = getattr(item, "id", None) or ""
+    key = _item_key(item)
     url = _ITEM_IMG.get(key)
     if url:
         return url
@@ -342,17 +351,19 @@ class InfernalMarketHub(discord.ui.View):
         return items[min(self._item_idx, len(items) - 1)]
 
     def _is_owned(self, item) -> bool:
-        if self._cat == "skins":   return item.id in self._owned_skins or item.price_dc == 0
-        if self._cat == "titles":  return item.id in self._owned_titles
-        if self._cat == "relics":  return item.id in self._owned_relics
-        if self._cat == "badges":  return item.id in self._owned_badges
+        key = _item_key(item)
+        if self._cat == "skins":   return key in self._owned_skins or item.price_dc == 0
+        if self._cat == "titles":  return key in self._owned_titles
+        if self._cat == "relics":  return key in self._owned_relics
+        if self._cat == "badges":  return key in self._owned_badges
         return False
 
     def _is_equipped(self, item) -> bool:
-        if self._cat == "skins":   return item.id == self._eq_skin
-        if self._cat == "titles":  return item.id == self._eq_title
-        if self._cat == "relics":  return item.id == self._eq_relic
-        if self._cat == "badges":  return item.id in self._eq_badges
+        key = _item_key(item)
+        if self._cat == "skins":   return key == self._eq_skin
+        if self._cat == "titles":  return key == self._eq_title
+        if self._cat == "relics":  return key == self._eq_relic
+        if self._cat == "badges":  return key in self._eq_badges
         return False
 
     def _is_locked(self, item) -> bool:
@@ -734,14 +745,15 @@ class InfernalMarketHub(discord.ui.View):
         preview_badges = list(self._eq_badges)
 
         if item:
+            key = _item_key(item)
             if self._cat == "skins":
-                preview_skin  = item.id
+                preview_skin  = key
             elif self._cat == "titles":
-                preview_title = item.id
+                preview_title = key
             elif self._cat == "relics":
-                preview_relic = item.id
-            elif self._cat == "badges" and item.id not in preview_badges:
-                preview_badges.append(item.id)
+                preview_relic = key
+            elif self._cat == "badges" and key not in preview_badges:
+                preview_badges.append(key)
 
         skin_obj   = SKINS.get(preview_skin, SKINS.get("default"))
         skin_name  = skin_obj.name if skin_obj else "Infernal Standard"
@@ -944,6 +956,31 @@ class InfernalMarketHub(discord.ui.View):
         embed.set_footer(text="Kingdom Treasury  ·  Kingdom of Hell")
         return embed
 
+    # ── Central safe-edit helper ──────────────────────────────────────────────
+
+    async def _safe_edit(self, interaction: discord.Interaction):
+        """Rebuild view + embed and edit the message. Always acknowledges."""
+        try:
+            self._rebuild()
+            await interaction.response.edit_message(
+                embed=self.build_embed(), view=self
+            )
+        except Exception:
+            log.exception(
+                "Market view error [mode=%s cat=%s]", self._mode, self._cat
+            )
+            # Make sure Discord always gets an acknowledgement so it doesn't
+            # show "Interaction Failed" — send a quiet ephemeral error note.
+            try:
+                if not interaction.response.is_done():
+                    await interaction.response.defer(ephemeral=True)
+                await interaction.followup.send(
+                    "*An internal error occurred. Please try `/market` again.*",
+                    ephemeral=True,
+                )
+            except Exception:
+                pass
+
     # ── Callbacks ─────────────────────────────────────────────────────────────
 
     def _hub_cb(self, cat: str):
@@ -953,48 +990,40 @@ class InfernalMarketHub(discord.ui.View):
             self._cat      = cat
             self._item_idx = 0
             self._mode     = self.MODE_CATEGORY
-            self._rebuild()
-            await interaction.response.edit_message(
-                embed=self.build_embed(), view=self
-            )
+            await self._safe_edit(interaction)
         return cb
 
     async def _prev_cb(self, interaction: discord.Interaction):
         if not await self._guard(interaction):
             return
         self._item_idx = max(0, self._item_idx - 1)
-        self._rebuild()
-        await interaction.response.edit_message(embed=self.build_embed(), view=self)
+        await self._safe_edit(interaction)
 
     async def _next_cb(self, interaction: discord.Interaction):
         if not await self._guard(interaction):
             return
         items = self._items()
         self._item_idx = min(len(items) - 1, self._item_idx + 1)
-        self._rebuild()
-        await interaction.response.edit_message(embed=self.build_embed(), view=self)
+        await self._safe_edit(interaction)
 
     async def _back_to_hub_cb(self, interaction: discord.Interaction):
         if not await self._guard(interaction):
             return
         self._mode = self.MODE_HUB
         self._cat  = None
-        self._rebuild()
-        await interaction.response.edit_message(embed=self.build_embed(), view=self)
+        await self._safe_edit(interaction)
 
     async def _back_to_cat_cb(self, interaction: discord.Interaction):
         if not await self._guard(interaction):
             return
         self._mode = self.MODE_CATEGORY
-        self._rebuild()
-        await interaction.response.edit_message(embed=self.build_embed(), view=self)
+        await self._safe_edit(interaction)
 
     async def _preview_cb(self, interaction: discord.Interaction):
         if not await self._guard(interaction):
             return
         self._mode = self.MODE_PREVIEW
-        self._rebuild()
-        await interaction.response.edit_message(embed=self.build_embed(), view=self)
+        await self._safe_edit(interaction)
 
     async def _acquire_cb(self, interaction: discord.Interaction):
         """Route to confirmation screen."""
@@ -1007,8 +1036,7 @@ class InfernalMarketHub(discord.ui.View):
             )
             return
         self._mode = self.MODE_CONFIRM
-        self._rebuild()
-        await interaction.response.edit_message(embed=self.build_embed(), view=self)
+        await self._safe_edit(interaction)
 
     async def _continue_cb(self, interaction: discord.Interaction):
         if not await self._guard(interaction):
@@ -1016,8 +1044,7 @@ class InfernalMarketHub(discord.ui.View):
         self._mode        = self.MODE_CATEGORY
         self._result_ok   = False
         self._result_item = None
-        self._rebuild()
-        await interaction.response.edit_message(embed=self.build_embed(), view=self)
+        await self._safe_edit(interaction)
 
     async def _leave_cb(self, interaction: discord.Interaction):
         if not await self._guard(interaction):
@@ -1085,20 +1112,21 @@ class InfernalMarketHub(discord.ui.View):
                     "Access denied. Your debt bars you from the market. Settle it first."
                 )
 
-            svc = self.bot.cosmetic_service
+            svc     = self.bot.cosmetic_service
+            item_id = _item_key(item)
 
             if self._cat == "skins":
-                result = await svc.buy_skin(self.guild_id, self.discord_id, item.id)
-                self._owned_skins.add(item.id)
+                result = await svc.buy_skin(self.guild_id, self.discord_id, item_id)
+                self._owned_skins.add(item_id)
             elif self._cat == "titles":
-                result = await svc.buy_title(self.guild_id, self.discord_id, item.id)
-                self._owned_titles.add(item.id)
+                result = await svc.buy_title(self.guild_id, self.discord_id, item_id)
+                self._owned_titles.add(item_id)
             elif self._cat == "relics":
-                result = await svc.buy_relic(self.guild_id, self.discord_id, item.id)
-                self._owned_relics.add(item.id)
+                result = await svc.buy_relic(self.guild_id, self.discord_id, item_id)
+                self._owned_relics.add(item_id)
             elif self._cat == "badges":
-                result = await svc.buy_badge(self.guild_id, self.discord_id, item.id)
-                self._owned_badges.add(item.id)
+                result = await svc.buy_badge(self.guild_id, self.discord_id, item_id)
+                self._owned_badges.add(item_id)
             else:
                 raise ValueError("Unknown item category.")
 

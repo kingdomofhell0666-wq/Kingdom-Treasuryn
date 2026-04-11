@@ -43,7 +43,12 @@ class CosmeticsCog(commands.Cog):
         description="Enter the Kingdom Exchange — the private cosmetics marketplace.",
     )
     async def market(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True)
+        try:
+            await interaction.response.defer(ephemeral=True)
+        except discord.NotFound:
+            # Interaction already expired (stale event after bot restart).
+            # Nothing to do — Discord showed "interaction failed" on their end.
+            return
 
         if not await check_routing(interaction, "market", getattr(self.bot, "config_service", None)):
             return
