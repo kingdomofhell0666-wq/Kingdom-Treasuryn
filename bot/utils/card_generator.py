@@ -1040,9 +1040,20 @@ def generate_card(
     badges_list  = list(equipped_badges or [])
     dn           = display_name or username
 
+    # ── Classification: prefer variant's group label, fall back to _CLASS ──
+    if card_variant and hasattr(card_variant, "classification") and card_variant.classification:
+        classification = card_variant.classification
+    else:
+        classification = _CLASS[min(rank_level, len(_CLASS) - 1)]
+
+    # ── Kingdom rank eligibility ─────────────────────────────────────────────
+    # Non-eligible hierarchy groups (Staff, Council, Royal, Owner) show EXEMPT.
+    kr_eligible = True
+    if card_variant and hasattr(card_variant, "kingdom_rank_eligible"):
+        kr_eligible = card_variant.kingdom_rank_eligible
+
     # Persistent infernal ID (hash of username — deterministic)
-    card_id      = f"KH-{abs(hash(username)) % 900000 + 100000:06d}"
-    classification = _CLASS[min(rank_level, len(_CLASS) - 1)]
+    card_id = f"KH-{abs(hash(username)) % 900000 + 100000:06d}"
 
     # ── Canvas ──────────────────────────────────────────────────────────────
     card = _gradient(W, H, t["bg1"], t["bg2"])
@@ -1277,7 +1288,14 @@ def generate_card(
             _composite_coin(card, tx_ + vw_ + 5,
                             fy + 12 + (vfh_ - csz_) // 2, csz_)
 
-    _stat_cell(sc_left,  "KINGDOM  RANK", f"#{kingdom_rank}", king_=is_kingdom1)
+    # Kingdom rank cell — exempt groups show official status instead of a number
+    if kr_eligible:
+        kr_display = f"#{kingdom_rank}"
+        kr_king    = is_kingdom1
+    else:
+        kr_display = "EXEMPT"
+        kr_king    = False
+    _stat_cell(sc_left,  "KINGDOM  RANK", kr_display, king_=kr_king)
     _stat_cell(sc_right, "TAXES  PAID",   _fmt_dc(taxes_paid), currency_=True)
     draw = ImageDraw.Draw(card)
 

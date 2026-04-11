@@ -8,7 +8,7 @@ from ..services.cosmetic_service import CosmeticService
 from ..utils.embeds import EmbedFactory
 from ..utils.card_generator import generate_card, fetch_avatar
 from ..utils.result_cards import generate_wealth_card
-from ..utils.skins import get_skin
+from ..utils.skins import get_skin, detect_rank_from_roles
 from ..utils.identity_variant import resolve_identity_card_variant
 from ..utils.routing import check_routing
 
@@ -18,11 +18,11 @@ class ProfileCog(commands.Cog):
         self.bot = bot
 
     @property
-    def db(self):              return self.bot.db
+    def db(self):           return self.bot.db
     @property
-    def audit(self):           return self.bot.audit_service
+    def audit(self):        return self.bot.audit_service
     @property
-    def cosmetics(self):       return self.bot.cosmetic_service
+    def cosmetics(self):    return self.bot.cosmetic_service
 
     @app_commands.command(name="identity", description="View your Kingdom Identity Card, or inspect another soul's.")
     @app_commands.describe(user="The soul whose identity you wish to inspect.")
@@ -32,19 +32,34 @@ class ProfileCog(commands.Cog):
         if not await check_routing(interaction, "identity", getattr(self.bot, "config_service", None)):
             return
 
-        guild_id     = str(interaction.guild_id)
-        target       = user or interaction.user
-        is_own_card  = target.id == interaction.user.id
-        discord_id   = str(target.id)
-        username     = target.display_name
+        guild_id    = str(interaction.guild_id)
+        target      = user or interaction.user
+        is_own_card = target.id == interaction.user.id
+        discord_id  = str(target.id)
 
-        user_data    = await self.db.upsert_user(guild_id, discord_id, username)
-        kingdom_rank = await self.audit.get_kingdom_rank(guild_id, discord_id)
+        # ── Real rank from live Discord roles ────────────────────────────────
+        # detect_rank_from_roles returns the highest matched economy rank name.
+        live_rank = detect_rank_from_roles(target.roles)
 
-        skin_id         = user_data.get("equipped_skin") or "default"
-        skin            = get_skin(skin_id)
-        equipped_title  = user_data.get("equipped_title") or "Unmarked"
-        equipped_relic  = user_data.get("equipped_relic") or ""
+        # Upsert with the display_name; live_rank drives the card variant.
+        user_data = await self.db.upsert_user(guild_id, discord_id, target.display_name)
+
+        # ── Hierarchy variant — full group + eligibility + classification ────
+        member_role_ids = [str(r.id) for r in target.roles]
+        card_variant    = resolve_identity_card_variant(member_role_ids, live_rank)
+
+        # ── Kingdom Rank — only for eligible groups (Nobility + Members) ────
+        if card_variant.kingdom_rank_eligible:
+            kingdom_rank = await self.audit.get_kingdom_rank(guild_id, discord_id)
+        else:
+            kingdom_rank = 0       # generate_card shows "EXEMPT" for kr_eligible=False
+
+        # ── Equipped cosmetics ───────────────────────────────────────────────
+        skin_id        = user_data.get("equipped_skin") or "default"
+        skin           = get_skin(skin_id)
+        equipped_title = user_data.get("equipped_title") or "Unmarked"
+        equipped_relic = user_data.get("equipped_relic") or ""
+
         equipped_badges = []
         try:
             import json as _json
@@ -52,10 +67,7 @@ class ProfileCog(commands.Cog):
         except Exception:
             equipped_badges = []
 
-        public_rank = user_data.get("rank", "Forsaken")
-        member_role_ids = [str(r.id) for r in target.roles]
-        card_variant = resolve_identity_card_variant(member_role_ids, public_rank)
-
+        # ── Avatar bytes ────────────────────────────────────────────────────
         avatar_url = None
         try:
             avatar_url = target.display_avatar.with_size(128).url
@@ -63,35 +75,37 @@ class ProfileCog(commands.Cog):
             pass
         avatar_bytes = await fetch_avatar(avatar_url)
 
+        # ── Generate card image ─────────────────────────────────────────────
         try:
-            card_buf  = generate_card(
-                username=target.name,
-                display_name=target.display_name,
-                equipped_title=equipped_title,
-                rank=public_rank,
-                balance=user_data.get("balance", 0),
-                kingdom_rank=kingdom_rank,
-                taxes_paid=user_data.get("taxes_paid", 0),
-                skin_id=skin_id,
-                avatar_bytes=avatar_bytes,
-                footer_flavor=skin.footer_flavor.strip('"'),
-                card_variant=card_variant,
-                relic_id=equipped_relic,
-                equipped_badges=equipped_badges,
+            card_buf = generate_card(
+                username       = target.name,
+                display_name   = target.display_name,
+                equipped_title = equipped_title,
+                rank           = live_rank,
+                balance        = user_data.get("balance", 0),
+                kingdom_rank   = kingdom_rank,
+                taxes_paid     = user_data.get("taxes_paid", 0),
+                skin_id        = skin_id,
+                avatar_bytes   = avatar_bytes,
+                footer_flavor  = skin.footer_flavor.strip('"'),
+                card_variant   = card_variant,
+                relic_id       = equipped_relic,
+                equipped_badges= equipped_badges,
             )
             card_file = discord.File(card_buf, filename="identity.png")
             embed     = discord.Embed(color=skin.color)
             embed.set_image(url="attachment://identity.png")
             if not is_own_card:
-                embed.set_footer(text=f"Identity of {username}  ·  Kingdom Treasury")
+                embed.set_footer(text=f"Identity of {target.display_name}  ·  Kingdom Treasury")
             await interaction.followup.send(embed=embed, file=card_file)
         except Exception:
             import logging
             logging.getLogger("kingdom_treasury").exception("Card generation failed")
             embed = EmbedFactory.identity(
-                user_data=user_data, kingdom_rank=kingdom_rank,
-                avatar_url=avatar_url,
-                mention=target.mention if not is_own_card else None,
+                user_data    = user_data,
+                kingdom_rank = kingdom_rank,
+                avatar_url   = avatar_url,
+                mention      = target.mention if not is_own_card else None,
             )
             await interaction.followup.send(embed=embed)
 
@@ -108,6 +122,8 @@ class ProfileCog(commands.Cog):
         username   = interaction.user.display_name
         user_data  = await self.db.upsert_user(guild_id, discord_id, username)
 
+        # Live rank & eligibility for wealth card
+        live_rank    = detect_rank_from_roles(interaction.user.roles)
         kingdom_rank = await self.audit.get_kingdom_rank(guild_id, discord_id)
 
         try:
@@ -116,12 +132,12 @@ class ProfileCog(commands.Cog):
             avatar_url = None
         avatar_bytes = await fetch_avatar(avatar_url)
 
-        skin_id = user_data.get("equipped_skin") or "default"
+        skin_id  = user_data.get("equipped_skin") or "default"
 
         loop     = asyncio.get_event_loop()
         card_buf = await loop.run_in_executor(None, lambda: generate_wealth_card(
             username     = username,
-            rank         = user_data.get("rank", "Forsaken"),
+            rank         = live_rank,
             balance      = user_data.get("balance", 0),
             taxes_paid   = user_data.get("taxes_paid", 0),
             kingdom_rank = kingdom_rank,
