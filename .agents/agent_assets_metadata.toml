@@ -359,3 +359,9 @@ id = "-Mi3DT6ShTBPqlIduc88A"
 uri = "file://attached_assets/card_preview_1200x720.jpg"
 type = "image"
 title = "Identity Card — 1200×720 rebuilt layout"
+
+[[outputs]]
+id = "YG2srWNJB870KieTnS_tF"
+uri = "file://attached_assets/card_no_border.jpg"
+type = "image"
+title = "Identity Card — no gold trim or outer border"

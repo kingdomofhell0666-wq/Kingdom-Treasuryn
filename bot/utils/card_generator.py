@@ -898,24 +898,6 @@ def _kingdom1_aura(card: Image.Image, theme: dict):
     """Exclusive supreme aura for the current #1 ranked soul."""
     gold = (255, 210, 0)
 
-    # Multiple blurred halos radiating outward
-    for offset, alpha, blur in [(32, 20, 30), (18, 48, 18), (9, 85, 12), (4, 125, 7)]:
-        layer = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-        d = ImageDraw.Draw(layer)
-        d.rounded_rectangle(
-            [(offset, offset), (W - 1 - offset, H - 1 - offset)],
-            radius=RADIUS + 3, outline=(*gold, alpha), width=5,
-        )
-        layer = layer.filter(ImageFilter.GaussianBlur(blur))
-        card.alpha_composite(layer)
-
-    # Sharp crisp gold rings
-    d2 = ImageDraw.Draw(card)
-    d2.rounded_rectangle([(2, 2), (W - 3, H - 3)], radius=RADIUS,
-                          outline=(*gold, 185), width=3)
-    d2.rounded_rectangle([(8, 8), (W - 9, H - 9)], radius=RADIUS - 3,
-                          outline=(*gold, 55), width=1)
-
     # Crown diamond at top-centre
     cx = W // 2
     dy = 5
@@ -1239,10 +1221,6 @@ def generate_card(
     draw.rounded_rectangle([(AV_X - 1, AV_Y - 1), (AV_X + AV_SZ, AV_Y + AV_SZ)],
                              radius=AV_RADIUS + 1,
                              outline=(*t["border"][:3], 180), width=1)
-    # Outer accent (high rank gets gold tint)
-    outer_col = (*t["gold"][:3], 90) if rank_level >= 14 else (*t["border"][:3], 80)
-    draw.rounded_rectangle([(AV_X - 4, AV_Y - 4), (AV_X + AV_SZ + 3, AV_Y + AV_SZ + 3)],
-                             radius=AV_RADIUS + 4, outline=outer_col, width=1)
 
     # "IDENTIFICATION PHOTO" caption
     cap_f = _font(8, cinzel=True)
@@ -1590,7 +1568,6 @@ def generate_card(
 
     # ── Post-processing (applied in order over the full canvas) ──────────────
     _apply_relic_effect(card, relic_id, t)
-    _rank_evolution_frame(card, rank_level, t)
 
     # Subtle paper/document grain (less aggressive than old fantasy card)
     _grain_texture(card, intensity=min(7, 3 + rank_level // 6))
