@@ -1,11 +1,14 @@
 """
 Kingdom Treasury — Infernal Market Hub
-Single-message AAA shop: hub → category browse → preview → confirm → acquire.
+The most immersive market experience achievable inside Discord.
+
+Flow: hub → category browse → preview → confirm → [sealing] → done
+Every transition edits the same ephemeral message in-place.
 """
 
 import asyncio
-import json
 import logging
+import random
 from typing import Dict, List, Optional, Set
 
 import discord
@@ -17,30 +20,63 @@ from ..utils.skins import (
 
 log = logging.getLogger("kingdom_treasury")
 
+# ─── Currency & separators ────────────────────────────────────────────────────
+
 _DC  = "<:devilcoinStack:1492184333392412692>"
 _SEP = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+_SEP_SHORT = "──────────────────────────"
 
-# ─── Rarity cosmetics ─────────────────────────────────────────────────────────
+# ─── Atmosphere lines (rotate randomly, use sparingly) ───────────────────────
+
+_ATMOSPHERE: List[str] = [
+    "*The Kingdom is watching.*",
+    "*This place remembers faces.*",
+    "*Some offerings are never forgotten.*",
+    "*Not every soul leaves unchanged.*",
+    "*What you claim here claims something back.*",
+    "*The fire burns low. Eyes watch from the dark.*",
+    "*Power is not given. It is taken.*",
+    "*The ledger records everything.*",
+    "*The Kingdom does not forget debts.*",
+    "*Only the marked may enter.*",
+]
+
+def _atmosphere() -> str:
+    return random.choice(_ATMOSPHERE)
+
+# ─── Rarity palette ──────────────────────────────────────────────────────────
 
 _RARITY_COLOR: Dict[str, int] = {
-    "Default":   0x1A1A1A,
-    "Common":    0x444444,
-    "Uncommon":  0x1A5C1A,
-    "Rare":      0x0D3D80,
-    "Epic":      0x4B0082,
-    "Legendary": 0x8B6914,
-    "Mythic":    0xB22222,
+    "Default":   0x1A0A0A,
+    "Common":    0x2A1A1A,
+    "Uncommon":  0x1A1A00,
+    "Rare":      0x000D26,
+    "Epic":      0x1A0033,
+    "Legendary": 0x1A0A00,
+    "Mythic":    0x2B0000,
 }
 
-_RARITY_DOT: Dict[str, str] = {
-    "Default":   "⬜",
-    "Common":    "🔘",
-    "Uncommon":  "🟢",
-    "Rare":      "🔵",
+_RARITY_SIGIL: Dict[str, str] = {
+    "Default":   "⬛",
+    "Common":    "◼",
+    "Uncommon":  "🟫",
+    "Rare":      "🔷",
     "Epic":      "🟣",
     "Legendary": "🟡",
     "Mythic":    "🔴",
 }
+
+_RARITY_LABEL: Dict[str, str] = {
+    "Default":   "DEFAULT",
+    "Common":    "COMMON",
+    "Uncommon":  "UNCOMMON",
+    "Rare":      "RARE",
+    "Epic":      "EPIC",
+    "Legendary": "LEGENDARY",
+    "Mythic":    "MYTHIC",
+}
+
+# ─── Category metadata ────────────────────────────────────────────────────────
 
 _CAT_ICON: Dict[str, str] = {
     "relics": "🔮",
@@ -49,18 +85,140 @@ _CAT_ICON: Dict[str, str] = {
     "badges": "🎖️",
 }
 
-_CAT_LORE: Dict[str, str] = {
-    "relics": "*Visual enchantments bound to your Identity Card.*",
-    "titles": "*Marks of distinction displayed beneath your name.*",
-    "skins":  "*Full transformation of your Identity Card.*",
-    "badges": "*Insignia of allegiance and achievement.*",
+_CAT_HEADER: Dict[str, str] = {
+    "relics": "RELICS",
+    "titles": "TITLES",
+    "skins":  "SKINS",
+    "badges": "BADGES",
 }
 
+_CAT_INTRO: Dict[str, str] = {
+    "relics": (
+        "*Fragments of power.*\n"
+        "*They do not decorate.*\n"
+        "*They alter what stands before others.*"
+    ),
+    "titles": (
+        "*Names become chains.*\n"
+        "*Or weapons.*\n"
+        "*Choose which you need.*"
+    ),
+    "skins": (
+        "*You do not remain unchanged here.*\n"
+        "*The old frame is no longer enough.*\n"
+        "*Become what survives.*"
+    ),
+    "badges": (
+        "*Some marks are earned.*\n"
+        "*Others are survived.*\n"
+        "*All of them remember.*"
+    ),
+}
+
+# ─── Image registry ──────────────────────────────────────────────────────────
+# Replace these URLs with your own hosted images for best results.
+# Discord embeds handle missing images gracefully — no image = embed still works.
+
+_IMG: Dict[str, Optional[str]] = {
+    # Main screens
+    "hub":     "https://i.imgur.com/aKxEjcC.jpg",
+    "exit":    "https://i.imgur.com/TlMBwRq.jpg",
+    "seal":    "https://i.imgur.com/mUGIbX7.jpg",
+    "acquire": "https://i.imgur.com/v8tlXJg.jpg",
+    # Category banners
+    "relics":  "https://i.imgur.com/nCyKJIy.jpg",
+    "titles":  "https://i.imgur.com/8lkPJi5.jpg",
+    "skins":   "https://i.imgur.com/XbUeMiI.jpg",
+    "badges":  "https://i.imgur.com/7k2bJRq.jpg",
+}
+
+# Per-item image overrides (item.id → URL). Falls back to category image.
+_ITEM_IMG: Dict[str, Optional[str]] = {
+    # Skins
+    "blood_crown":   None,
+    "abyss_smoke":   None,
+    "infernal_gold": None,
+    "royal_dark":    None,
+    "black_throne":  None,
+    "crimson_sigil": None,
+    # Relics
+    "soul_aura":       None,
+    "infernal_crown":  None,
+    "void_drift":      None,
+    "crimson_chains":  None,
+    "abyssal_veil":    None,
+    "sanguine_halo":   None,
+    # Badges (use emoji icon, no image needed for small items)
+}
+
+# Per-item lore quotes (psychological impact lines shown in item embeds)
+_ITEM_LORE: Dict[str, str] = {
+    # Skins
+    "blood_crown":   "Worn by those who paid more than coin to earn it.",
+    "abyss_smoke":   "Those who see it do not forget it. They are not meant to.",
+    "infernal_gold": "Gold is not earned here. It is seized.",
+    "royal_dark":    "By decree of the Infernal Court. Not a request.",
+    "black_throne":  "The throne is not inherited. It is taken.",
+    "crimson_sigil": "Marked by the sigil. Bound to the Kingdom. Forever.",
+    # Relics
+    "soul_aura":       "This presence does not follow everyone. Only those the Kingdom has noticed.",
+    "infernal_crown":  "It does not touch you. It does not need to.",
+    "void_drift":      "They do not fall. They orbit. Endlessly.",
+    "crimson_chains":  "They are decorative. They are also real.",
+    "abyssal_veil":    "The darkness does not conceal you. It announces you.",
+    "sanguine_halo":   "It is not a reward. It is a warning.",
+    # Titles
+    "Royal Gambler":       "Fate is not random. It just looks that way to others.",
+    "Night Winner":        "The ledger does not lie. They claimed it.",
+    "Eternal Debtor":      "The debt is permanent. So is the presence.",
+    "Abyss Walker":        "Unbothered by the dark. That alone is notable.",
+    "Bloodbound":          "Loyalty was never a question. It was never allowed to be.",
+    "Hand of the Kingdom": "Quiet authority. The most dangerous kind.",
+    "Infernal Patron":     "The Treasury takes notice. It does not forget.",
+    "Void Merchant":       "Some things should not have a price. They do now.",
+    "Coin of the Damned":  "The curse spends just fine.",
+    "Infernal Investor":   "Profit above all. Even the fires below.",
+    "Throne Witness":      "Stood before the Black Throne. Did not falter.",
+    "Shadow Sovereign":    "Known. But never seen.",
+    "Cerberus Favored":    "The hound looked. And chose not to bite.",
+    "Marked Noble":        "Branded by the Kingdom. The mark does not wash off.",
+    "The Untaxed":         "How? The Kingdom does not discuss how.",
+    "The Unbranded":       "No mark. Yet the Kingdom knows exactly who they are.",
+    "Coin Reaper":         "Death and currency. Both inevitabilities. They deal in both.",
+    # Badges
+    "haunted":           "Something follows this soul. No one else can see it.",
+    "void_sworn":        "An oath was made to the void. The void did not forget.",
+    "bloodpact":         "The pact holds both ways. It always has.",
+    "infernal_mark":     "The Kingdom burned its seal into their record. It does not fade.",
+    "wraith_touched":    "Something reached through. Left a mark. Then retreated.",
+    "cerberus_marked":   "The three-headed guardian looked directly. And nodded.",
+    "throne_carved":     "Their name was cut into the Black Throne. As a record.",
+    "kingdom_ascendant": "The Kingdom itself took note. The Abyss watches.",
+}
+
+def _item_lore(item) -> str:
+    key = getattr(item, "id", None) or getattr(item, "name", "")
+    return _ITEM_LORE.get(key, "")
+
+def _item_image(item, cat: str) -> Optional[str]:
+    key = getattr(item, "id", None) or ""
+    url = _ITEM_IMG.get(key)
+    if url:
+        return url
+    return _IMG.get(cat)
+
+# ─── Status labels ────────────────────────────────────────────────────────────
+
+def _status_equipped(cat: str) -> str:
+    if cat == "skins":   return "✦  BOUND TO YOUR FORM"
+    if cat == "titles":  return "✦  WORN BENEATH YOUR NAME"
+    if cat == "relics":  return "✦  ACTIVE ON YOUR CARD"
+    if cat == "badges":  return "✦  DISPLAYED ON YOUR IDENTITY"
+    return "✦  EQUIPPED"
 
 # ─── Item helpers ─────────────────────────────────────────────────────────────
 
 def _cat_items(cat: str) -> list:
-    """Return price-sorted item list for a category (excluding free defaults)."""
     if cat == "relics":
         return sorted(RELICS_CATALOG.values(), key=lambda x: x.price_dc)
     elif cat == "titles":
@@ -78,13 +236,13 @@ def _cat_items(cat: str) -> list:
     return []
 
 
-# ─── Main Hub View ────────────────────────────────────────────────────────────
+# ─── Main Market View ─────────────────────────────────────────────────────────
 
 class InfernalMarketHub(discord.ui.View):
     """
-    One view object manages the entire market session for a single user.
-    Modes: hub → category → preview → confirm → done.
-    All transitions edit the same message in place.
+    One view manages the entire market session for a single user.
+    All state transitions edit the same ephemeral message in place.
+    Modes: hub → category → preview → confirm → done
     """
 
     MODE_HUB      = "hub"
@@ -112,15 +270,15 @@ class InfernalMarketHub(discord.ui.View):
         equipped_badges: List[str],
     ):
         super().__init__(timeout=300)
-        self.owner_id        = owner_id
-        self.bot             = bot
-        self.guild_id        = guild_id
-        self.discord_id      = discord_id
-        self.user_rank       = user_rank
-        self.user_rank_idx   = _rank_idx(user_rank)
-        self._user_balance   = user_balance
+        self.owner_id      = owner_id
+        self.bot           = bot
+        self.guild_id      = guild_id
+        self.discord_id    = discord_id
+        self.user_rank     = user_rank
+        self.user_rank_idx = _rank_idx(user_rank)
+        self._user_balance = user_balance
 
-        # Mutable ownership state (updated on purchase)
+        # Ownership state (mutated on purchase)
         self._owned_skins:   Set[str] = set(owned_skins)
         self._owned_titles:  Set[str] = set(owned_titles)
         self._owned_relics:  Set[str] = set(owned_relics)
@@ -130,26 +288,30 @@ class InfernalMarketHub(discord.ui.View):
         self._eq_relic  = equipped_relic or ""
         self._eq_badges: List[str] = list(equipped_badges)
 
-        # Navigation state
+        # Navigation
         self._mode     = self.MODE_HUB
         self._cat:     Optional[str] = None
         self._item_idx = 0
 
-        # Result state (after purchase)
+        # Result state
         self._result_ok   = False
         self._result_item = None
         self._result_msg  = ""
         self._result_cost = 0
         self._result_bal  = 0
 
+        # Message reference for timeout editing
+        self._message: Optional[discord.Message] = None
+
         self._rebuild()
 
-    # ── Access guard ──────────────────────────────────────────────────────────
+    # ── Guard ─────────────────────────────────────────────────────────────────
 
     async def _guard(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.owner_id:
             await interaction.response.send_message(
-                "*This session belongs to another soul. Open your own market.*",
+                "*This session belongs to another soul.*\n"
+                "*Open your own Exchange with `/market`.*",
                 ephemeral=True,
             )
             return False
@@ -189,20 +351,20 @@ class InfernalMarketHub(discord.ui.View):
     def _can_afford(self, item) -> bool:
         return self._user_balance >= getattr(item, "price_dc", 0)
 
-    def _status_label(self, item) -> str:
-        if self._is_equipped(item):
-            return "✦  **EQUIPPED**"
-        if self._is_owned(item):
-            return "✓  **OWNED**"
-        if self._is_locked(item):
-            req = getattr(item, "min_rank", "?")
-            return f"🔒  **LOCKED** — Requires **{req}**"
-        if not self._can_afford(item):
-            return "💀  **INSUFFICIENT FUNDS**"
-        return "⚔  **AVAILABLE**"
-
     def _can_acquire(self, item) -> bool:
         return not self._is_owned(item) and not self._is_locked(item)
+
+    def _status_line(self, item) -> str:
+        if self._is_equipped(item):
+            return _status_equipped(self._cat or "")
+        if self._is_owned(item):
+            return "✔  BOUND TO YOUR SOUL"
+        if self._is_locked(item):
+            req = getattr(item, "min_rank", "?")
+            return f"🔒  LOCKED — Requires **{req}**"
+        if not self._can_afford(item):
+            return f"💀  INSUFFICIENT FUNDS"
+        return "⚔  AVAILABLE"
 
     # ── View rebuild ──────────────────────────────────────────────────────────
 
@@ -221,20 +383,20 @@ class InfernalMarketHub(discord.ui.View):
 
     def _build_hub(self):
         cats = [
-            ("🔮  Relics",  "relics"),
-            ("👑  Titles",  "titles"),
-            ("🎭  Skins",   "skins"),
-            ("🎖️  Badges", "badges"),
+            ("🔮  Relics",  "relics",  discord.ButtonStyle.secondary),
+            ("👑  Titles",  "titles",  discord.ButtonStyle.secondary),
+            ("🎭  Skins",   "skins",   discord.ButtonStyle.secondary),
+            ("🎖️  Badges", "badges",  discord.ButtonStyle.secondary),
         ]
-        for label, cat in cats:
-            btn = discord.ui.Button(
-                label=label, style=discord.ButtonStyle.secondary, row=0
-            )
+        for label, cat, style in cats:
+            btn = discord.ui.Button(label=label, style=style, row=0)
             btn.callback = self._hub_cb(cat)
             self.add_item(btn)
 
         leave = discord.ui.Button(
-            label="🚪  Leave the Exchange", style=discord.ButtonStyle.secondary, row=1
+            label="🚪  Leave the Exchange",
+            style=discord.ButtonStyle.secondary,
+            row=1,
         )
         leave.callback = self._leave_cb
         self.add_item(leave)
@@ -247,58 +409,79 @@ class InfernalMarketHub(discord.ui.View):
 
         can_acquire = item is not None and self._can_acquire(item)
         can_afford  = item is not None and self._can_afford(item)
+        can_buy     = can_acquire and can_afford
 
+        # Row 0: navigation
         prev = discord.ui.Button(
-            label="⬅️  Previous",
-            style=discord.ButtonStyle.secondary,
-            row=0,
-            disabled=(idx <= 0),
+            label    = "◀  Previous",
+            style    = discord.ButtonStyle.secondary,
+            row      = 0,
+            disabled = (idx <= 0),
         )
         nxt = discord.ui.Button(
-            label="Next  ➡️",
-            style=discord.ButtonStyle.secondary,
-            row=0,
-            disabled=(idx >= n - 1),
+            label    = "Next  ▶",
+            style    = discord.ButtonStyle.secondary,
+            row      = 0,
+            disabled = (idx >= n - 1),
         )
         prev.callback = self._prev_cb
         nxt.callback  = self._next_cb
         self.add_item(prev)
         self.add_item(nxt)
 
-        acquire = discord.ui.Button(
-            label    = "🩸  Acquire",
-            style    = discord.ButtonStyle.danger if (can_acquire and can_afford) else discord.ButtonStyle.secondary,
+        # Row 1: actions
+        offer = discord.ui.Button(
+            label    = "🩸  Offer Blood",
+            style    = discord.ButtonStyle.danger if can_buy else discord.ButtonStyle.secondary,
             row      = 1,
-            disabled = not (can_acquire and can_afford),
+            disabled = not can_buy,
         )
         preview = discord.ui.Button(
-            label="👁️  Manifestation",
-            style=discord.ButtonStyle.secondary,
-            row=1,
+            label  = "👁️  Manifestation",
+            style  = discord.ButtonStyle.secondary,
+            row    = 1,
         )
         back = discord.ui.Button(
-            label="🔙  Back",
-            style=discord.ButtonStyle.secondary,
-            row=1,
+            label  = "↩  The Exchange",
+            style  = discord.ButtonStyle.secondary,
+            row    = 1,
         )
-        acquire.callback = self._acquire_cb
+        leave = discord.ui.Button(
+            label  = "🚪  Leave",
+            style  = discord.ButtonStyle.secondary,
+            row    = 1,
+        )
+        offer.callback   = self._acquire_cb
         preview.callback = self._preview_cb
         back.callback    = self._back_to_hub_cb
-        self.add_item(acquire)
+        leave.callback   = self._leave_cb
+        self.add_item(offer)
         self.add_item(preview)
         self.add_item(back)
+        self.add_item(leave)
 
     def _build_preview(self):
-        back = discord.ui.Button(
-            label="🔙  Back",
-            style=discord.ButtonStyle.secondary,
-            row=0,
+        item       = self._current()
+        can_buy    = item is not None and self._can_acquire(item) and self._can_afford(item)
+
+        offer = discord.ui.Button(
+            label    = "🩸  Offer Blood",
+            style    = discord.ButtonStyle.danger if can_buy else discord.ButtonStyle.secondary,
+            row      = 0,
+            disabled = not can_buy,
         )
-        back.callback = self._back_to_cat_cb
+        back = discord.ui.Button(
+            label  = "↩  Return",
+            style  = discord.ButtonStyle.secondary,
+            row    = 0,
+        )
+        offer.callback = self._acquire_cb
+        back.callback  = self._back_to_cat_cb
+        self.add_item(offer)
         self.add_item(back)
 
     def _build_confirm(self):
-        item = self._current()
+        item       = self._current()
         can_afford = item is not None and self._can_afford(item)
 
         seal = discord.ui.Button(
@@ -308,9 +491,9 @@ class InfernalMarketHub(discord.ui.View):
             disabled = not can_afford,
         )
         cancel = discord.ui.Button(
-            label="✖  Cancel",
-            style=discord.ButtonStyle.secondary,
-            row=0,
+            label  = "✖  Withdraw",
+            style  = discord.ButtonStyle.secondary,
+            row    = 0,
         )
         seal.callback   = self._seal_cb
         cancel.callback = self._back_to_cat_cb
@@ -319,14 +502,14 @@ class InfernalMarketHub(discord.ui.View):
 
     def _build_done(self):
         cont = discord.ui.Button(
-            label="🔙  Continue Browsing",
-            style=discord.ButtonStyle.secondary,
-            row=0,
+            label  = "↩  Continue Browsing",
+            style  = discord.ButtonStyle.secondary,
+            row    = 0,
         )
         leave = discord.ui.Button(
-            label="🚪  Leave the Exchange",
-            style=discord.ButtonStyle.secondary,
-            row=0,
+            label  = "🚪  Leave the Exchange",
+            style  = discord.ButtonStyle.secondary,
+            row    = 0,
         )
         cont.callback  = self._continue_cb
         leave.callback = self._leave_cb
@@ -348,48 +531,84 @@ class InfernalMarketHub(discord.ui.View):
             return self._done_embed()
         return self._hub_embed()
 
+    # ── Hub embed ─────────────────────────────────────────────────────────────
+
     def _hub_embed(self) -> discord.Embed:
+        n_relics  = len(RELICS_CATALOG)
+        n_titles  = sum(1 for t in TITLES_CATALOG.values() if t.price_dc > 0)
+        n_skins   = sum(1 for s in SKINS.values() if s.price_dc > 0)
+        n_badges  = len(BADGES_CATALOG)
+
         embed = discord.Embed(
-            title="🩸  Kingdom Exchange",
-            description=(
+            title = "🩸  Kingdom Exchange",
+            description = (
                 f"{_SEP}\n\n"
-                "*The gates open.*\n\n"
-                "*Power is not given.*\n"
-                "*It is taken… at a price.*\n\n"
-                "*Choose what you seek, soul.*\n\n"
+                "The doors creak open.\n\n"
+                "You step into the Infernal Exchange.\n"
+                "The air is thick.\n"
+                "The fire burns low.\n\n"
+                "Eyes turn toward you.\n"
+                "Not welcoming. Not hostile.\n"
+                "**Judging.**\n\n"
+                "Power is not given.\n"
+                "It is taken… and paid in full.\n\n"
+                "*Choose carefully.*\n\n"
                 f"{_SEP}"
             ),
-            color=0x0D0D0D,
+            color = 0x1A0004,
         )
         embed.add_field(
-            name="🔮  Relics",
-            value=f"*Visual effects on your Identity*\n`{len(RELICS_CATALOG)} items`",
-            inline=True,
+            name  = "🔮  Relics",
+            value = (
+                "*Fragments of power.*\n"
+                "*They alter what stands before others.*\n"
+                f"`{n_relics} available`"
+            ),
+            inline = True,
         )
         embed.add_field(
-            name="👑  Titles",
-            value=f"*Marks beneath your name*\n`{sum(1 for t in TITLES_CATALOG.values() if t.price_dc > 0)} items`",
-            inline=True,
+            name  = "👑  Titles",
+            value = (
+                "*Names that cling to you.*\n"
+                "*Some command fear.*\n"
+                f"`{n_titles} available`"
+            ),
+            inline = True,
         )
         embed.add_field(name="\u200b", value="\u200b", inline=True)
         embed.add_field(
-            name="🎭  Skins",
-            value=f"*Full Identity Card redesign*\n`{sum(1 for s in SKINS.values() if s.price_dc > 0)} items`",
-            inline=True,
+            name  = "🎭  Skins",
+            value = (
+                "*You are not what you were.*\n"
+                "*Become what survives.*\n"
+                f"`{n_skins} available`"
+            ),
+            inline = True,
         )
         embed.add_field(
-            name="🎖️  Badges",
-            value=f"*Insignia on your Identity*\n`{len(BADGES_CATALOG)} items`",
-            inline=True,
+            name  = "🎖️  Badges",
+            value = (
+                "*Marks of memory.*\n"
+                "*Proof of endurance.*\n"
+                f"`{n_badges} available`"
+            ),
+            inline = True,
         )
         embed.add_field(name="\u200b", value="\u200b", inline=True)
         embed.add_field(
-            name=_SEP,
-            value=f"Your Treasury: **{self._user_balance:,}** {_DC}",
-            inline=False,
+            name  = _SEP,
+            value = (
+                f"**Your Treasury:** {self._user_balance:,} {_DC}\n"
+                f"**Your Rank:** {self.user_rank}"
+            ),
+            inline = False,
         )
-        embed.set_footer(text=f"Kingdom Treasury  ·  {self.user_rank}  ·  Kingdom of Hell")
+        if img := _IMG.get("hub"):
+            embed.set_image(url=img)
+        embed.set_footer(text=f"The Kingdom is watching.  ·  Kingdom of Hell")
         return embed
+
+    # ── Category / item browse embed ──────────────────────────────────────────
 
     def _cat_embed(self) -> discord.Embed:
         item  = self._current()
@@ -399,84 +618,103 @@ class InfernalMarketHub(discord.ui.View):
 
         if not item:
             return discord.Embed(
-                description="*No items found in this category.*",
-                color=0x0D0D0D,
+                description="*No items exist in this section.*",
+                color=0x1A0004,
             )
 
-        icon      = _CAT_ICON.get(self._cat or "", "🛒")
-        rarity    = getattr(item, "rarity", "Unknown")
-        dot       = _RARITY_DOT.get(rarity, "⬜")
-        color     = _RARITY_COLOR.get(rarity, 0x0D0D0D)
-        price_dc  = getattr(item, "price_dc", 0)
-        min_rank  = getattr(item, "min_rank", "")
-        status    = self._status_label(item)
+        cat      = self._cat or ""
+        icon     = _CAT_ICON.get(cat, "🛒")
+        header   = _CAT_HEADER.get(cat, cat.upper())
+        intro    = _CAT_INTRO.get(cat, "")
+        rarity   = getattr(item, "rarity", "Unknown")
+        sigil    = _RARITY_SIGIL.get(rarity, "◼")
+        rar_lbl  = _RARITY_LABEL.get(rarity, rarity.upper())
+        color    = _RARITY_COLOR.get(rarity, 0x1A0004)
+        price_dc = getattr(item, "price_dc", 0)
+        min_rank = getattr(item, "min_rank", "")
+        status   = self._status_line(item)
+        lore     = _item_lore(item)
+        icon_str = getattr(item, "icon", "") if cat == "badges" else ""
 
-        lore = _CAT_LORE.get(self._cat or "", "")
+        # Balance affordability display
+        if self._user_balance >= price_dc:
+            bal_display = f"**{self._user_balance:,}** {_DC}  ·  Cost: **{price_dc:,}** {_DC}"
+        else:
+            short = price_dc - self._user_balance
+            bal_display = f"**{self._user_balance:,}** {_DC}  ·  *Need {short:,} more {_DC}*"
 
-        cat_label = (self._cat or "").rstrip("s").title()
-        if self._cat == "badges":
-            cat_label = "Badge"
-
-        icon_str = getattr(item, "icon", "") if self._cat == "badges" else ""
-
-        balance_line = (
-            f"**{self._user_balance:,}** {_DC}  ·  "
-            + (f"~~{price_dc:,}~~ insufficient" if self._user_balance < price_dc else f"Cost: **{price_dc:,}** {_DC}")
-        )
+        item_name = f"{icon_str}  {item.name}" if icon_str else item.name
 
         embed = discord.Embed(
-            title       = f"{icon}  {(self._cat or '').upper()}",
-            description = lore,
+            title       = f"{icon}  {header}",
+            description = f"{intro}\n\n{_SEP_SHORT}",
             color       = color,
         )
-        embed.add_field(name="\u200b", value=_SEP, inline=False)
+
         embed.add_field(
-            name  = f"{dot}  **{icon_str}{' ' if icon_str else ''}{item.name}**",
+            name  = f"{sigil}  {rar_lbl}",
+            value = f"## {item_name}",
+            inline = False,
+        )
+        embed.add_field(
+            name  = "\u200b",
             value = f"*{item.description}*",
-            inline=False,
+            inline = False,
         )
-        embed.add_field(name="\u200b", value=_SEP, inline=False)
+        if lore:
+            embed.add_field(
+                name  = "\u200b",
+                value = f"*\"{lore}\"*",
+                inline = False,
+            )
+        embed.add_field(name="\u200b", value=_SEP_SHORT, inline=False)
         embed.add_field(
-            name="PRICE",
-            value=f"**{price_dc:,}** {_DC}",
-            inline=True,
-        )
-        embed.add_field(
-            name="TYPE",
-            value=f"**{cat_label}**",
-            inline=True,
-        )
-        embed.add_field(
-            name="RARITY",
-            value=f"**{rarity}**",
-            inline=True,
+            name  = "PRICE",
+            value = f"**{price_dc:,}** {_DC}",
+            inline = True,
         )
         embed.add_field(
-            name="REQUIRED RANK",
-            value=f"**{min_rank}**+" if min_rank else "**All Ranks**",
-            inline=True,
+            name  = "TYPE",
+            value = f"**{header.rstrip('S').title() if header.endswith('S') else header.title()}**",
+            inline = True,
         )
         embed.add_field(
-            name="STATUS",
-            value=status,
-            inline=True,
+            name  = "RARITY",
+            value = f"**{rarity}**",
+            inline = True,
+        )
+        embed.add_field(
+            name  = "REQUIRED RANK",
+            value = f"**{min_rank}**+" if min_rank else "**All Ranks**",
+            inline = True,
+        )
+        embed.add_field(
+            name  = "STATUS",
+            value = status,
+            inline = True,
         )
         embed.add_field(name="\u200b", value="\u200b", inline=True)
-        embed.add_field(name="\u200b", value=_SEP, inline=False)
+        embed.add_field(name="\u200b", value=_SEP_SHORT, inline=False)
         embed.add_field(
-            name="YOUR TREASURY",
-            value=balance_line,
-            inline=False,
+            name  = "YOUR TREASURY",
+            value = bal_display,
+            inline = False,
         )
+
+        if img := _item_image(item, cat):
+            embed.set_image(url=img)
+
         embed.set_footer(
             text=f"Item {idx + 1} of {n}  ·  {self.user_rank}  ·  Kingdom Treasury"
         )
         return embed
 
+    # ── Preview / Manifestation embed ─────────────────────────────────────────
+
     def _preview_embed(self) -> discord.Embed:
         item = self._current()
 
-        # Simulate equipped state if this item were equipped
+        # Simulate equipped loadout with this item active
         preview_skin   = self._eq_skin
         preview_title  = self._eq_title
         preview_relic  = self._eq_relic
@@ -500,133 +738,200 @@ class InfernalMarketHub(discord.ui.View):
         badge_display = ""
         for bid in preview_badges[:3]:
             if bid in BADGES_CATALOG:
-                badge_display += BADGES_CATALOG[bid].icon + " "
-        if not badge_display:
-            badge_display = "None"
+                badge_display += BADGES_CATALOG[bid].icon + "  "
+        badge_display = badge_display.strip() or "None"
 
         effect_desc = ""
         if item:
             effect_desc = getattr(item, "effect_desc", item.description)
 
+        lore = _item_lore(item) if item else ""
+        item_name = item.name if item else "Unknown"
+
         embed = discord.Embed(
-            title="👁️  Manifestation",
-            description=(
+            title = "👁️  Manifestation",
+            description = (
                 f"{_SEP}\n\n"
-                f"*{effect_desc}*\n\n"
+                "*A dark presence gathers around your form.*\n\n"
+                f"*This is not yet yours.*\n\n"
+                "*But the Kingdom allows you to see*\n"
+                f"*what you could become.*\n\n"
                 f"{_SEP}"
             ),
-            color=0x1A0A2E,
+            color = 0x1A0A2E,
         )
-        embed.add_field(name="Active Skin",   value=f"**{skin_name}**",   inline=True)
-        embed.add_field(name="Active Title",  value=f"**{title_name}**",  inline=True)
-        embed.add_field(name="Active Relic",  value=f"**{relic_name}**",  inline=True)
-        embed.add_field(name="Active Badges", value=badge_display,         inline=True)
         embed.add_field(
-            name="\u200b",
-            value=(
-                "*This is a simulation of your identity after equipping this item.*\n"
-                "*Use `/relics` to manage equipped items after purchase.*"
-            ),
-            inline=False,
+            name  = f"If you claimed  **{item_name}**",
+            value = f"*{effect_desc}*",
+            inline = False,
         )
-        embed.set_footer(text="Kingdom Treasury  ·  Kingdom of Hell")
+        if lore:
+            embed.add_field(
+                name  = "\u200b",
+                value = f"*\"{lore}\"*",
+                inline = False,
+            )
+        embed.add_field(name="\u200b", value=_SEP_SHORT, inline=False)
+        embed.add_field(name="Skin",   value=f"**{skin_name}**",  inline=True)
+        embed.add_field(name="Title",  value=f"**{title_name}**", inline=True)
+        embed.add_field(name="Relic",  value=f"**{relic_name}**", inline=True)
+        embed.add_field(name="Badges", value=badge_display,        inline=True)
+        embed.add_field(
+            name  = "\u200b",
+            value = (
+                f"\n*This is a simulation only.*\n"
+                "*Use `/relics` to equip after purchase.*"
+            ),
+            inline = False,
+        )
+        if item and (img := _item_image(item, self._cat or "")):
+            embed.set_image(url=img)
+        embed.set_footer(text="Manifestation Preview  ·  Kingdom of Hell")
         return embed
+
+    # ── Confirmation embed ─────────────────────────────────────────────────────
 
     def _confirm_embed(self) -> discord.Embed:
         item = self._current()
         if not item:
-            return discord.Embed(description="*No item selected.*", color=0x0D0D0D)
+            return discord.Embed(description="*No item selected.*", color=0x1A0004)
 
-        rarity   = getattr(item, "rarity", "Unknown")
-        dot      = _RARITY_DOT.get(rarity, "⬜")
-        color    = _RARITY_COLOR.get(rarity, 0x0D0D0D)
-        price_dc = getattr(item, "price_dc", 0)
+        rarity    = getattr(item, "rarity", "Unknown")
+        sigil     = _RARITY_SIGIL.get(rarity, "◼")
+        color     = _RARITY_COLOR.get(rarity, 0x1A0004)
+        price_dc  = getattr(item, "price_dc", 0)
         bal_after = self._user_balance - price_dc
         icon_str  = getattr(item, "icon", "") if self._cat == "badges" else ""
+        item_name = f"{icon_str}  {item.name}" if icon_str else item.name
+        lore      = _item_lore(item)
 
         embed = discord.Embed(
-            title="⚔  Confirm Acquisition",
-            description=(
+            title = "⚔  The Exchange Awaits Your Blood",
+            description = (
                 f"{_SEP}\n\n"
                 "*The Kingdom awaits your offering.*\n\n"
-                "*This transaction cannot be undone.*\n\n"
+                "*This transaction cannot be undone.*\n"
+                "*The ledger is permanent.*\n\n"
                 f"{_SEP}"
             ),
-            color=color,
+            color = color,
         )
         embed.add_field(
-            name="ITEM",
-            value=f"{dot}  **{icon_str}{' ' if icon_str else ''}{item.name}**  —  {rarity}",
-            inline=False,
+            name  = "ITEM",
+            value = f"{sigil}  **{item_name}**  —  *{rarity}*",
+            inline = False,
+        )
+        if lore:
+            embed.add_field(
+                name  = "\u200b",
+                value = f"*\"{lore}\"*",
+                inline = False,
+            )
+        embed.add_field(name="\u200b", value=_SEP_SHORT, inline=False)
+        embed.add_field(
+            name  = "COST",
+            value = f"**{price_dc:,}** {_DC}",
+            inline = True,
         )
         embed.add_field(
-            name="COST",
-            value=f"**{price_dc:,}** {_DC}",
-            inline=True,
+            name  = "YOUR TREASURY",
+            value = f"**{self._user_balance:,}** {_DC}",
+            inline = True,
         )
         embed.add_field(
-            name="YOUR TREASURY",
-            value=f"**{self._user_balance:,}** {_DC}",
-            inline=True,
+            name  = "BALANCE AFTER",
+            value = (
+                f"**{bal_after:,}** {_DC}"
+                if bal_after >= 0
+                else "*Insufficient funds — this will be denied*"
+            ),
+            inline = True,
         )
+        embed.add_field(name="\u200b", value=_SEP_SHORT, inline=False)
         embed.add_field(
-            name="BALANCE AFTER",
-            value=f"**{bal_after:,}** {_DC}" if bal_after >= 0 else "*Insufficient funds*",
-            inline=True,
+            name  = "\u200b",
+            value = "*Seal the Exchange to complete your offering.\nWithdraw to reconsider.*",
+            inline = False,
         )
         embed.set_footer(text="Kingdom Treasury  ·  Kingdom of Hell")
         return embed
+
+    # ── Done / result embed ───────────────────────────────────────────────────
 
     def _done_embed(self) -> discord.Embed:
         if self._result_ok and self._result_item:
             item   = self._result_item
             rarity = getattr(item, "rarity", "Unknown")
-            color  = _RARITY_COLOR.get(rarity, 0xFFD700)
-            embed  = discord.Embed(
-                title="🩸  Acquisition Complete",
-                description=(
+            color  = _RARITY_COLOR.get(rarity, 0x1A0004)
+            sigil  = _RARITY_SIGIL.get(rarity, "◼")
+            icon_s = getattr(item, "icon", "") if self._cat == "badges" else ""
+            lore   = _item_lore(item)
+            effect = getattr(item, "effect_desc", item.description)
+
+            embed = discord.Embed(
+                title = "🩸  Transaction Accepted",
+                description = (
                     f"{_SEP}\n\n"
-                    "*You have claimed:*\n\n"
-                    f"## {getattr(item, 'icon', '') + ' ' if getattr(item, 'icon', '') else ''}{item.name}\n\n"
-                    "*The Kingdom acknowledges your offering.*\n\n"
+                    "*The Kingdom has taken your offering.*\n\n"
+                    "*It does not thank you.*\n"
+                    "*It remembers.*\n\n"
                     f"{_SEP}"
                 ),
-                color=color,
+                color = color,
             )
             embed.add_field(
-                name="COST",
-                value=f"**{self._result_cost:,}** {_DC}",
-                inline=True,
+                name  = "You have claimed:",
+                value = (
+                    f"{sigil}  **{icon_s + '  ' if icon_s else ''}{item.name}**\n"
+                    f"*{effect}*"
+                ),
+                inline = False,
+            )
+            if lore:
+                embed.add_field(
+                    name  = "\u200b",
+                    value = f"*\"{lore}\"*",
+                    inline = False,
+                )
+            embed.add_field(name="\u200b", value=_SEP_SHORT, inline=False)
+            embed.add_field(
+                name  = "COST",
+                value = f"**{self._result_cost:,}** {_DC}",
+                inline = True,
             )
             embed.add_field(
-                name="REMAINING TREASURY",
-                value=f"**{self._result_bal:,}** {_DC}",
-                inline=True,
+                name  = "REMAINING TREASURY",
+                value = f"**{self._result_bal:,}** {_DC}",
+                inline = True,
             )
             embed.add_field(
-                name="RARITY",
-                value=f"**{rarity}**",
-                inline=True,
+                name  = "RARITY",
+                value = f"**{rarity}**",
+                inline = True,
             )
+            embed.add_field(name="\u200b", value=_SEP_SHORT, inline=False)
             embed.add_field(
-                name="\u200b",
-                value="*Use `/relics` to equip your acquisition.*",
-                inline=False,
+                name  = "\u200b",
+                value = "*You are marked.*\n*Use `/relics` to equip your acquisition.*",
+                inline = False,
             )
+            if img := _IMG.get("acquire"):
+                embed.set_image(url=img)
         else:
             embed = discord.Embed(
-                title="🩸  Exchange Denied",
-                description=(
+                title = "🩸  The Exchange Refused",
+                description = (
                     f"{_SEP}\n\n"
                     f"*{self._result_msg or 'The Kingdom refuses this transaction.'}*\n\n"
+                    "*Return when your offering is sufficient.*\n\n"
                     f"{_SEP}"
                 ),
-                color=0x0A0A0A,
+                color = 0x0A0A0A,
             )
         embed.set_footer(text="Kingdom Treasury  ·  Kingdom of Hell")
         return embed
 
-    # ── Navigation callbacks ──────────────────────────────────────────────────
+    # ── Callbacks ─────────────────────────────────────────────────────────────
 
     def _hub_cb(self, cat: str):
         async def cb(interaction: discord.Interaction):
@@ -679,13 +984,13 @@ class InfernalMarketHub(discord.ui.View):
         await interaction.response.edit_message(embed=self.build_embed(), view=self)
 
     async def _acquire_cb(self, interaction: discord.Interaction):
-        """Show the confirmation screen before committing the purchase."""
+        """Route to confirmation screen."""
         if not await self._guard(interaction):
             return
         item = self._current()
         if not item or not self._can_acquire(item):
             await interaction.response.send_message(
-                "*This item is not available for acquisition.*", ephemeral=True
+                "*This item cannot be acquired.*", ephemeral=True
             )
             return
         self._mode = self.MODE_CONFIRM
@@ -705,22 +1010,27 @@ class InfernalMarketHub(discord.ui.View):
         if not await self._guard(interaction):
             return
         farewell = discord.Embed(
-            description=(
+            description = (
                 f"{_SEP}\n\n"
                 "*The gates close behind you.*\n\n"
-                "*The Kingdom remembers all transactions.*\n\n"
+                "*No transaction is forgotten.*\n"
+                "*No mark is erased.*\n\n"
+                "*Return…*\n"
+                "*when you have more to offer.*\n\n"
                 f"{_SEP}"
             ),
-            color=0x0D0D0D,
+            color = 0x0A0A0A,
         )
-        farewell.set_footer(text="Kingdom Treasury  ·  Kingdom of Hell")
+        if img := _IMG.get("exit"):
+            farewell.set_image(url=img)
+        farewell.set_footer(text="The Kingdom remembers.  ·  Kingdom of Hell")
         await interaction.response.edit_message(embed=farewell, view=None)
         self.stop()
 
-    # ── Seal callback — executes the actual purchase ──────────────────────────
+    # ── Seal — execute purchase ────────────────────────────────────────────────
 
     async def _seal_cb(self, interaction: discord.Interaction):
-        """Execute the confirmed purchase."""
+        """Confirm and execute the purchase. Defers + edits after async work."""
         if not await self._guard(interaction):
             return
 
@@ -731,30 +1041,35 @@ class InfernalMarketHub(discord.ui.View):
             )
             return
 
-        # Show "Sealing..." while the backend call happens
-        seal_embed = discord.Embed(
-            description=(
+        # Immediately acknowledge — show sealing ritual
+        sealing = discord.Embed(
+            title = "🩸  Sealing the Exchange…",
+            description = (
                 f"{_SEP}\n\n"
-                "🩸  *Sealing the exchange…*\n\n"
-                "*The Kingdom records your offering.*\n\n"
+                "*The Exchange accepts your offering.*\n\n"
+                "*The mark is being carved.*\n"
+                "*The ledger prepares to remember.*\n\n"
+                "*This cannot be interrupted.*\n\n"
                 f"{_SEP}"
             ),
-            color=0x1A0004,
+            color = 0x1A0004,
         )
-        seal_embed.set_footer(text="Kingdom Treasury  ·  Kingdom of Hell")
+        if img := _IMG.get("seal"):
+            sealing.set_image(url=img)
+        sealing.set_footer(text="Kingdom Treasury  ·  Kingdom of Hell")
+
         msg_id = interaction.message.id
-        await interaction.response.edit_message(embed=seal_embed, view=None)
+        await interaction.response.edit_message(embed=sealing, view=None)
 
-        # Atmospheric delay
-        await asyncio.sleep(1.0)
+        # Atmospheric pause — the ritual has weight
+        await asyncio.sleep(1.5)
 
-        # Perform purchase
+        # Execute purchase
         try:
-            # Re-check sacrifice gate
             user_data = await self.bot.db.get_user(self.guild_id, self.discord_id)
             if user_data and user_data.get("sacrifice_active"):
                 raise ValueError(
-                    "Access denied. Your debt must be cleared before entering the market."
+                    "Access denied. Your debt bars you from the market. Settle it first."
                 )
 
             svc = self.bot.cosmetic_service
@@ -774,12 +1089,11 @@ class InfernalMarketHub(discord.ui.View):
             else:
                 raise ValueError("Unknown item category.")
 
-            # Update local balance
             cost    = result.get("cost", 0)
             new_bal = result.get("new_balance", 0)
             self._user_balance = new_bal
 
-            # Ledger log
+            # Ledger — if money moved, the Treasury must see it
             ledger = getattr(self.bot, "ledger_service", None)
             if ledger and cost > 0:
                 try:
@@ -810,15 +1124,15 @@ class InfernalMarketHub(discord.ui.View):
             self._result_ok  = False
             self._result_msg = "An internal error occurred. Please try again."
 
-        # Update display
+        # Rebuild to done state
         self._mode = self.MODE_DONE
         self._rebuild()
 
         try:
             await interaction.followup.edit_message(
                 msg_id,
-                embed=self.build_embed(),
-                view=self,
+                embed = self.build_embed(),
+                view  = self,
             )
         except Exception:
             try:
@@ -829,4 +1143,25 @@ class InfernalMarketHub(discord.ui.View):
     # ── Timeout ───────────────────────────────────────────────────────────────
 
     async def on_timeout(self):
-        pass
+        """Disable all buttons and show expired state."""
+        for child in self.children:
+            child.disabled = True
+
+        expired = discord.Embed(
+            description = (
+                f"{_SEP}\n\n"
+                "*The Exchange has gone still.*\n\n"
+                "*The fire has died.*\n"
+                "*The doors are no longer open.*\n\n"
+                "*Open `/market` again to return.*\n\n"
+                f"{_SEP}"
+            ),
+            color = 0x0A0A0A,
+        )
+        expired.set_footer(text="Session expired  ·  Kingdom of Hell")
+
+        try:
+            if self._message:
+                await self._message.edit(embed=expired, view=self)
+        except Exception:
+            pass

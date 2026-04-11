@@ -97,7 +97,8 @@ class CosmeticsCog(commands.Cog):
             equipped_relic  = eq_relic,
             equipped_badges = eq_badges,
         )
-        await interaction.followup.send(embed=hub.build_embed(), view=hub, ephemeral=True)
+        msg = await interaction.followup.send(embed=hub.build_embed(), view=hub, ephemeral=True)
+        hub._message = msg
 
     # ─── /relics ──────────────────────────────────────────────────────────────
 
