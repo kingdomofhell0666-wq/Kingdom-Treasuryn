@@ -41,6 +41,11 @@ app.use(sessionMiddleware);
 
 app.use("/api", router);
 
+// Root redirect — send bare domain visitors straight to the Exchange
+app.get("/", (_req, res) => {
+  res.redirect(301, "/exchange/");
+});
+
 // Serve the dashboard SPA at /dashboard/ (fallback to index.html for client-side routing)
 // __dirname resolves to the directory of THIS file (src/ in dev, dist/ in prod)
 // Go up to the api-server root, then up to the workspace root, then into dashboard
