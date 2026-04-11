@@ -353,3 +353,9 @@ id = "Rb7hzcYFjWciN8xEClvvY"
 uri = "file://attached_assets/card_resized.jpg"
 type = "image"
 title = "Screenshot resized to 900×320"
+
+[[outputs]]
+id = "-Mi3DT6ShTBPqlIduc88A"
+uri = "file://attached_assets/card_preview_1200x720.jpg"
+type = "image"
+title = "Identity Card — 1200×720 rebuilt layout"

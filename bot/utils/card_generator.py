@@ -20,41 +20,41 @@ _DEJA_B    = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
 _DEJA_R    = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
 _LOGO_PATH = "bot/assets/server_logo.png"   # drop file here to use real logo
 
-# ─── Card geometry — 900×320 compact horizontal ID ───────────────────────────
-W, H      = 900, 320
-RADIUS    = 24
-OUT_PAD   = 20               # outer edge padding
-IN_PAD    = 16               # inner content padding
+# ─── Card geometry — 1200×720 spacious horizontal ID ─────────────────────────
+W, H      = 1200, 720
+RADIUS    = 22
+OUT_PAD   = 24               # outer edge padding
+IN_PAD    = 18               # inner content padding
 
 # ── Column grid (3-column fixed layout) ───────────────────────────────────────
 # Columns never shift — skins only change colours/textures, never layout.
-LFT_X     = OUT_PAD          # 20
-LFT_W     = 210
-LFT_R     = LFT_X + LFT_W   # 230
+LFT_X     = OUT_PAD          # 24
+LFT_W     = 234
+LFT_R     = LFT_X + LFT_W   # 258
 
-CTR_X     = 250              # center col starts (gap of 20 from LFT_R)
-CTR_W     = 408
-CTR_R     = CTR_X + CTR_W   # 658
+CTR_X     = 278              # center col starts (gap 20 after LFT_R)
+CTR_W     = 688
+CTR_R     = CTR_X + CTR_W   # 966
 
-RGT_X     = 678              # right col starts
-RGT_W     = W - RGT_X - OUT_PAD  # 202
-RGT_R     = RGT_X + RGT_W   # 880
+RGT_X     = 986              # right col starts (gap 20 after CTR_R)
+RGT_W     = W - RGT_X - OUT_PAD   # 190
+RGT_R     = RGT_X + RGT_W   # 1176
 
 # ── Zone boundaries (y) ───────────────────────────────────────────────────────
-HEADER_H  = 32               # y =  0 – 32  header strip
-HDR_H     = HEADER_H         # alias
-MAIN_Y    = 32               # y = 32 – 234 three-column main body
-MAIN_END  = 234
-ART_Y     = 237              # y = 237 – 277 bound artifacts row
-ARTS_END  = 277
-BADGE_Y   = 280              # y = 280 – 304 circular seals
-FOOTER_Y  = 306              # y = 306 – 320 footer
+HEADER_H  = 58               # y =   0 –  58  header strip
+HDR_H     = HEADER_H
+MAIN_Y    = 58               # y =  58 – 456  three-column main body
+MAIN_END  = 456
+ART_Y     = 468              # y = 468 – 628  bound artifacts row
+ARTS_END  = 628
+BADGE_Y   = 638              # y = 638 – 668  circular seals row
+FOOTER_Y  = 678              # y = 678 – 720  footer
 
-# ── Avatar fixed position (inside left column) ─────────────────────────────────
-AV_X      = LFT_X            # 20
-AV_Y      = MAIN_Y + 6      # 38
-AV_SZ     = 128
-AV_RADIUS = 14               # rounded corners (per spec)
+# ── Avatar fixed position (inside left column) ────────────────────────────────
+AV_X      = LFT_X            # 24
+AV_Y      = MAIN_Y + 16     # 74
+AV_SZ     = 200
+AV_RADIUS = 16               # rounded corners
 
 # PAD alias — helpers (_line, _double_line, etc.) still reference it
 PAD       = OUT_PAD
@@ -312,8 +312,10 @@ def _risk_tier_overlay(card: Image.Image, risk: int):
 # The logo is composited at ~75% opacity, centred in the right column.
 
 def _bg_sigil(card: Image.Image, theme: dict):
-    cx, cy = 779, 133          # right-col centre
-    _render_right_logo(card, theme, cx, cy, max_dim=160)
+    # Centre of right column: RGT_X + RGT_W//2, (MAIN_Y + MAIN_END)//2
+    cx = RGT_X + RGT_W // 2   # ≈ 1081
+    cy = (MAIN_Y + MAIN_END) // 2  # ≈ 257
+    _render_right_logo(card, theme, cx, cy, max_dim=175)
 
 
 def _render_right_logo(card: Image.Image, theme: dict,
@@ -1181,33 +1183,33 @@ def generate_card(
     draw = ImageDraw.Draw(card)
 
     # Left micro-code
-    draw.text((OUT_PAD, 6), "KOH",
-              font=_font(9, cinzel=True), fill=(*t["gold"][:3], 162))
-    draw.text((OUT_PAD, 18), "TIERED  MEMORY",
-              font=_font(6), fill=(*t["text2"][:3], 72))
+    draw.text((OUT_PAD, 8), "KOH",
+              font=_font(11, cinzel=True), fill=(*t["gold"][:3], 162))
+    draw.text((OUT_PAD, 24), "SERIES  MMXXV",
+              font=_font(8), fill=(*t["text2"][:3], 72))
 
     # Center — official header text
-    hdr1_f = _font(12, cinzel=True)
+    hdr1_f = _font(18, cinzel=True)
     hdr1   = "KINGDOM  OF  HELL"
     hdr1_w = _tw(draw, hdr1, hdr1_f)
-    _glow(card, ((W - hdr1_w) // 2, 5), hdr1, hdr1_f,
-          (*t["gold"][:3], 228), t["glow"], blur=7, spread=2)
+    _glow(card, ((W - hdr1_w) // 2, 8), hdr1, hdr1_f,
+          (*t["gold"][:3], 232), t["glow"], blur=10, spread=3)
     draw = ImageDraw.Draw(card)
-    hdr2_f = _font(7, cinzel=True)
-    hdr2   = "INFERNAL  IDENTITY  SYSTEM"
+    hdr2_f = _font(10, cinzel=True)
+    hdr2   = "INFERNAL  IDENTIFICATION  SYSTEM"
     hdr2_w = _tw(draw, hdr2, hdr2_f)
-    draw.text(((W - hdr2_w) // 2, 20), hdr2,
-              font=hdr2_f, fill=(*t["text2"][:3], 135))
+    draw.text(((W - hdr2_w) // 2, 33), hdr2,
+              font=hdr2_f, fill=(*t["text2"][:3], 140))
 
     # Right micro-code
-    draw.text((W - OUT_PAD - 75, 6), "INFERNAL  ARC",
-              font=_font(6), fill=(*t["text2"][:3], 72))
+    draw.text((W - OUT_PAD - 96, 8), "INFERNAL  REG.",
+              font=_font(8), fill=(*t["text2"][:3], 72))
 
-    # Header bottom rule — gold + border hairline
-    draw.line([(OUT_PAD, HDR_H - 5), (W - OUT_PAD, HDR_H - 5)],
-              fill=(*t["gold"][:3], 120), width=1)
-    draw.line([(OUT_PAD, HDR_H - 2), (W - OUT_PAD, HDR_H - 2)],
-              fill=(*t["border"][:3], 48), width=1)
+    # Header bottom double-rule
+    draw.line([(OUT_PAD, HDR_H - 8), (W - OUT_PAD, HDR_H - 8)],
+              fill=(*t["gold"][:3], 148), width=2)
+    draw.line([(OUT_PAD, HDR_H - 3), (W - OUT_PAD, HDR_H - 3)],
+              fill=(*t["border"][:3], 52), width=1)
 
     # ════════════════════════════════════════════════════════════════════════
     # MAIN BODY  y = 32 – 234      3-column fixed grid
@@ -1243,119 +1245,119 @@ def generate_card(
                              radius=AV_RADIUS + 4, outline=outer_col, width=1)
 
     # "IDENTIFICATION PHOTO" caption
-    cap_f = _font(6, cinzel=True)
+    cap_f = _font(8, cinzel=True)
     cap   = "IDENTIFICATION  PHOTO"
     cap_w = _tw(draw, cap, cap_f)
-    draw.text((AV_X + (AV_SZ - cap_w) // 2, AV_Y + AV_SZ + 4),
+    draw.text((AV_X + (AV_SZ - cap_w) // 2, AV_Y + AV_SZ + 6),
               cap, font=cap_f, fill=(*t["text2"][:3], 85))
 
     # Separator line under caption
-    bal_sep_y = AV_Y + AV_SZ + 16
-    draw.line([(AV_X + 6, bal_sep_y), (AV_X + AV_SZ - 6, bal_sep_y)],
+    bal_sep_y = AV_Y + AV_SZ + 22
+    draw.line([(AV_X + 8, bal_sep_y), (AV_X + AV_SZ - 8, bal_sep_y)],
               fill=(*t["border"][:3], 50), width=1)
 
     # Balance panel
     bp = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     ImageDraw.Draw(bp).rounded_rectangle(
-        [(AV_X - 2, bal_sep_y + 3), (AV_X + AV_SZ + 2, MAIN_END - 8)],
-        radius=6, fill=(*t["wealth_hl"][:3], 75),
+        [(AV_X - 2, bal_sep_y + 4), (AV_X + AV_SZ + 2, MAIN_END - 12)],
+        radius=8, fill=(*t["wealth_hl"][:3], 80),
     )
     card.alpha_composite(bp)
     draw = ImageDraw.Draw(card)
 
-    bal_lbl_f = _font(7, cinzel=True)
+    bal_lbl_f = _font(9, cinzel=True)
     bal_lbl   = "BALANCE"
     bal_lbl_w = _tw(draw, bal_lbl, bal_lbl_f)
-    draw.text((AV_X + (AV_SZ - bal_lbl_w) // 2, bal_sep_y + 7),
-              bal_lbl, font=bal_lbl_f, fill=(*t["text2"][:3], 138))
+    draw.text((AV_X + (AV_SZ - bal_lbl_w) // 2, bal_sep_y + 10),
+              bal_lbl, font=bal_lbl_f, fill=(*t["text2"][:3], 145))
 
     # Balance number + coin icon
     bal_str  = _fmt_dc(balance)
-    bal_font = _fit_font(draw, bal_str, AV_SZ - 32, 26, 16, bold=True)
-    bal_fh   = getattr(bal_font, "size", 22)
-    coin_sz  = max(int(bal_fh * 0.82), 16)
+    bal_font = _fit_font(draw, bal_str, AV_SZ - 28, 42, 24, bold=True)
+    bal_fh   = getattr(bal_font, "size", 36)
+    coin_sz  = max(int(bal_fh * 0.82), 24)
     bal_w    = _tw(draw, bal_str, bal_font)
-    tot_bal  = bal_w + 4 + coin_sz
+    tot_bal  = bal_w + 6 + coin_sz
     bal_x    = AV_X + (AV_SZ - tot_bal) // 2
-    bal_y_p  = bal_sep_y + 18
+    bal_y_p  = bal_sep_y + 28
     _glow(card, (bal_x, bal_y_p), bal_str, bal_font,
-          (*t["gold"][:3], 255), t["glow"], blur=14, spread=3)
-    _composite_coin(card, bal_x + bal_w + 4,
+          (*t["gold"][:3], 255), t["glow"], blur=18, spread=4)
+    _composite_coin(card, bal_x + bal_w + 6,
                     bal_y_p + (bal_fh - coin_sz) // 2, coin_sz)
     draw = ImageDraw.Draw(card)
 
     # "D E V I L C O I N S" sublabel
     dc_sub   = "D E V I L C O I N S"
-    dc_f     = _font(6, cinzel=True)
+    dc_f     = _font(8, cinzel=True)
     dc_w     = _tw(draw, dc_sub, dc_f)
-    draw.text((AV_X + (AV_SZ - dc_w) // 2, bal_y_p + bal_fh + 4),
-              dc_sub, font=dc_f, fill=(*t["text2"][:3], 78))
+    draw.text((AV_X + (AV_SZ - dc_w) // 2, bal_y_p + bal_fh + 6),
+              dc_sub, font=dc_f, fill=(*t["text2"][:3], 80))
 
     # Left/center vertical rule
     draw.line([(LFT_R + 9, MAIN_Y + 8), (LFT_R + 9, MAIN_END - 8)],
               fill=(*t["border"][:3], 52), width=1)
 
     # ── CENTER COLUMN ─────────────────────────────────────────────────────────
-    flbl    = _font(7, cinzel=True)    # field label
+    flbl    = _font(9, cinzel=True)    # field label
     fx      = CTR_X
     fy      = AV_Y                     # aligned with avatar top
-    fw      = CTR_W                    # 408 px
-    col_mid = fx + fw // 2            # mid-point for two-sub-col splits
+    fw      = CTR_W
+    col_mid = fx + fw // 2
 
     # ── NAME ──
     draw.text((fx, fy), "NAME", font=flbl, fill=(*t["text2"][:3], 108))
-    fy += 11
-    name_f = _fit_font(draw, dn, fw - 4, 22, 12, bold=True)
+    fy += 14
+    name_f = _fit_font(draw, dn, fw - 4, 34, 16, bold=True)
     _glow(card, (fx, fy), dn, name_f,
-          t["text1"], t["glow"], blur=6, spread=2)
+          t["text1"], t["glow"], blur=8, spread=3)
     draw = ImageDraw.Draw(card)
-    fy += getattr(name_f, "size", 20) + 5
+    fy += getattr(name_f, "size", 30) + 8
 
     # thin rule
     draw.line([(fx, fy), (CTR_R, fy)], fill=(*t["border"][:3], 32), width=1)
-    fy += 9
+    fy += 12
 
     # ── RANK (left half) | TITLE (right half) ──
-    hw = fw // 2 - 6
+    hw = fw // 2 - 8
     draw.text((fx, fy),         "RANK",  font=flbl, fill=(*t["text2"][:3], 108))
-    draw.text((col_mid + 4, fy),"TITLE", font=flbl, fill=(*t["text2"][:3], 108))
-    fy += 11
-    rank_disp = display_role[:16] if display_role else "—"
-    _glow(card, (fx, fy), rank_disp, _font(16, bold=True),
-          (*t["gold"][:3], 228), t["glow"], blur=6, spread=1)
+    draw.text((col_mid + 6, fy),"TITLE", font=flbl, fill=(*t["text2"][:3], 108))
+    fy += 14
+    rank_disp = display_role[:18] if display_role else "—"
+    _glow(card, (fx, fy), rank_disp, _font(24, bold=True),
+          (*t["gold"][:3], 228), t["glow"], blur=8, spread=2)
     draw = ImageDraw.Draw(card)
     has_title  = bool(equipped_title and equipped_title.lower()
                       not in ("unmarked", ""))
     title_disp = equipped_title if has_title else "—"
-    title_vf   = _fit_font(draw, title_disp, hw, 14, 9, bold=True)
-    draw.text((col_mid + 4, fy + 2), title_disp, font=title_vf,
+    title_vf   = _fit_font(draw, title_disp, hw, 20, 12, bold=True)
+    draw.text((col_mid + 6, fy + 2), title_disp, font=title_vf,
               fill=(*t["accent"][:3], 208))
-    fy += 22
+    fy += 34
 
     # thin rule
     draw.line([(fx, fy), (CTR_R, fy)], fill=(*t["border"][:3], 28), width=1)
-    fy += 9
+    fy += 12
 
     # ── ID NO. (left) | CLASSIFICATION (right) ──
     draw.text((fx, fy),          "ID NO.",         font=flbl, fill=(*t["text2"][:3], 108))
-    draw.text((col_mid + 4, fy), "CLASSIFICATION", font=flbl, fill=(*t["text2"][:3], 108))
-    fy += 11
-    _glow(card, (fx, fy), card_id, _font(12, bold=True),
-          (*t["gold"][:3], 198), t["glow"], blur=4, spread=1)
+    draw.text((col_mid + 6, fy), "CLASSIFICATION", font=flbl, fill=(*t["text2"][:3], 108))
+    fy += 14
+    _glow(card, (fx, fy), card_id, _font(16, bold=True),
+          (*t["gold"][:3], 198), t["glow"], blur=5, spread=1)
     draw = ImageDraw.Draw(card)
-    cls_f = _fit_font(draw, classification, hw, 11, 8, bold=True)
-    draw.text((col_mid + 4, fy + 1), classification, font=cls_f,
-              fill=(*t["accent"][:3], 175))
-    fy += 17
+    cls_f = _fit_font(draw, classification, hw, 16, 10, bold=True)
+    draw.text((col_mid + 6, fy + 1), classification, font=cls_f,
+              fill=(*t["accent"][:3], 200))
+    fy += 24
 
     # ── Data boundary — heavier double rule ──
-    draw.line([(fx, fy),     (CTR_R, fy)],     fill=(*t["border"][:3], 75), width=2)
-    draw.line([(fx, fy + 4), (CTR_R, fy + 4)], fill=(*t["gold"][:3], 30),   width=1)
-    fy += 16
+    draw.line([(fx, fy),     (CTR_R, fy)],     fill=(*t["border"][:3], 80), width=2)
+    draw.line([(fx, fy + 5), (CTR_R, fy + 5)], fill=(*t["gold"][:3], 38),   width=1)
+    fy += 22
 
     # ── KINGDOM RANK | TAXES PAID  (stat cols) ──
-    stat_lbl_f = _font(7, cinzel=True)
-    stat_val_f = _font(22, bold=True)
+    stat_lbl_f = _font(9, cinzel=True)
+    stat_val_f = _font(32, bold=True)
     sc_left    = fx + fw // 4
     sc_right   = fx + (fw * 3) // 4
 
@@ -1364,17 +1366,17 @@ def generate_card(
         lw_ = _tw(draw, label_, stat_lbl_f)
         draw.text((cx_ - lw_ // 2, fy), label_,
                   font=stat_lbl_f, fill=(*t["text2"][:3], 130))
-        vfh_  = getattr(stat_val_f, "size", 22)
-        csz_  = max(int(vfh_ * 0.74), 16)
+        vfh_  = getattr(stat_val_f, "size", 32)
+        csz_  = max(int(vfh_ * 0.74), 24)
         vw_   = _tw(draw, val_, stat_val_f)
-        tot_  = vw_ + (csz_ + 5 if currency_ else 0)
+        tot_  = vw_ + (csz_ + 6 if currency_ else 0)
         tx_   = cx_ - tot_ // 2
         col_  = (*t["gold"][:3], 255) if king_ else (*t["accent"][:3], 218)
-        _glow(card, (tx_, fy + 12), val_, stat_val_f, col_, t["glow"],
-              blur=10 if king_ else 5, spread=3 if king_ else 2)
+        _glow(card, (tx_, fy + 18), val_, stat_val_f, col_, t["glow"],
+              blur=14 if king_ else 7, spread=4 if king_ else 2)
         if currency_:
-            _composite_coin(card, tx_ + vw_ + 5,
-                            fy + 12 + (vfh_ - csz_) // 2, csz_)
+            _composite_coin(card, tx_ + vw_ + 6,
+                            fy + 18 + (vfh_ - csz_) // 2, csz_)
 
     # Kingdom rank cell — exempt groups show official status instead of a number
     if kr_eligible:
@@ -1388,18 +1390,18 @@ def generate_card(
     draw = ImageDraw.Draw(card)
 
     # Thin vertical divider between stat cells
-    draw.line([(col_mid, fy + 4), (col_mid, fy + 38)],
-              fill=(*t["border"][:3], 38), width=1)
+    draw.line([(col_mid, fy + 6), (col_mid, fy + 58)],
+              fill=(*t["border"][:3], 42), width=1)
 
     # ── RIGHT COLUMN separator line ────────────────────────────────────────
-    draw.line([(CTR_R + 9, MAIN_Y + 8), (CTR_R + 9, MAIN_END - 8)],
+    draw.line([(CTR_R + 10, MAIN_Y + 12), (CTR_R + 10, MAIN_END - 12)],
               fill=(*t["border"][:3], 40), width=1)
 
-    # ── RIGHT COLUMN label (small, overlaid on sigil area) ────────────────
-    rgt_lbl_f = _font(7, cinzel=True)
+    # ── RIGHT COLUMN label (small, overlaid on sigil area) ─────────────────
+    rgt_lbl_f = _font(9, cinzel=True)
     rgt_lbl   = "AUTHORITY  SEAL"
     rgt_lbl_w = _tw(draw, rgt_lbl, rgt_lbl_f)
-    draw.text((RGT_X + (RGT_W - rgt_lbl_w) // 2, MAIN_END - 18),
+    draw.text((RGT_X + (RGT_W - rgt_lbl_w) // 2, MAIN_END - 24),
               rgt_lbl, font=rgt_lbl_f, fill=(*t["text2"][:3], 70))
 
     # Full-width main-body bottom separator
@@ -1427,19 +1429,25 @@ def generate_card(
     title_col_  = (*t["accent"][:3], 205) if has_title else (*t["text2"][:3], 62)
 
     # Section label
-    art_lbl_f = _font(7, cinzel=True)
+    art_lbl_f = _font(9, cinzel=True)
     art_lbl   = "BOUND  ARTIFACTS"
     art_lbl_w = _tw(draw, art_lbl, art_lbl_f)
-    draw.text((OUT_PAD, ART_Y + 4), art_lbl,
-              font=art_lbl_f, fill=(*t["text2"][:3], 112))
-    draw.line([(OUT_PAD + art_lbl_w + 8, ART_Y + 8),
-               (W - OUT_PAD, ART_Y + 8)],
+    draw.text(((W - art_lbl_w) // 2, ART_Y + 6), art_lbl,
+              font=art_lbl_f, fill=(*t["text2"][:3], 125))
+    # Diamond dividers each side of label
+    art_cx = W // 2
+    draw.line([(OUT_PAD + 24, ART_Y + 18), (art_cx - art_lbl_w // 2 - 12, ART_Y + 18)],
               fill=(*t["border"][:3], 40), width=1)
+    draw.line([(art_cx + art_lbl_w // 2 + 12, ART_Y + 18), (W - OUT_PAD - 24, ART_Y + 18)],
+              fill=(*t["border"][:3], 40), width=1)
+    draw.polygon([(art_cx, ART_Y + 12), (art_cx + 6, ART_Y + 18),
+                  (art_cx, ART_Y + 24), (art_cx - 6, ART_Y + 18)],
+                 fill=(*t["accent"][:3], 140))
 
     # Three horizontal artifact slots
-    slot_gap    = 12
-    slot_y      = ART_Y + 16
-    slot_h      = ARTS_END - slot_y - 4    # ~57 px
+    slot_gap    = 16
+    slot_y      = ART_Y + 30
+    slot_h      = ARTS_END - slot_y - 6
     usable_w    = W - OUT_PAD * 2
     slot_w      = (usable_w - slot_gap * 2) // 3
     slot_xs     = [OUT_PAD,
@@ -1450,8 +1458,8 @@ def generate_card(
         ("SKIN",   skin_name_,  skin_col_),
         ("TITLE",  title_name_, title_col_),
     ]
-    slot_lbl_f  = _font(7, cinzel=True)
-    slot_val_sz = 13
+    slot_lbl_f  = _font(9, cinzel=True)
+    slot_val_sz = 18
 
     for (slot_, val_, vcol_), sx_ in zip(slot_data, slot_xs):
         # Slot background
@@ -1496,86 +1504,89 @@ def generate_card(
 
     draw = ImageDraw.Draw(card)
     valid_badges = [BADGES_CATALOG[b] for b in badges_list[:3] if b in BADGES_CATALOG]
-    SEAL_R  = 11                          # circle radius (22 px diameter)
-    SEAL_CY = BADGE_Y + SEAL_R + 1       # vertical centre
 
     if valid_badges:
-        # "SEALS OF RECOGNITION" micro-label left-aligned
-        sl_f  = _font(6, cinzel=True)
+        # "SEALS OF RECOGNITION" micro-label centered
+        sl_f  = _font(8, cinzel=True)
         sl    = "SEALS  OF  RECOGNITION"
-        draw.text((OUT_PAD, BADGE_Y + 1), sl,
-                  font=sl_f, fill=(*t["text2"][:3], 90))
+        sl_w  = _tw(draw, sl, sl_f)
+        draw.text(((W - sl_w) // 2, BADGE_Y + 2), sl,
+                  font=sl_f, fill=(*t["text2"][:3], 95))
 
-        # Position badges right-aligned within the row
-        spacing  = SEAL_R * 2 + 8
+        SEAL_R_  = 16
+        SEAL_CY_ = BADGE_Y + SEAL_R_ + 14
+        spacing  = SEAL_R_ * 2 + 12
         n_badges = len(valid_badges)
-        total_bw = n_badges * (SEAL_R * 2) + (n_badges - 1) * 8
+        total_bw = n_badges * (SEAL_R_ * 2) + (n_badges - 1) * 12
         bx_start = (W - total_bw) // 2
-        seal_x   = bx_start + SEAL_R
+        seal_x   = bx_start + SEAL_R_
 
         for badge in valid_badges:
             col = _RARITY_BADGE_COLOR.get(badge.rarity, t["text2"][:3])
-            # Glow ring
             gl = Image.new("RGBA", (W, H), (0, 0, 0, 0))
             gld = ImageDraw.Draw(gl)
-            gld.ellipse([(seal_x - SEAL_R - 3, SEAL_CY - SEAL_R - 3),
-                          (seal_x + SEAL_R + 3, SEAL_CY + SEAL_R + 3)],
-                         fill=(*col, 35))
-            gl = gl.filter(ImageFilter.GaussianBlur(4))
+            gld.ellipse([(seal_x - SEAL_R_ - 4, SEAL_CY_ - SEAL_R_ - 4),
+                          (seal_x + SEAL_R_ + 4, SEAL_CY_ + SEAL_R_ + 4)],
+                         fill=(*col, 38))
+            gl = gl.filter(ImageFilter.GaussianBlur(5))
             card.alpha_composite(gl)
             d2 = ImageDraw.Draw(card)
-
-            # Fill circle
-            d2.ellipse([(seal_x - SEAL_R, SEAL_CY - SEAL_R),
-                         (seal_x + SEAL_R, SEAL_CY + SEAL_R)],
-                        fill=(*t["bg2"][:3], 180),
+            d2.ellipse([(seal_x - SEAL_R_, SEAL_CY_ - SEAL_R_),
+                         (seal_x + SEAL_R_, SEAL_CY_ + SEAL_R_)],
+                        fill=(*t["bg2"][:3], 185),
                         outline=(*col, 200), width=2)
-
-            # Abbreviation inside (first 2 chars, tiny font)
             ab   = badge.name[:2].upper()
-            ab_f = _font(7, bold=True)
+            ab_f = _font(10, bold=True)
             ab_w = _tw(d2, ab, ab_f)
-            ab_fh = getattr(ab_f, "size", 7)
-            d2.text((seal_x - ab_w // 2, SEAL_CY - ab_fh // 2),
-                    ab, font=ab_f, fill=(*col, 218))
-
-            # Badge name below the seal
-            nm_f  = _font(6)
-            nm_w  = _tw(d2, badge.name[:10], nm_f)
-            d2.text((seal_x - nm_w // 2, SEAL_CY + SEAL_R + 2),
-                    badge.name[:10], font=nm_f,
-                    fill=(*col, 140))
-
+            ab_fh = getattr(ab_f, "size", 10)
+            d2.text((seal_x - ab_w // 2, SEAL_CY_ - ab_fh // 2),
+                    ab, font=ab_f, fill=(*col, 220))
+            nm_f  = _font(8)
+            nm_w  = _tw(d2, badge.name[:12], nm_f)
+            d2.text((seal_x - nm_w // 2, SEAL_CY_ + SEAL_R_ + 3),
+                    badge.name[:12], font=nm_f, fill=(*col, 145))
             seal_x += spacing
     else:
-        nb_f  = _font(8)
+        nb_f  = _font(10)
         nb    = "No seals of recognition registered."
         nb_w  = _tw(draw, nb, nb_f)
-        draw.text(((W - nb_w) // 2, BADGE_Y + 4), nb,
-                  font=nb_f, fill=(*t["text2"][:3], 48))
+        draw.text(((W - nb_w) // 2, BADGE_Y + 6), nb,
+                  font=nb_f, fill=(*t["text2"][:3], 52))
 
     # ════════════════════════════════════════════════════════════════════════
-    # FOOTER  y = 306 – 320
+    # FOOTER  y = 678 – 720
     # ════════════════════════════════════════════════════════════════════════
 
     draw = ImageDraw.Draw(card)
 
-    # Thin separator
-    draw.line([(OUT_PAD, FOOTER_Y - 1), (W - OUT_PAD, FOOTER_Y - 1)],
-              fill=(*t["border"][:3], 34), width=1)
+    # Top rule
+    draw.line([(OUT_PAD, FOOTER_Y - 2), (W - OUT_PAD, FOOTER_Y - 2)],
+              fill=(*t["border"][:3], 38), width=1)
 
-    # Single footer inscription + machine code on same line split left/right
-    fi_f  = _font(7)
-    fi    = "The Abyss remembers your name."
-    fi_w  = _tw(draw, fi, fi_f)
-    draw.text((OUT_PAD, FOOTER_Y + 3), fi,
-              font=fi_f, fill=(*t["text2"][:3], 110))
+    # Three centred footer lines
+    ft1_f = _font(11, cinzel=True)
+    ft1   = "Registered in the Infernal Archives."
+    ft1_w = _tw(draw, ft1, ft1_f)
+    draw.text(((W - ft1_w) // 2, FOOTER_Y + 4),
+              ft1, font=ft1_f, fill=(*t["text2"][:3], 135))
 
-    mc_f  = _font(6)
-    mc    = f"ID: {card_id}  ·  SERIES MMXXV  ·  INFERNAL REGISTRY"
+    ft2_f = _font(10)
+    ft2   = "The Abyss remembers your name."
+    ft2_w = _tw(draw, ft2, ft2_f)
+    draw.text(((W - ft2_w) // 2, FOOTER_Y + 20),
+              ft2, font=ft2_f, fill=(*t["text2"][:3], 100))
+
+    ft3_f = _font(9)
+    ft3   = f"\u201cThe Abyss remembers your name.\u201d"
+    ft3_w = _tw(draw, ft3, ft3_f)
+    draw.text(((W - ft3_w) // 2, FOOTER_Y + 34),
+              ft3, font=ft3_f, fill=(*t["text2"][:3], 72))
+
+    mc_f  = _font(8)
+    mc    = f"ID: {card_id}  ·  SERIES MMXXV  ·  KINGDOM OF HELL  ·  INFERNAL REGISTRY"
     mc_w  = _tw(draw, mc, mc_f)
-    draw.text((W - OUT_PAD - mc_w, FOOTER_Y + 5), mc,
-              font=mc_f, fill=(*t["text2"][:3], 60))
+    draw.text(((W - mc_w) // 2, FOOTER_Y + 50),
+              mc, font=mc_f, fill=(*t["text2"][:3], 52))
 
     # ── Post-processing (applied in order over the full canvas) ──────────────
     _apply_relic_effect(card, relic_id, t)
