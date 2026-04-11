@@ -14,6 +14,7 @@ from ..services.cosmetic_service import CosmeticService
 from ..utils.skins import (
     SKINS, TITLES_CATALOG, RELICS_CATALOG, BADGES_CATALOG,
     DEFAULT_SKIN_ID,
+    detect_rank_from_roles, rank_idx,
 )
 from ..utils.routing import check_routing
 from ..ui.infernal_market import InfernalMarketHub
@@ -68,8 +69,13 @@ class CosmeticsCog(commands.Cog):
             await interaction.followup.send(embed=embed, ephemeral=True)
             return
 
-        user_rank     = user_row.get("rank", "Forsaken") if user_row else "Forsaken"
         user_balance  = user_row.get("balance", 0) if user_row else 0
+
+        # Detect rank from actual Discord roles (real-time, highest wins).
+        # Falls back to DB-stored rank if no matching role found.
+        db_rank   = user_row.get("rank", "Forsaken") if user_row else "Forsaken"
+        role_rank = detect_rank_from_roles(getattr(interaction.user, "roles", []))
+        user_rank = role_rank if rank_idx(role_rank) > rank_idx(db_rank) else db_rank
 
         # Fetch full cosmetic state
         owned_skins  = await self.cosmetics.get_owned_skins(guild_id, discord_id)

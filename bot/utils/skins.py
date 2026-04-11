@@ -295,17 +295,101 @@ TITLES: List[str] = list(TITLES_CATALOG.keys())
 
 
 # ─── Rank Order ───────────────────────────────────────────────────────────────
+# Levels are additive — higher number = higher rank.
+# Staff/Nobility override Member ranks.
+# Admin/Owner override everything.
 
 RANK_ORDER: Dict[str, int] = {
-    "Forsaken": 0, "Vermin": 1, "Corrupted": 2, "Folklore": 3, "Mythology": 4,
-    "Demonology": 5, "Eschatology": 6, "Archangel": 7, "Archdemon": 8,
-    "Knight": 9, "Baron": 10, "Viscount": 11, "Count": 12, "Marquis": 13, "Duke": 14,
-    "Chancellor": 15,
+    # Member progression
+    "Forsaken":     0,
+    "Vermin":       1,
+    "Corrupted":    2,
+    "Folklore":     3,
+    "Mythology":    4,
+    "Demonology":   5,
+    "Eschatology":  6,
+    "Archangel":    7,
+    "Archdemon":    8,
+    # Nobility
+    "Knight":       9,
+    "Baron":        10,
+    "Viscount":     11,
+    "Count":        12,
+    "Marquis":      13,
+    "Duke":         14,
+    # Staff / Legion
+    "Legionnaires": 15,
+    "Centurion":    16,
+    # High Council / Moderation
+    "Legates":      17,
+    "Chancellor":   18,
+    # Royal / Admin
+    "Princesses":   19,
+    "Princes":      19,
+    "Consorts":     20,
+    # Owner
+    "Sovereign":    21,
 }
 
 
 def rank_idx(rank: str) -> int:
     return RANK_ORDER.get(rank, 0)
+
+
+# ─── Discord Role ID → Rank Name Mapping ─────────────────────────────────────
+# Maps each Discord role ID to its Kingdom rank name.
+# Used to detect rank in real-time from member roles at market open.
+
+DISCORD_ROLE_RANKS: Dict[int, str] = {
+    # Owner
+    1290484661419638873: "Sovereign",
+    # Admin / Royal Family
+    1418279591528890508: "Consorts",
+    1290484661419638870: "Princes",
+    1489067882557079603: "Princesses",
+    # Moderation / High Council
+    1414110540128718898: "Chancellor",
+    1489108767353344130: "Legates",
+    # Nobility
+    1489130140532211874: "Duke",
+    1489129490209706045: "Marquis",
+    1489128625474113697: "Count",
+    1489127901461876807: "Viscount",
+    1489127375206613082: "Baron",
+    1489126295798415380: "Knight",
+    # Staff / Legion
+    1489108909682589696: "Centurion",
+    1290484661419638871: "Legionnaires",
+    # Member Ranks
+    1290530372748185612: "Archdemon",
+    1290530281580662796: "Archangel",
+    1290529262377500815: "Demonology",
+    1290484661419638869: "Eschatology",
+    1290484661419638868: "Folklore",
+    1290484661419638867: "Mythology",
+    1290484661419638866: "Corrupted",
+    1484302112241352744: "Vermin",
+    1489101267048468490: "Forsaken",
+}
+
+
+def detect_rank_from_roles(member_roles) -> str:
+    """
+    Return the highest Kingdom rank for a member based on their Discord roles.
+
+    member_roles: iterable of objects with an `.id` attribute (discord.Role list).
+    Falls back to "Forsaken" if no known role is found.
+    """
+    best_rank  = "Forsaken"
+    best_level = RANK_ORDER.get("Forsaken", 0)
+    for role in member_roles:
+        rank_name = DISCORD_ROLE_RANKS.get(role.id)
+        if rank_name:
+            level = RANK_ORDER.get(rank_name, -1)
+            if level > best_level:
+                best_level = level
+                best_rank  = rank_name
+    return best_rank
 
 
 # ─── Relic ────────────────────────────────────────────────────────────────────

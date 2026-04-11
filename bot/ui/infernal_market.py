@@ -116,39 +116,52 @@ _CAT_INTRO: Dict[str, str] = {
 }
 
 # ─── Image registry ──────────────────────────────────────────────────────────
-# Replace these URLs with your own hosted images for best results.
-# Discord embeds handle missing images gracefully — no image = embed still works.
+# All images are verified direct Wikimedia Commons CDN URLs (resolved via API).
+# Public domain paintings by John Martin (1789–1854). Permanently hosted.
+# Discord embeds load these directly — no redirects, no rate limiting.
+#
+# Verified paintings:
+#  Hub / Seal       →  "Pandemonium" (c.1841, WGA) — Satan's court in Hell
+#  Acquire          →  "The Great Day of His Wrath" (1853) — divine fire/judgment
+#  Exit             →  "The Plains of Heaven" (1853) — fading from the Exchange
+#  Relics           →  "The Great Day of His Wrath" — cursed power, fire
+#  Titles           →  "Belshazzar's Feast" (1826) — throne of fallen kings
+#  Skins            →  "Sodom and Gomorrah" — dark transformation, destruction
+#  Badges           →  "Ruins of an Ancient City" — ancient marks, carved stone
+
+_CDN = "https://upload.wikimedia.org/wikipedia/commons/"
 
 _IMG: Dict[str, Optional[str]] = {
     # Main screens
-    "hub":     "https://i.imgur.com/aKxEjcC.jpg",
-    "exit":    "https://i.imgur.com/TlMBwRq.jpg",
-    "seal":    "https://i.imgur.com/mUGIbX7.jpg",
-    "acquire": "https://i.imgur.com/v8tlXJg.jpg",
+    "hub":     _CDN + "6/65/John_Martin_-_Pandemonium_-_WGA14149.jpg",
+    "seal":    _CDN + "6/65/John_Martin_-_Pandemonium_-_WGA14149.jpg",
+    "acquire": _CDN + "5/50/John_Martin_-_The_Great_Day_of_His_Wrath_-_Google_Art_Project.jpg",
+    "exit":    _CDN + "7/79/John_Martin_-_The_Plains_of_Heaven_-_Google_Art_Project.jpg",
     # Category banners
-    "relics":  "https://i.imgur.com/nCyKJIy.jpg",
-    "titles":  "https://i.imgur.com/8lkPJi5.jpg",
-    "skins":   "https://i.imgur.com/XbUeMiI.jpg",
-    "badges":  "https://i.imgur.com/7k2bJRq.jpg",
+    "relics":  _CDN + "5/50/John_Martin_-_The_Great_Day_of_His_Wrath_-_Google_Art_Project.jpg",
+    "titles":  _CDN + "e/ec/John_Martin_-_Belshazzar%27s_Feast_-_Google_Art_Project.jpg",
+    "skins":   _CDN + "e/e1/John_Martin_-_Sodom_and_Gomorrah.jpg",
+    "badges":  _CDN + "6/6f/John_Martin_-_Ruins_of_an_Ancient_City_-_Cleveland_Art_Museum.jpg",
 }
 
 # Per-item image overrides (item.id → URL). Falls back to category image.
+# Add custom URLs here for individual item art as the server grows.
 _ITEM_IMG: Dict[str, Optional[str]] = {
-    # Skins
+    # Skins — inherits category "skins" fallback
     "blood_crown":   None,
     "abyss_smoke":   None,
     "infernal_gold": None,
     "royal_dark":    None,
     "black_throne":  None,
     "crimson_sigil": None,
-    # Relics
+    # Relics — inherits category "relics" fallback
     "soul_aura":       None,
     "infernal_crown":  None,
     "void_drift":      None,
     "crimson_chains":  None,
     "abyssal_veil":    None,
     "sanguine_halo":   None,
-    # Badges (use emoji icon, no image needed for small items)
+    # Badges — inherits category "badges" fallback
 }
 
 # Per-item lore quotes (psychological impact lines shown in item embeds)
