@@ -1,7 +1,7 @@
 """
 Kingdom Treasury — Infernal Identity Card Generator
-900 × 1100 px  |  Vertical AAA Layout  |  Pillow
-Zones: Header · Identity · Wealth · Stats · Audit · Footer
+900 × 1100 px  |  Official Government ID Layout  |  Pillow
+Zones: Header · Identity · Balance · Stats · Artifacts · Footer
 """
 
 import io
@@ -21,26 +21,36 @@ _DEJA_R = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
 
 # ─── Card geometry ────────────────────────────────────────────────────────────
 W, H     = 900, 1100
-RADIUS   = 26
-PAD      = 18           # tight — content dominates the surface
+RADIUS   = 20
+PAD      = 22
 
 # ── Zone boundaries (y) ──────────────────────────────────────────────────────
-HEADER_H  = 50
+#   Zone 1 — Header strip             y=  0 –  90
+HEADER_H  = 90
+DIV1      = 90
+#   Zone 2 — Identity block           y= 90 – 340
+IDENT_Y   = 90
+AV_SZ     = 196
+AV_X      = 22
+AV_Y      = 100
+ID_DATA_X = AV_X + AV_SZ + 26          # x=244
+DIV2      = 340
+#   Zone 3 — Balance                  y=340 – 488
+BAL_Y     = 340
+DIV3      = 488
+#   Zone 4 — Stats                    y=488 – 608
+STATS_Y   = 488
+DIV4      = 608
+#   Zone 5 — Bound Artifacts          y=608 – 888
+ART_Y     = 608
+DIV5      = 888
+#   Zone 6 — Footer                   y=888 – 1100
+FOOTER_Y  = 888
 
-DIV1      = 50
-ID_Y      = 56
-AV_SZ     = 206          # large avatar
-AV_X      = PAD
-AV_Y      = ID_Y + 10
-
-DIV2      = 278
-WEALTH_Y  = 284
-DIV3      = 508
-STATS_Y   = 514
-DIV4      = 656
-AUDIT_Y   = 662     # audit zone starts immediately after stats
-DIV5      = 1008    # audit zone ends / footer divider
-FOOTER_Y  = 1014
+# Legacy aliases (kept for relic / sigil helpers that reference them)
+WEALTH_Y  = BAL_Y
+AUDIT_Y   = ART_Y
+ID_Y      = IDENT_Y
 
 # ─── Skin themes ──────────────────────────────────────────────────────────────
 THEMES = {
@@ -442,6 +452,35 @@ def _placeholder_avatar(sz: int, theme: dict) -> Image.Image:
     d.ellipse([(m - 22, 16), (m + 22, 62)], fill=c)
     d.ellipse([(m - 36, 66), (m + 36, sz - 4)], fill=c)
     return av
+
+
+def _paste_avatar_square(card: Image.Image, av_bytes: Optional[bytes],
+                          theme: dict, x: int, y: int, sz: int, rank_level: int):
+    """Passport-style square photo with official document frame."""
+    if av_bytes:
+        try:
+            av = Image.open(io.BytesIO(av_bytes)).convert("RGBA").resize(
+                (sz, sz), Image.LANCZOS)
+        except Exception:
+            av = _placeholder_avatar(sz, theme)
+    else:
+        av = _placeholder_avatar(sz, theme)
+
+    av.putalpha(Image.new("L", (sz, sz), 255))
+    card.alpha_composite(av, (x, y))
+
+    d = ImageDraw.Draw(card)
+    # Inner frame
+    d.rectangle([(x - 1, y - 1), (x + sz, y + sz)],
+                outline=(*theme["border"][:3], 200), width=1)
+    # Outer frame
+    d.rectangle([(x - 4, y - 4), (x + sz + 3, y + sz + 3)],
+                outline=(*theme["border"][:3], 110), width=1)
+    # Gold accent frame for high ranks
+    if rank_level >= 15:
+        gold_a = min(255, 70 + (rank_level - 15) * 16)
+        d.rectangle([(x - 7, y - 7), (x + sz + 6, y + sz + 6)],
+                    outline=(*theme["gold"][:3], gold_a), width=1)
 
 
 # ─── Wealth zone highlight ────────────────────────────────────────────────────
@@ -875,6 +914,46 @@ def _render_badges_card(card: Image.Image, badge_ids: List[str],
         bx0 += badge_w + 14
 
 
+def _low_rank_damage(card: Image.Image, rank_level: int, theme: dict):
+    """Worn / damaged document overlay for very low ranks (Forsaken / Vermin)."""
+    rng = _random.Random(91827)           # deterministic
+    layer = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    d = ImageDraw.Draw(layer)
+    intensity = max(1, 3 - rank_level)   # 3 for level 0, 2 for 1, 1 for 2
+
+    # Scratch lines
+    for _ in range(intensity * 9):
+        x1 = rng.randint(0, W)
+        y1 = rng.randint(0, H)
+        x2 = x1 + rng.randint(-80, 80)
+        y2 = y1 + rng.randint(-40, 40)
+        a  = rng.randint(18, 48)
+        d.line([(x1, y1), (x2, y2)], fill=(0, 0, 0, a), width=1)
+
+    # Worn patches
+    for _ in range(intensity * 6):
+        px = rng.randint(60, W - 60)
+        py = rng.randint(120, H - 120)
+        pw = rng.randint(20, 90)
+        ph = rng.randint(2, 8)
+        a  = rng.randint(12, 35)
+        d.rectangle([(px, py), (px + pw, py + ph)], fill=(0, 0, 0, a))
+
+    layer = layer.filter(ImageFilter.GaussianBlur(0.6))
+    card.alpha_composite(layer)
+
+    # Faint "CONDEMNED" watermark stamp for rank 0
+    if rank_level == 0:
+        stamp_layer = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+        sd = ImageDraw.Draw(stamp_layer)
+        sf = _font(60, cinzel=True)
+        sw = _tw(sd, "CONDEMNED", sf)
+        sd.text(((W - sw) // 2, H // 2 - 30), "CONDEMNED",
+                font=sf, fill=(180, 0, 0, 22))
+        stamp_layer = stamp_layer.rotate(-25, center=(W // 2, H // 2))
+        card.alpha_composite(stamp_layer)
+
+
 def generate_card(
     username: str,
     display_name: str,
@@ -891,354 +970,453 @@ def generate_card(
     equipped_badges: Optional[List[str]] = None,
 ) -> io.BytesIO:
 
+    # ── Skin names ──────────────────────────────────────────────────────────
+    _SKIN_NAMES = {
+        "default":       "STANDARD ISSUE",
+        "blood_crown":   "BLOOD CROWN",
+        "abyss_smoke":   "ABYSS SMOKE",
+        "infernal_gold": "INFERNAL GOLD",
+        "royal_dark":    "ROYAL DARK",
+        "black_throne":  "BLACK THRONE",
+        "crimson_sigil": "CRIMSON SIGIL",
+    }
+
+    # ── Classification table ────────────────────────────────────────────────
+    _CLASS = [
+        "CONDEMNED — LOWEST CLASS",   # 0  Forsaken
+        "CONDEMNED — LOWEST CLASS",   # 1  Vermin
+        "LOWER ENTITY",               # 2  Corrupted
+        "LOWER ENTITY",               # 3  Folklore
+        "LESSER ENTITY",              # 4  Mythology
+        "LESSER ENTITY",              # 5  Demonology
+        "INFERNAL ENTITY",            # 6  Eschatology
+        "INFERNAL ENTITY",            # 7  Archangel
+        "HIGH ENTITY",                # 8  Archdemon
+        "HIGH ENTITY",                # 9  Knight
+        "NOBLE ENTITY",               # 10 Baron
+        "NOBLE ENTITY",               # 11 Viscount
+        "MILITARY AUTHORITY",         # 12 Count
+        "MILITARY AUTHORITY",         # 13 Marquis
+        "COUNCIL AUTHORITY",          # 14 Duke
+        "COUNCIL AUTHORITY",          # 15 Legionnaires
+        "INFERNAL AUTHORITY",         # 16 Centurion
+        "INFERNAL AUTHORITY",         # 17 Legates
+        "HIGH AUTHORITY",             # 18 Chancellor
+        "HIGH AUTHORITY",             # 19 Prince/Princess
+        "SUPREME AUTHORITY",          # 20 Consort
+        "SOVEREIGN — SUPREME CLASS",  # 21 Sovereign
+    ]
+
     t = _t(skin_id)
 
-    is_special   = bool(card_variant and card_variant.variant_type == "special")
     display_role = card_variant.primary_display_role if card_variant else rank
     economy_rank = card_variant.public_rank if card_variant else rank
+    rank_level   = _rank_level_from_name(economy_rank)
+    is_kingdom1  = (kingdom_rank == 1)
+    badges_list  = list(equipped_badges or [])
+    dn           = display_name or username
 
-    rank_level  = _rank_level_from_name(economy_rank)
-    is_kingdom1 = (kingdom_rank == 1)
-    badges_list = list(equipped_badges or [])
+    # Persistent infernal ID (hash of username — deterministic)
+    card_id      = f"KH-{abs(hash(username)) % 900000 + 100000:06d}"
+    classification = _CLASS[min(rank_level, len(_CLASS) - 1)]
 
     # ── Canvas ──────────────────────────────────────────────────────────────
     card = _gradient(W, H, t["bg1"], t["bg2"])
 
-    # ── Background sigil (behind everything) ──────────────────────────────
+    # ── Background sigil (very faint) ─────────────────────────────────────
     _bg_sigil(card, t)
 
-    # ── Ambient inner glow (rank-driven) ──────────────────────────────────
+    # ── Ambient inner glow (rank-driven, subtle) ───────────────────────────
     _inner_glow_vignette(card, t, rank_level)
 
-    # ── Wealth zone highlight ──────────────────────────────────────────────
-    _wealth_highlight(card, t)
-
     draw = ImageDraw.Draw(card)
 
-    # ────────────────────────────────────────────────────────────────────────
-    # ZONE 1 — HEADER
-    # ────────────────────────────────────────────────────────────────────────
-
-    # Card borders
+    # ════════════════════════════════════════════════════════════════════════
+    # CARD BORDER — official document frame
+    # ════════════════════════════════════════════════════════════════════════
+    border_a = min(200, 150 + rank_level * 3)
     draw.rounded_rectangle([(1, 1), (W - 2, H - 2)],
-                            radius=RADIUS, outline=(*t["border"][:3], 220), width=2)
+                            radius=RADIUS, outline=(*t["border"][:3], border_a), width=2)
     draw.rounded_rectangle([(5, 5), (W - 6, H - 6)],
-                            radius=RADIUS - 3, outline=(*t["border"][:3], 45), width=1)
+                            radius=RADIUS - 3, outline=(*t["border"][:3], 40), width=1)
+    if rank_level >= 16:
+        gold_a = min(255, 55 + (rank_level - 16) * 14)
+        draw.rounded_rectangle([(9, 9), (W - 10, H - 10)],
+                                radius=RADIUS - 6,
+                                outline=(*t["gold"][:3], gold_a), width=1)
 
-    # Header center text
-    hf = _font(10, cinzel=True)
-    htxt = "KINGDOM  OF  HELL    ·    INFERNAL  IDENTITY  CARD"
-    draw.text(((W - _tw(draw, htxt, hf)) // 2, 14), htxt,
-              font=hf, fill=(*t["text2"][:3], 155))
+    # ════════════════════════════════════════════════════════════════════════
+    # ZONE 1 — HEADER STRIP  (y=0–90)
+    # ════════════════════════════════════════════════════════════════════════
 
-    # Top-right badge — special role name OR kingdom rank #
-    if is_special:
-        role_upper = display_role.upper()
-        krf = _fit_font(draw, role_upper, 210, 28, 14, bold=True, cinzel=True)
-        krw = _tw(draw, role_upper, krf)
-        _glow(card, (W - PAD - krw, 6), role_upper, krf,
-              (*t["gold"][:3], 252), t["glow"], blur=16, spread=4)
-        draw = ImageDraw.Draw(card)
-        krl = _font(9, cinzel=True)
-        krlw = _tw(draw, "HIERARCHY ROLE", krl)
-        draw.text((W - PAD - krlw, 44), "HIERARCHY ROLE",
-                  font=krl, fill=(*t["text2"][:3], 140))
-    elif is_kingdom1:
-        # #1 Kingdom Rank — supreme treatment: large glowing gold with crown label
-        gold = (255, 210, 0)
-        kr_str = "#1"
-        krf = _font(42, bold=True, cinzel=True)
-        krw = _tw(draw, kr_str, krf)
-        _glow(card, (W - PAD - krw, 4), kr_str, krf,
-              (*gold, 255), gold, blur=22, spread=6)
-        draw = ImageDraw.Draw(card)
-        krl = _font(9, cinzel=True)
-        apex_str = "KINGDOM  APEX"
-        krlw = _tw(draw, apex_str, krl)
-        _glow(card, (W - PAD - krlw, 48), apex_str, krl,
-              (*gold, 230), gold, blur=8, spread=1)
-        draw = ImageDraw.Draw(card)
-    else:
-        kr_str = f"#{kingdom_rank}"
-        krf = _font(36, bold=True, cinzel=True)
-        krw = _tw(draw, kr_str, krf)
-        _glow(card, (W - PAD - krw, 6), kr_str, krf,
-              (*t["gold"][:3], 252), t["glow"], blur=16, spread=4)
-        draw = ImageDraw.Draw(card)
-        krl = _font(9, cinzel=True)
-        krlw = _tw(draw, "KINGDOM RANK", krl)
-        draw.text((W - PAD - krlw, 44), "KINGDOM RANK",
-                  font=krl, fill=(*t["text2"][:3], 140))
-
-    _double_line(draw, DIV1, t)
-
-    # ────────────────────────────────────────────────────────────────────────
-    # ZONE 2 — IDENTITY
-    # ────────────────────────────────────────────────────────────────────────
-
-    _paste_avatar(card, avatar_bytes, t)
+    # Header background — slightly different tone to the main card
+    hdr_bg  = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    hdr_d   = ImageDraw.Draw(hdr_bg)
+    hdr_col = tuple(max(0, c - 8) for c in t["bg1"][:3])
+    hdr_d.rounded_rectangle([(2, 2), (W - 3, HDR_H)],
+                              radius=RADIUS - 2, fill=(*hdr_col, 255))
+    card.alpha_composite(hdr_bg)
     draw = ImageDraw.Draw(card)
 
-    # Display name — dominant
-    name_x = AV_X + AV_SZ + 22
-    max_name_w = W - name_x - PAD - 50
+    # Left seal: initials
+    draw.text((PAD + 2, 12), "KOH",
+              font=_font(11, cinzel=True), fill=(*t["gold"][:3], 172))
+    draw.text((PAD + 2, 28), "REG.",
+              font=_font(7, cinzel=True), fill=(*t["text2"][:3], 95))
 
-    dn = display_name or username
-    name_font = _fit_font(draw, dn, max_name_w, 64, 28, bold=True)
-    name_y = AV_Y + 6
-    _glow(card, (name_x, name_y), dn, name_font,
-          t["text1"], t["glow"], blur=10, spread=3)
+    # Center: Kingdom of Hell + subtitle
+    hdr1_f = _font(17, cinzel=True)
+    hdr1   = "KINGDOM  OF  HELL"
+    hdr1_w = _tw(draw, hdr1, hdr1_f)
+    _glow(card, ((W - hdr1_w) // 2, 10), hdr1, hdr1_f,
+          (*t["gold"][:3], 228), t["glow"], blur=10, spread=2)
+    draw = ImageDraw.Draw(card)
+    hdr2_f = _font(9, cinzel=True)
+    hdr2   = "INFERNAL  IDENTIFICATION  SYSTEM"
+    hdr2_w = _tw(draw, hdr2, hdr2_f)
+    draw.text(((W - hdr2_w) // 2, 35), hdr2,
+              font=hdr2_f, fill=(*t["text2"][:3], 145))
+
+    # Right: series label
+    draw.text((W - PAD - 82, 12), "SERIES  MMXXV",
+              font=_font(8, cinzel=True), fill=(*t["text2"][:3], 92))
+    draw.text((W - PAD - 68, 27), "INFERNAL  REG.",
+              font=_font(7), fill=(*t["text2"][:3], 72))
+
+    # Header bottom double-rule
+    draw.line([(PAD, HDR_H - 12), (W - PAD, HDR_H - 12)],
+              fill=(*t["gold"][:3], 148), width=2)
+    draw.line([(PAD, HDR_H - 7), (W - PAD, HDR_H - 7)],
+              fill=(*t["border"][:3], 52), width=1)
+
+    # ════════════════════════════════════════════════════════════════════════
+    # ZONE 2 — IDENTITY BLOCK  (y=90–340)
+    # ════════════════════════════════════════════════════════════════════════
+
+    # Passport-style square photo
+    _paste_avatar_square(card, avatar_bytes, t, AV_X, AV_Y, AV_SZ, rank_level)
     draw = ImageDraw.Draw(card)
 
-    # Secondary line: Role — Title
-    has_title = equipped_title and equipped_title.lower() not in ("unmarked", "")
-    title_text = equipped_title if has_title else "Kingdom of Hell"
-    rp_font = _font(19, bold=True)
-    sec_font = _font(19)
-    name_h = getattr(name_font, "size", 52)
-    sec_y = name_y + name_h + 6
-    rank_part = f"{display_role}  —  "
-    rpw = _tw(draw, rank_part, rp_font)
-    _glow(card, (name_x, sec_y), rank_part, rp_font,
-          (*t["gold"][:3], 236), t["glow"], blur=5, spread=1)
+    # "IDENTIFICATION PHOTO" caption
+    photo_f  = _font(8, cinzel=True)
+    pl1_w    = _tw(draw, "IDENTIFICATION", photo_f)
+    pl2_w    = _tw(draw, "PHOTO", photo_f)
+    draw.text((AV_X + (AV_SZ - pl1_w) // 2, AV_Y + AV_SZ + 7),
+              "IDENTIFICATION", font=photo_f, fill=(*t["text2"][:3], 98))
+    draw.text((AV_X + (AV_SZ - pl2_w) // 2, AV_Y + AV_SZ + 20),
+              "PHOTO", font=photo_f, fill=(*t["text2"][:3], 98))
+
+    # Vertical rule separating photo from data
+    draw.line([(ID_DATA_X - 10, IDENT_Y + 10), (ID_DATA_X - 10, DIV2 - 10)],
+              fill=(*t["border"][:3], 48), width=1)
+
+    # ── Identity data fields ──
+    flbl = _font(8, cinzel=True)
+    fx   = ID_DATA_X
+    fy   = AV_Y
+
+    # NAME
+    draw.text((fx, fy), "NAME", font=flbl, fill=(*t["text2"][:3], 112))
+    fy += 14
+    name_f = _fit_font(draw, dn, W - fx - PAD - 10, 30, 16, bold=True)
+    _glow(card, (fx, fy), dn, name_f,
+          t["text1"], t["glow"], blur=6, spread=2)
     draw = ImageDraw.Draw(card)
-    draw.text((name_x + rpw, sec_y), title_text,
-              font=sec_font, fill=(*t["accent"][:3], 220))
+    fy += getattr(name_f, "size", 26) + 6
 
-    # Sub-label: hierarchy indicator (special roles) or tax bracket (public ranks)
-    if is_special:
-        hier_f = _font(12)
-        hier_str = "✦  INFERNAL  HIERARCHY  ROLE"
-        draw.text((name_x, sec_y + 26), hier_str,
-                  font=hier_f, fill=(*t["accent"][:3], 168))
-    else:
-        RANK_TAX = {
-            "Forsaken": 0.12, "Condemned": 0.09, "Hellbound": 0.06,
-            "Archdemon": 0.03, "Duke": 0.01,
-        }
-        tax_rate = RANK_TAX.get(economy_rank, 0.12)
-        tax_str = "TAX EXEMPT" if tax_rate == 0 else f"TAX BRACKET  {int(tax_rate * 100)}%"
-        tbf = _font(12)
-        draw.text((name_x, sec_y + 26), tax_str,
-                  font=tbf, fill=(*t["text2"][:3], 158))
+    # Separator
+    draw.line([(fx, fy), (W - PAD, fy)], fill=(*t["border"][:3], 36), width=1)
+    fy += 8
 
-    # Username (subtle)
-    if username and username.lower() != dn.lower():
-        unf = _font(11)
-        draw.text((name_x, sec_y + 46), f"@{username}",
-                  font=unf, fill=(*t["text2"][:3], 105))
+    # RANK  |  TITLE  (two sub-columns)
+    rcx = fx
+    tcx = fx + (W - fx - PAD) // 2 + 4
+    draw.text((rcx, fy), "RANK",  font=flbl, fill=(*t["text2"][:3], 112))
+    draw.text((tcx, fy), "TITLE", font=flbl, fill=(*t["text2"][:3], 112))
+    fy += 14
+    rank_disp  = display_role[:16] if display_role else "—"
+    _glow(card, (rcx, fy), rank_disp, _font(19, bold=True),
+          (*t["gold"][:3], 228), t["glow"], blur=6, spread=1)
+    draw = ImageDraw.Draw(card)
+    has_title  = bool(equipped_title and equipped_title.lower()
+                      not in ("unmarked", ""))
+    title_disp = equipped_title if has_title else "—"
+    title_vf   = _fit_font(draw, title_disp, W - tcx - PAD - 4, 17, 10, bold=True)
+    draw.text((tcx, fy + 2), title_disp, font=title_vf,
+              fill=(*t["accent"][:3], 208))
+    fy += 32
 
-    _double_line(draw, DIV2, t)
+    # Separator
+    draw.line([(fx, fy), (W - PAD, fy)], fill=(*t["border"][:3], 36), width=1)
+    fy += 8
 
-    # ────────────────────────────────────────────────────────────────────────
-    # ZONE 3 — WEALTH (DOMINANT)
-    # ────────────────────────────────────────────────────────────────────────
+    # ID NO.  |  KINGDOM RANK
+    draw.text((rcx, fy), "ID NO.",       font=flbl, fill=(*t["text2"][:3], 112))
+    draw.text((tcx, fy), "KINGDOM RANK", font=flbl, fill=(*t["text2"][:3], 112))
+    fy += 14
+    _glow(card, (rcx, fy), card_id, _font(15, bold=True),
+          (*t["gold"][:3], 198), t["glow"], blur=4, spread=1)
+    draw = ImageDraw.Draw(card)
+    kr_str  = f"#{kingdom_rank}"
+    kr_col  = (*t["gold"][:3], 255) if is_kingdom1 else (*t["accent"][:3], 218)
+    _glow(card, (tcx, fy), kr_str, _font(19, bold=True),
+          kr_col, t["glow"],
+          blur=9 if is_kingdom1 else 4, spread=2 if is_kingdom1 else 1)
+    draw = ImageDraw.Draw(card)
+    fy += 30
 
-    wlf = _font(13, cinzel=True)
-    wlw = _tw(draw, "WEALTH", wlf)
-    draw.text(((W - wlw) // 2, WEALTH_Y + 10), "WEALTH",
-              font=wlf, fill=(*t["text2"][:3], 180))
+    # Separator
+    draw.line([(fx, fy), (W - PAD, fy)], fill=(*t["border"][:3], 30), width=1)
+    fy += 7
 
+    # CLASSIFICATION
+    draw.text((fx, fy), "CLASSIFICATION", font=flbl,
+              fill=(*t["text2"][:3], 112))
+    fy += 13
+    draw.text((fx, fy), classification, font=_font(11, bold=True),
+              fill=(*t["accent"][:3], 178))
+
+    # Zone 2 bottom separator — heavy official rules
+    draw.line([(PAD, DIV2 - 2), (W - PAD, DIV2 - 2)],
+              fill=(*t["border"][:3], 100), width=2)
+    draw.line([(PAD, DIV2 + 2), (W - PAD, DIV2 + 2)],
+              fill=(*t["gold"][:3], 38), width=1)
+
+    # ════════════════════════════════════════════════════════════════════════
+    # ZONE 3 — BALANCE  (y=340–488)
+    # ════════════════════════════════════════════════════════════════════════
+
+    # Subtle panel background
+    bal_panel = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    bp_d = ImageDraw.Draw(bal_panel)
+    bp_d.rectangle([(PAD, BAL_Y + 4), (W - PAD, DIV3 - 4)],
+                   fill=(*t["wealth_hl"][:3], 90))
+    card.alpha_composite(bal_panel)
+    draw = ImageDraw.Draw(card)
+
+    # "BALANCE" label
+    bal_lbl_f = _font(10, cinzel=True)
+    bal_lbl_w = _tw(draw, "BALANCE", bal_lbl_f)
+    draw.text(((W - bal_lbl_w) // 2, BAL_Y + 14), "BALANCE",
+              font=bal_lbl_f, fill=(*t["text2"][:3], 145))
+
+    # Balance value + coin icon
     bal_str  = _fmt_dc(balance)
-    bal_font = _fit_font(draw, bal_str, W - 140, 92, 50, bold=True)
-    bal_h    = getattr(bal_font, "size", 82)
-    _coin_sz = max(int(bal_h * 0.82), 28)
-    _coin_gap = 10
-    bal_w  = _tw(draw, bal_str, bal_font)
-    total_bal_w = bal_w + _coin_gap + _coin_sz
-    bal_x  = (W - total_bal_w) // 2
-    bal_y  = WEALTH_Y + 30
-    _glow(card, (bal_x, bal_y), bal_str, bal_font,
-          (*t["gold"][:3], 255), t["glow"], blur=24, spread=6)
-    # Stamp coin icon vertically centred with the number baseline
-    _composite_coin(card, bal_x + bal_w + _coin_gap,
-                    bal_y + (bal_h - _coin_sz) // 2, _coin_sz)
+    bal_font = _fit_font(draw, bal_str, W - 160, 74, 40, bold=True)
+    bal_h    = getattr(bal_font, "size", 68)
+    coin_sz  = max(int(bal_h * 0.80), 28)
+    coin_gap = 10
+    bal_w    = _tw(draw, bal_str, bal_font)
+    total_w  = bal_w + coin_gap + coin_sz
+    bal_x    = (W - total_w) // 2
+    bal_y_p  = BAL_Y + 32
+    _glow(card, (bal_x, bal_y_p), bal_str, bal_font,
+          (*t["gold"][:3], 255), t["glow"], blur=22, spread=6)
+    _composite_coin(card, bal_x + bal_w + coin_gap,
+                    bal_y_p + (bal_h - coin_sz) // 2, coin_sz)
     draw = ImageDraw.Draw(card)
 
-    accent_y = bal_y + bal_h + 14
-    draw.line([(W // 5, accent_y), (2 * W // 5, accent_y)],
-              fill=(*t["border"][:3], 60), width=1)
-    draw.line([(3 * W // 5, accent_y), (4 * W // 5, accent_y)],
-              fill=(*t["border"][:3], 60), width=1)
-    dc_lbl = "D  E  V  I  L  C  O  I  N  S"
-    dc_f = _font(10, cinzel=True)
-    dc_w = _tw(draw, dc_lbl, dc_f)
-    draw.text(((W - dc_w) // 2, accent_y - 4), dc_lbl,
-              font=dc_f, fill=(*t["text2"][:3], 118))
+    # "DEVILCOINS" sub-label
+    dc_sub   = "D  E  V  I  L  C  O  I  N  S"
+    dc_sub_f = _font(9, cinzel=True)
+    dc_sub_w = _tw(draw, dc_sub, dc_sub_f)
+    draw.text(((W - dc_sub_w) // 2, bal_y_p + bal_h + 8), dc_sub,
+              font=dc_sub_f, fill=(*t["text2"][:3], 90))
 
-    _double_line(draw, DIV3, t)
+    # Zone 3 separator
+    draw.line([(PAD, DIV3 - 2), (W - PAD, DIV3 - 2)],
+              fill=(*t["border"][:3], 75), width=1)
+    draw.line([(PAD, DIV3 + 2), (W - PAD, DIV3 + 2)],
+              fill=(*t["gold"][:3], 28), width=1)
 
-    # ────────────────────────────────────────────────────────────────────────
-    # ZONE 4 — STATS
-    # ────────────────────────────────────────────────────────────────────────
+    # ════════════════════════════════════════════════════════════════════════
+    # ZONE 4 — STATISTICS  (y=488–608)
+    # ════════════════════════════════════════════════════════════════════════
 
-    lbl_f = _font(11, cinzel=True)
-    val_f  = _font(32, bold=True)
+    stat_lbl_f = _font(9, cinzel=True)
+    stat_val_f = _font(30, bold=True)
+    sc_left    = W // 3
+    sc_right   = 2 * W // 3
 
-    # Two stats — Kingdom Rank (left) and Taxes Paid (right)
-    stat_cols = [W // 3, 2 * W // 3]
+    def _stat_col(cx_: int, label_: str, val_: str,
+                  currency_: bool = False, king_: bool = False):
+        lw_ = _tw(draw, label_, stat_lbl_f)
+        draw.text((cx_ - lw_ // 2, STATS_Y + 10), label_,
+                  font=stat_lbl_f, fill=(*t["text2"][:3], 138))
+        vfh_  = getattr(stat_val_f, "size", 30)
+        csz_  = max(int(vfh_ * 0.76), 22)
+        vw_   = _tw(draw, val_, stat_val_f)
+        tot_  = vw_ + (csz_ + 8 if currency_ else 0)
+        tx_   = cx_ - tot_ // 2
+        col_  = (*t["gold"][:3], 255) if king_ else (*t["accent"][:3], 218)
+        _glow(card, (tx_, STATS_Y + 28), val_, stat_val_f,
+              col_, t["glow"],
+              blur=11 if king_ else 6, spread=3 if king_ else 2)
+        if currency_:
+            _composite_coin(card, tx_ + vw_ + 8,
+                            STATS_Y + 28 + (vfh_ - csz_) // 2, csz_)
 
-    def _stat2(cx_: int, label: str, value: str, currency: bool = False):
-        lw_ = _tw(draw, label, lbl_f)
-        draw.text((cx_ - lw_ // 2, STATS_Y + 6), label,
-                  font=lbl_f, fill=(*t["text2"][:3], 178))
-        vf_h = getattr(val_f, "size", 32)
-        csz  = max(int(vf_h * 0.80), 22)
-        cgap = 8
-        vw_  = _tw(draw, value, val_f)
-        total_w = vw_ + (csz + cgap if currency else 0)
-        tx_  = cx_ - total_w // 2
-        _glow(card, (tx_, STATS_Y + 28), value, val_f,
-              (*t["accent"][:3], 238), t["glow"], blur=9, spread=3)
-        if currency:
-            _composite_coin(card, tx_ + vw_ + cgap,
-                            STATS_Y + 28 + (vf_h - csz) // 2, csz)
-
-    _stat2(stat_cols[0], "KINGDOM RANK", f"#{kingdom_rank}")
-    _stat2(stat_cols[1], "TAXES PAID", _fmt_dc(taxes_paid), currency=True)
-
-    draw = ImageDraw.Draw(card)
-
-    # Vertical divider between the two stats
-    mid_x = W // 2
-    draw.line([(mid_x, STATS_Y + 10), (mid_x, STATS_Y + 120)],
-              fill=(*t["border"][:3], 38), width=1)
-
-    _double_line(draw, DIV4, t)
-
-    # ────────────────────────────────────────────────────────────────────────
-    # ZONE 5 — EQUIPPED RECORD
-    # ────────────────────────────────────────────────────────────────────────
-
-    _SKIN_NAMES = {
-        "default":      "Infernal Standard",
-        "blood_crown":  "Blood Crown",
-        "abyss_smoke":  "Abyss Smoke",
-        "infernal_gold": "Infernal Gold",
-        "royal_dark":   "Royal Dark",
-        "black_throne": "Black Throne",
-        "crimson_sigil": "Crimson Sigil",
-    }
+    _stat_col(sc_left,  "KINGDOM RANK", f"#{kingdom_rank}", king_=is_kingdom1)
+    _stat_col(sc_right, "TAXES  PAID",  _fmt_dc(taxes_paid), currency_=True)
 
     draw = ImageDraw.Draw(card)
-    az = AUDIT_Y
+    # Vertical divider
+    draw.line([(W // 2, STATS_Y + 8), (W // 2, DIV4 - 8)],
+              fill=(*t["border"][:3], 40), width=1)
 
-    # Zone header
-    eq_hdr = "EQUIPPED  RECORD"
-    eq_hf  = _font(11, cinzel=True)
-    eq_hw  = _tw(draw, eq_hdr, eq_hf)
-    draw.text(((W - eq_hw) // 2, az + 14), eq_hdr,
-              font=eq_hf, fill=(*t["text2"][:3], 155))
+    # Zone 4 separator
+    draw.line([(PAD, DIV4 - 2), (W - PAD, DIV4 - 2)],
+              fill=(*t["border"][:3], 75), width=1)
+    draw.line([(PAD, DIV4 + 2), (W - PAD, DIV4 + 2)],
+              fill=(*t["gold"][:3], 26), width=1)
 
-    # Decorative separator with diamond
-    div_cx = W // 2
-    draw.line([(PAD + 30, az + 34), (div_cx - 12, az + 34)],
-              fill=(*t["border"][:3], 50), width=1)
-    draw.line([(div_cx + 12, az + 34), (W - PAD - 30, az + 34)],
-              fill=(*t["border"][:3], 50), width=1)
-    draw.polygon([(div_cx, az + 28), (div_cx + 7, az + 34),
-                  (div_cx, az + 40), (div_cx - 7, az + 34)],
-                 fill=(*t["accent"][:3], 155))
-
-    # Three loadout columns
-    slot_y   = az + 52
-    slot_lf  = _font(10, cinzel=True)
-    slot_vf  = _font(16, bold=True)
-    slot_cols = [W // 4, W // 2, 3 * W // 4]
-
-    relic_name = (RELICS_CATALOG[relic_id].name
-                  if relic_id and relic_id in RELICS_CATALOG else "—")
-    relic_col  = (*t["accent"][:3], 225) if relic_id else (*t["text2"][:3], 90)
-
-    skin_name  = _SKIN_NAMES.get(skin_id or "default", "Infernal Standard")
-    skin_col   = (*t["gold"][:3], 220) if (skin_id and skin_id != "default") \
-                 else (*t["text2"][:3], 120)
-
-    title_name = equipped_title if (
-        equipped_title and equipped_title.lower() not in ("unmarked", "")
-    ) else "—"
-    title_col  = (*t["accent"][:3], 210) if title_name != "—" \
-                 else (*t["text2"][:3], 90)
-
-    def _slot(cx_: int, label: str, value: str, vcol: tuple):
-        lw_ = _tw(draw, label, slot_lf)
-        draw.text((cx_ - lw_ // 2, slot_y),
-                  label, font=slot_lf, fill=(*t["text2"][:3], 135))
-        vv  = (value[:13] + "…") if len(value) > 14 else value
-        vw_ = _tw(draw, vv, slot_vf)
-        _glow(card, (cx_ - vw_ // 2, slot_y + 18), vv, slot_vf,
-              vcol, t["glow"], blur=6, spread=1)
-
-    _slot(slot_cols[0], "RELIC",  relic_name, relic_col)
-    _slot(slot_cols[1], "SKIN",   skin_name,  skin_col)
-    _slot(slot_cols[2], "TITLE",  title_name, title_col)
+    # ════════════════════════════════════════════════════════════════════════
+    # ZONE 5 — BOUND ARTIFACTS  (y=608–888)
+    # ════════════════════════════════════════════════════════════════════════
 
     draw = ImageDraw.Draw(card)
 
-    # Thin separator below slots
-    _line(draw, slot_y + 54, t, alpha=38)
+    # Section header + diamond separator
+    art_hdr_f = _font(11, cinzel=True)
+    art_hdr   = "BOUND  ARTIFACTS"
+    art_hdr_w = _tw(draw, art_hdr, art_hdr_f)
+    draw.text(((W - art_hdr_w) // 2, ART_Y + 12), art_hdr,
+              font=art_hdr_f, fill=(*t["text2"][:3], 138))
+    art_cx = W // 2
+    draw.line([(PAD + 28, ART_Y + 30), (art_cx - 12, ART_Y + 30)],
+              fill=(*t["border"][:3], 46), width=1)
+    draw.line([(art_cx + 12, ART_Y + 30), (W - PAD - 28, ART_Y + 30)],
+              fill=(*t["border"][:3], 46), width=1)
+    draw.polygon([(art_cx, ART_Y + 24), (art_cx + 7, ART_Y + 30),
+                  (art_cx, ART_Y + 36), (art_cx - 7, ART_Y + 30)],
+                 fill=(*t["accent"][:3], 145))
 
-    # Badge seals row
-    badge_section_y = slot_y + 68
+    # Registry rows: RELIC · SKIN · TITLE
+    row_lbl_f  = _font(9, cinzel=True)
+    row_val_f  = _font(15, bold=True)
+    row_y      = ART_Y + 46
+    row_h      = 44
+    row_l      = PAD + 12
+    row_r      = W - PAD - 12
+
+    relic_name_  = (RELICS_CATALOG[relic_id].name
+                    if relic_id and relic_id in RELICS_CATALOG else "— UNBOUND —")
+    relic_col_   = (*t["accent"][:3], 215) if relic_id else (*t["text2"][:3], 70)
+    skin_name_   = _SKIN_NAMES.get(skin_id or "default", "STANDARD ISSUE")
+    skin_col_    = (*t["gold"][:3], 202) if (skin_id and skin_id != "default") \
+                   else (*t["text2"][:3], 92)
+    title_name_  = equipped_title if has_title else "— UNMARKED —"
+    title_col_   = (*t["accent"][:3], 202) if has_title else (*t["text2"][:3], 70)
+
+    def _reg_row(ry_: int, slot_: str, val_: str, vcol_: tuple):
+        row_bg = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+        rb_d   = ImageDraw.Draw(row_bg)
+        rb_d.rectangle([(row_l - 4, ry_), (row_r + 4, ry_ + row_h - 2)],
+                        fill=(*t["bg2"][:3], 36))
+        card.alpha_composite(row_bg)
+        d2 = ImageDraw.Draw(card)
+        d2.text((row_l, ry_ + 7), slot_, font=row_lbl_f,
+                fill=(*t["text2"][:3], 108))
+        vv  = (val_[:22] + "…") if len(val_) > 23 else val_
+        vw  = _tw(d2, vv, row_val_f)
+        vfy = ry_ + (row_h - getattr(row_val_f, "size", 15)) // 2 - 1
+        _glow(card, (row_r - vw, vfy), vv, row_val_f,
+              vcol_, t["glow"], blur=4, spread=1)
+        d3 = ImageDraw.Draw(card)
+        d3.line([(row_l, ry_ + row_h - 1), (row_r, ry_ + row_h - 1)],
+                fill=(*t["border"][:3], 26), width=1)
+
+    _reg_row(row_y,           "RELIC", relic_name_,  relic_col_)
+    _reg_row(row_y + row_h,   "SKIN",  skin_name_,   skin_col_)
+    _reg_row(row_y + row_h*2, "TITLE", title_name_,  title_col_)
+
+    draw = ImageDraw.Draw(card)
+
+    # Badges sub-section
+    badge_y = row_y + row_h * 3 + 10
     if badges_list:
-        seal_hf  = _font(10, cinzel=True)
-        seal_str = "SEALS  OF  RECOGNITION"
-        seal_w   = _tw(draw, seal_str, seal_hf)
-        draw.text(((W - seal_w) // 2, badge_section_y), seal_str,
-                  font=seal_hf, fill=(*t["text2"][:3], 135))
-        _render_badges_card(card, badges_list, badge_section_y + 18, t)
+        seal_lbl_f = _font(9, cinzel=True)
+        seal_lbl   = "SEALS  OF  RECOGNITION"
+        seal_lbl_w = _tw(draw, seal_lbl, seal_lbl_f)
+        draw.text(((W - seal_lbl_w) // 2, badge_y), seal_lbl,
+                  font=seal_lbl_f, fill=(*t["text2"][:3], 118))
+        _render_badges_card(card, badges_list, badge_y + 16, t)
         draw = ImageDraw.Draw(card)
     else:
-        nb_f  = _font(11)
-        nb_str = "No seals registered."
-        nb_w  = _tw(draw, nb_str, nb_f)
-        draw.text(((W - nb_w) // 2, badge_section_y + 6), nb_str,
-                  font=nb_f, fill=(*t["text2"][:3], 65))
+        nb_f  = _font(10)
+        nb    = "No seals registered."
+        nb_w  = _tw(draw, nb, nb_f)
+        draw.text(((W - nb_w) // 2, badge_y + 8), nb,
+                  font=nb_f, fill=(*t["text2"][:3], 55))
 
-    # Kingdom inscription — skin flavor text
-    insc_y = DIV5 - 56
-    _line(draw, insc_y, t, alpha=22)
-    insc_flavor = footer_flavor or "The Abyss remembers your name."
-    insc_f = _font(10)
-    insc_w = _tw(draw, f'"{insc_flavor}"', insc_f)
-    draw.text(((W - insc_w) // 2, insc_y + 10),
-              f'"{insc_flavor}"', font=insc_f,
-              fill=(*t["text2"][:3], 128))
+    # Zone 5 bottom separator
+    draw.line([(PAD, DIV5 - 2), (W - PAD, DIV5 - 2)],
+              fill=(*t["border"][:3], 75), width=1)
+    draw.line([(PAD, DIV5 + 2), (W - PAD, DIV5 + 2)],
+              fill=(*t["gold"][:3], 26), width=1)
 
-    _double_line(draw, DIV5, t)
+    # ════════════════════════════════════════════════════════════════════════
+    # ZONE 6 — FOOTER  (y=888–1100)
+    # ════════════════════════════════════════════════════════════════════════
 
-    # ────────────────────────────────────────────────────────────────────────
-    # ZONE 6 — FOOTER
-    # ────────────────────────────────────────────────────────────────────────
-
-    # Primary footer inscription
-    footer_main = "The Abyss remembers your name."
-    ff = _font(12)
-    fw = _tw(draw, footer_main, ff)
-    _glow(card, ((W - fw) // 2, FOOTER_Y + 12), footer_main, ff,
-          (*t["text2"][:3], 175), t["glow"], blur=5, spread=1)
     draw = ImageDraw.Draw(card)
 
-    # Card ID / watermark
-    wm_f = _font(8)
-    wm = f"Kingdom Treasury  ·  ID-{hash(username) % 99999:05d}"
-    draw.text((PAD, FOOTER_Y + 44), wm,
-              font=wm_f, fill=(*t["text2"][:3], 70))
+    # Primary inscription
+    f1   = "Registered in the Infernal Archives."
+    f1_f = _font(12)
+    f1_w = _tw(draw, f1, f1_f)
+    _glow(card, ((W - f1_w) // 2, FOOTER_Y + 20), f1, f1_f,
+          (*t["text2"][:3], 185), t["glow"], blur=5, spread=1)
+    draw = ImageDraw.Draw(card)
 
-    skin_wm = f"// {skin_id or 'default'} //"
-    sw_w = _tw(draw, skin_wm, wm_f)
-    draw.text((W - PAD - sw_w, FOOTER_Y + 44), skin_wm,
-              font=wm_f, fill=(*t["text2"][:3], 70))
+    # Secondary inscription
+    f2   = "The Abyss remembers your name."
+    f2_f = _font(10)
+    f2_w = _tw(draw, f2, f2_f)
+    draw.text(((W - f2_w) // 2, FOOTER_Y + 42), f2,
+              font=f2_f, fill=(*t["text2"][:3], 125))
 
-    # ── Relic effect overlay ─────────────────────────────────────────────────
+    # Skin flavor (tertiary, very subtle)
+    if footer_flavor:
+        f3_f = _font(9)
+        f3   = f'"{footer_flavor}"'
+        f3_w = _tw(draw, f3, f3_f)
+        draw.text(((W - f3_w) // 2, FOOTER_Y + 62), f3,
+                  font=f3_f, fill=(*t["text2"][:3], 82))
+
+    # Machine-code separator
+    draw.line([(PAD, FOOTER_Y + 84), (W - PAD, FOOTER_Y + 84)],
+              fill=(*t["border"][:3], 36), width=1)
+
+    # Machine-readable strip
+    mc   = (f"ID: {card_id}  ·  SERIES MMXXV  ·  "
+            f"KINGDOM OF HELL  ·  INFERNAL REGISTRY")
+    mc_f = _font(9)
+    mc_w = _tw(draw, mc, mc_f)
+    draw.text(((W - mc_w) // 2, FOOTER_Y + 92), mc,
+              font=mc_f, fill=(*t["text2"][:3], 70))
+
+    # Corner watermarks
+    wm_f  = _font(8)
+    wm_l  = f"KOH-ARCH-{rank_level:02d}"
+    wm_r  = f"// {skin_id or 'default'} //"
+    wm_rw = _tw(draw, wm_r, wm_f)
+    draw.text((PAD, FOOTER_Y + 108), wm_l,
+              font=wm_f, fill=(*t["text2"][:3], 56))
+    draw.text((W - PAD - wm_rw, FOOTER_Y + 108), wm_r,
+              font=wm_f, fill=(*t["text2"][:3], 56))
+
+    # ── Post-processing (applied in order over the full canvas) ──────────────
     _apply_relic_effect(card, relic_id, t)
-
-    # ── Rank evolution border aura ────────────────────────────────────────────
     _rank_evolution_frame(card, rank_level, t)
 
-    # ── Animation illusion — grain + scanlines ────────────────────────────────
-    _grain_texture(card, intensity=min(12, 5 + rank_level // 3))
-    _scanline_illusion(card, alpha=6)
+    # Subtle paper/document grain (less aggressive than old fantasy card)
+    _grain_texture(card, intensity=min(7, 3 + rank_level // 6))
+    _scanline_illusion(card, alpha=4)
+
+    # Damage/worn overlay for very low ranks
+    if rank_level <= 2:
+        _low_rank_damage(card, rank_level, t)
 
     # ── Kingdom #1 supreme aura (applied last, above everything) ─────────────
     if is_kingdom1:

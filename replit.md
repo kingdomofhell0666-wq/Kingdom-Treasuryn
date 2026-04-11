@@ -35,7 +35,7 @@ bot/
 │   └── blackmarket_view.py      # paginated buy interface
 ├── cogs/                # Command groups
 │   ├── economy.py       # /grind /tribute /transfer /vault /market /ascend
-│   ├── profile.py       # /identity /wealth (passes relic_id + badges to card)
+│   ├── profile.py       # /identity (official ID card: 6 zones, no risk score)
 │   ├── cosmetics.py     # /market (InfernalMarketHub) + /relics (equip loadout)
 │   ├── investment.py    # /invest /portfolio /collect /withdraw
 │   └── blackmarket.py   # /blackmarket
