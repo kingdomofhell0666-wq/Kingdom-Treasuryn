@@ -371,3 +371,9 @@ id = "er1RNNOuI-uUhaVonCyWR"
 uri = "file://attached_assets/card_clean.jpg"
 type = "image"
 title = "Identity Card — no gold smoke or glow"
+
+[[outputs]]
+id = "CrlG_6RXq-uyOujuHfZWA"
+uri = "file://attached_assets/card_no_gold_deco.jpg"
+type = "image"
+title = "Identity Card — gold kept only on lines and DC balance"

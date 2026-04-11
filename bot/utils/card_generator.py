@@ -604,11 +604,6 @@ def _paste_avatar_square(card: Image.Image, av_bytes: Optional[bytes],
     # Outer frame
     d.rectangle([(x - 4, y - 4), (x + sz + 3, y + sz + 3)],
                 outline=(*theme["border"][:3], 110), width=1)
-    # Gold accent frame for high ranks
-    if rank_level >= 15:
-        gold_a = min(255, 70 + (rank_level - 15) * 16)
-        d.rectangle([(x - 7, y - 7), (x + sz + 6, y + sz + 6)],
-                    outline=(*theme["gold"][:3], gold_a), width=1)
 
 
 # ─── Wealth zone highlight ────────────────────────────────────────────────────
@@ -1148,7 +1143,6 @@ def generate_card(
     _bg_sigil(card, t)
 
     # Rank-driven ambient vignette
-    _inner_glow_vignette(card, t, rank_level)
 
     draw = ImageDraw.Draw(card)
 
@@ -1166,7 +1160,7 @@ def generate_card(
 
     # Left micro-code
     draw.text((OUT_PAD, 8), "KOH",
-              font=_font(11, cinzel=True), fill=(*t["gold"][:3], 162))
+              font=_font(11, cinzel=True), fill=(*t["text2"][:3], 110))
     draw.text((OUT_PAD, 24), "SERIES  MMXXV",
               font=_font(8), fill=(*t["text2"][:3], 72))
 
@@ -1175,7 +1169,7 @@ def generate_card(
     hdr1   = "KINGDOM  OF  HELL"
     hdr1_w = _tw(draw, hdr1, hdr1_f)
     _glow(card, ((W - hdr1_w) // 2, 8), hdr1, hdr1_f,
-          (*t["gold"][:3], 232), t["glow"], blur=10, spread=3)
+          (*t["text1"][:3], 220), t["glow"], blur=8, spread=2)
     draw = ImageDraw.Draw(card)
     hdr2_f = _font(10, cinzel=True)
     hdr2   = "INFERNAL  IDENTIFICATION  SYSTEM"
@@ -1302,7 +1296,7 @@ def generate_card(
     fy += 14
     rank_disp = display_role[:18] if display_role else "—"
     _glow(card, (fx, fy), rank_disp, _font(24, bold=True),
-          (*t["gold"][:3], 228), t["glow"], blur=8, spread=2)
+          (*t["accent"][:3], 228), t["glow"], blur=8, spread=2)
     draw = ImageDraw.Draw(card)
     has_title  = bool(equipped_title and equipped_title.lower()
                       not in ("unmarked", ""))
@@ -1321,7 +1315,7 @@ def generate_card(
     draw.text((col_mid + 6, fy), "CLASSIFICATION", font=flbl, fill=(*t["text2"][:3], 108))
     fy += 14
     _glow(card, (fx, fy), card_id, _font(16, bold=True),
-          (*t["gold"][:3], 198), t["glow"], blur=5, spread=1)
+          (*t["text1"][:3], 210), t["glow"], blur=5, spread=1)
     draw = ImageDraw.Draw(card)
     cls_f = _fit_font(draw, classification, hw, 16, 10, bold=True)
     draw.text((col_mid + 6, fy + 1), classification, font=cls_f,
@@ -1349,7 +1343,7 @@ def generate_card(
         vw_   = _tw(draw, val_, stat_val_f)
         tot_  = vw_ + (csz_ + 6 if currency_ else 0)
         tx_   = cx_ - tot_ // 2
-        col_  = (*t["gold"][:3], 255) if king_ else (*t["accent"][:3], 218)
+        col_  = (*t["accent"][:3], 255) if king_ else (*t["accent"][:3], 218)
         _glow(card, (tx_, fy + 18), val_, stat_val_f, col_, t["glow"],
               blur=14 if king_ else 7, spread=4 if king_ else 2)
         if currency_:
@@ -1401,7 +1395,7 @@ def generate_card(
                    if relic_id and relic_id in RELICS_CATALOG else "UNBOUND")
     relic_col_  = (*t["accent"][:3], 215) if relic_id else (*t["text2"][:3], 62)
     skin_name_  = _SKIN_NAMES.get(skin_id or "default", "STANDARD ISSUE")
-    skin_col_   = (*t["gold"][:3], 205) if (skin_id and skin_id != "default") \
+    skin_col_   = (*t["text1"][:3], 205) if (skin_id and skin_id != "default") \
                   else (*t["text2"][:3], 85)
     title_name_ = equipped_title if has_title else "UNMARKED"
     title_col_  = (*t["accent"][:3], 205) if has_title else (*t["text2"][:3], 62)
