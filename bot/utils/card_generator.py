@@ -11,6 +11,7 @@ from typing import Optional, List, Tuple
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 
 from .identity_variant import EffectiveCardVariant
+from .skins import RANK_ORDER, BADGES_CATALOG, RELICS_CATALOG
 
 # ─── Asset paths ──────────────────────────────────────────────────────────────
 _CINZEL = "bot/assets/fonts/Cinzel.ttf"
@@ -617,6 +618,228 @@ def _apply_relic_effect(card: Image.Image, relic_id: Optional[str], theme: dict)
         )
 
 
+# ─── Rank evolution ───────────────────────────────────────────────────────────
+
+# (rank_idx_threshold, aura_rgb, border_alpha, glow_blur, frame_width, corner_alpha)
+_RANK_EVOLUTION: List[Tuple] = [
+    (0,  (80,  0,   0),   0,   0,  0, 0),   # Forsaken — no aura
+    (1,  (90,  10,  0),   0,   0,  0, 0),   # Vermin — no aura
+    (2,  (115, 0,   0),   38,  6,  1, 6),   # Corrupted
+    (3,  (135, 12,  0),   48,  7,  1, 10),  # Folklore
+    (4,  (158, 18,  0),   58,  9,  2, 14),  # Mythology
+    (5,  (178, 24,  0),   68,  11, 2, 18),  # Demonology
+    (6,  (198, 34,  0),   78,  13, 2, 22),  # Eschatology
+    (7,  (218, 50,  5),   88,  15, 2, 27),  # Archangel
+    (8,  (235, 65,  8),   98,  17, 3, 32),  # Archdemon
+    (9,  (205, 168, 22),  108, 18, 3, 36),  # Knight
+    (10, (210, 176, 27),  113, 19, 3, 39),  # Baron
+    (11, (215, 182, 32),  118, 20, 3, 41),  # Viscount
+    (12, (218, 188, 37),  123, 21, 4, 43),  # Count
+    (13, (222, 193, 41),  128, 22, 4, 46),  # Marquis
+    (14, (226, 200, 46),  133, 23, 4, 49),  # Duke
+    (15, (180, 182, 228), 124, 21, 4, 46),  # Legionnaires
+    (16, (190, 192, 236), 134, 22, 4, 49),  # Centurion
+    (17, (200, 202, 244), 144, 23, 4, 52),  # Legates
+    (18, (210, 212, 255), 154, 25, 5, 56),  # Chancellor
+    (19, (248, 215, 52),  158, 26, 5, 62),  # Princesses/Princes
+    (20, (255, 218, 56),  166, 27, 5, 66),  # Consorts
+    (21, (255, 225, 62),  178, 29, 6, 76),  # Sovereign
+]
+
+_RARITY_BADGE_COLOR = {
+    "Common":    (148, 102, 102),
+    "Uncommon":  (90,  158,  82),
+    "Rare":      (62,  108, 200),
+    "Epic":      (145,  58, 202),
+    "Legendary": (215, 168,  42),
+    "Mythic":    (210,  22,  22),
+}
+
+
+def _rank_level_from_name(rank: str) -> int:
+    return RANK_ORDER.get(rank, 0)
+
+
+def _rank_evolution_frame(card: Image.Image, rank_level: int, theme: dict):
+    """Apply evolving rank aura border — intensifies with rank."""
+    if rank_level < 2:
+        return
+    tier = _RANK_EVOLUTION[min(rank_level, len(_RANK_EVOLUTION) - 1)]
+    color, border_a, blur, fw, corners = tier[1], tier[2], tier[3], tier[4], tier[5]
+    if border_a == 0:
+        return
+
+    # Blurred outer aura
+    layer = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    d = ImageDraw.Draw(layer)
+    d.rounded_rectangle([(1, 1), (W - 2, H - 2)],
+                         radius=RADIUS, outline=(*color, border_a), width=fw + 3)
+    layer = layer.filter(ImageFilter.GaussianBlur(blur))
+    card.alpha_composite(layer)
+
+    # Sharp inner ring
+    d2 = ImageDraw.Draw(card)
+    d2.rounded_rectangle([(1, 1), (W - 2, H - 2)],
+                          radius=RADIUS, outline=(*color, min(255, border_a + 55)), width=fw)
+
+    # Corner glow spots for mid-to-high ranks
+    if corners > 0:
+        for cx, cy in [(0, 0), (W, 0), (0, H), (W, H)]:
+            cl = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+            ImageDraw.Draw(cl).ellipse([(cx - 90, cy - 90), (cx + 90, cy + 90)],
+                                        fill=(*color, corners))
+            cl = cl.filter(ImageFilter.GaussianBlur(38))
+            card.alpha_composite(cl)
+
+
+def _kingdom1_aura(card: Image.Image, theme: dict):
+    """Exclusive supreme aura for the current #1 ranked soul."""
+    gold = (255, 210, 0)
+
+    # Multiple blurred halos radiating outward
+    for offset, alpha, blur in [(32, 20, 30), (18, 48, 18), (9, 85, 12), (4, 125, 7)]:
+        layer = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+        d = ImageDraw.Draw(layer)
+        d.rounded_rectangle(
+            [(offset, offset), (W - 1 - offset, H - 1 - offset)],
+            radius=RADIUS + 3, outline=(*gold, alpha), width=5,
+        )
+        layer = layer.filter(ImageFilter.GaussianBlur(blur))
+        card.alpha_composite(layer)
+
+    # Sharp crisp gold rings
+    d2 = ImageDraw.Draw(card)
+    d2.rounded_rectangle([(2, 2), (W - 3, H - 3)], radius=RADIUS,
+                          outline=(*gold, 185), width=3)
+    d2.rounded_rectangle([(8, 8), (W - 9, H - 9)], radius=RADIUS - 3,
+                          outline=(*gold, 55), width=1)
+
+    # Crown diamond at top-centre
+    cx = W // 2
+    dy = 5
+    for pts, a, b in [
+        ([(cx, dy - 18), (cx + 14, dy - 6), (cx, dy + 6), (cx - 14, dy - 6)], 90, 6),
+        ([(cx, dy - 14), (cx + 10, dy - 5), (cx, dy + 4), (cx - 10, dy - 5)], 220, 2),
+    ]:
+        dlay = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+        ImageDraw.Draw(dlay).polygon(pts, fill=(*gold, a))
+        dlay = dlay.filter(ImageFilter.GaussianBlur(b))
+        card.alpha_composite(dlay)
+    ImageDraw.Draw(card).polygon(
+        [(cx, dy - 14), (cx + 10, dy - 5), (cx, dy + 4), (cx - 10, dy - 5)],
+        fill=(*gold, 225),
+    )
+
+    # Top-corner golden light bursts
+    for cx, cy in [(0, 0), (W, 0)]:
+        bl = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+        ImageDraw.Draw(bl).ellipse([(cx - 100, cy - 100), (cx + 100, cy + 100)],
+                                    fill=(*gold, 28))
+        bl = bl.filter(ImageFilter.GaussianBlur(44))
+        card.alpha_composite(bl)
+
+    # Bottom ambient shimmer
+    sh = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    ImageDraw.Draw(sh).ellipse([(W // 2 - 300, H - 60), (W // 2 + 300, H + 100)],
+                                fill=(*gold, 18))
+    sh = sh.filter(ImageFilter.GaussianBlur(30))
+    card.alpha_composite(sh)
+
+
+def _grain_texture(card: Image.Image, intensity: int = 8):
+    """Subtle analog noise grain — makes the card feel textured and alive."""
+    rng = _random.Random(17)
+    noise = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    nd = ImageDraw.Draw(noise)
+    for _ in range(W * H // 10):
+        x = rng.randint(0, W - 1)
+        y = rng.randint(0, H - 1)
+        a = rng.randint(0, intensity)
+        bright = rng.randint(190, 255)
+        nd.point((x, y), fill=(bright, bright, bright, a))
+    card.alpha_composite(noise)
+
+
+def _scanline_illusion(card: Image.Image, alpha: int = 7):
+    """Faint horizontal scanlines — simulates screen-rendered depth."""
+    scan = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    sd = ImageDraw.Draw(scan)
+    for y in range(0, H, 4):
+        sd.line([(0, y), (W, y)], fill=(0, 0, 0, alpha))
+    card.alpha_composite(scan)
+
+
+def _inner_glow_vignette(card: Image.Image, theme: dict, rank_level: int):
+    """Soft inner glow from edges — creates depth and warmth."""
+    tier = _RANK_EVOLUTION[min(rank_level, len(_RANK_EVOLUTION) - 1)]
+    color = tier[1]
+    alpha_boost = min(40, 8 + rank_level * 2)
+
+    vig = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    vd  = ImageDraw.Draw(vig)
+    # Inner light source — center top
+    for r, a in [(320, alpha_boost), (200, alpha_boost // 2)]:
+        vd.ellipse([(W // 2 - r, -r // 2), (W // 2 + r, r // 2 + 20)],
+                   fill=(*color, a))
+    vig = vig.filter(ImageFilter.GaussianBlur(50))
+    card.alpha_composite(vig)
+
+
+def _render_badges_card(card: Image.Image, badge_ids: List[str],
+                         y_start: int, theme: dict):
+    """Render badge seals onto the card in the official record zone."""
+    valid = [BADGES_CATALOG[b] for b in badge_ids[:3] if b in BADGES_CATALOG]
+    if not valid:
+        return
+
+    draw = ImageDraw.Draw(card)
+
+    # Section header
+    bl_f = _font(9, cinzel=True)
+    bl_str = "MARKS  ·  ACTIVE  INSIGNIA"
+    bl_w = _tw(draw, bl_str, bl_f)
+    draw.text(((W - bl_w) // 2, y_start),
+              bl_str, font=bl_f, fill=(*theme["text2"][:3], 148))
+
+    badge_w, badge_h = 166, 40
+    n = len(valid)
+    total_w = n * badge_w + (n - 1) * 14
+    bx0 = (W - total_w) // 2
+    by  = y_start + 18
+
+    for badge in valid:
+        col = _RARITY_BADGE_COLOR.get(badge.rarity, theme["text2"][:3])
+
+        # Stamp background + outline
+        stamp = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+        sd = ImageDraw.Draw(stamp)
+        sd.rounded_rectangle(
+            [(bx0, by), (bx0 + badge_w, by + badge_h)],
+            radius=7, outline=(*col, 170), width=1,
+            fill=(*theme["bg2"][:3], 100),
+        )
+        # Subtle glow on stamp
+        stamp_glow = stamp.filter(ImageFilter.GaussianBlur(3))
+        card.alpha_composite(stamp_glow)
+        card.alpha_composite(stamp)
+        draw = ImageDraw.Draw(card)
+
+        # Badge name
+        bn_f = _font(13, bold=True)
+        bn   = badge.name[:16]
+        bn_w = _tw(draw, bn, bn_f)
+        draw.text((bx0 + (badge_w - bn_w) // 2, by + 5),
+                  bn, font=bn_f, fill=(*col, 218))
+
+        # Rarity label
+        rar_f = _font(9)
+        rar_w = _tw(draw, badge.rarity.upper(), rar_f)
+        draw.text((bx0 + (badge_w - rar_w) // 2, by + 24),
+                  badge.rarity.upper(), font=rar_f, fill=(*col, 135))
+
+        bx0 += badge_w + 14
+
+
 def generate_card(
     username: str,
     display_name: str,
@@ -632,6 +855,7 @@ def generate_card(
     audit_state: str = "neutral",
     card_variant: Optional[EffectiveCardVariant] = None,
     relic_id: Optional[str] = None,
+    equipped_badges: Optional[List[str]] = None,
 ) -> io.BytesIO:
 
     t    = _t(skin_id)
@@ -641,11 +865,18 @@ def generate_card(
     display_role = card_variant.primary_display_role if card_variant else rank
     economy_rank = card_variant.public_rank if card_variant else rank
 
+    rank_level  = _rank_level_from_name(economy_rank)
+    is_kingdom1 = (kingdom_rank == 1)
+    badges_list = list(equipped_badges or [])
+
     # ── Canvas ──────────────────────────────────────────────────────────────
     card = _gradient(W, H, t["bg1"], t["bg2"])
 
     # ── Background sigil (behind everything) ──────────────────────────────
     _bg_sigil(card, t)
+
+    # ── Ambient inner glow (rank-driven) ──────────────────────────────────
+    _inner_glow_vignette(card, t, rank_level)
 
     # ── Wealth zone highlight ──────────────────────────────────────────────
     _wealth_highlight(card, t)
@@ -683,6 +914,21 @@ def generate_card(
         krlw = _tw(draw, "HIERARCHY ROLE", krl)
         draw.text((W - PAD - krlw, 44), "HIERARCHY ROLE",
                   font=krl, fill=(*t["text2"][:3], 140))
+    elif is_kingdom1:
+        # #1 Kingdom Rank — supreme treatment: large glowing gold with crown label
+        gold = (255, 210, 0)
+        kr_str = "#1"
+        krf = _font(42, bold=True, cinzel=True)
+        krw = _tw(draw, kr_str, krf)
+        _glow(card, (W - PAD - krw, 4), kr_str, krf,
+              (*gold, 255), gold, blur=22, spread=6)
+        draw = ImageDraw.Draw(card)
+        krl = _font(9, cinzel=True)
+        apex_str = "KINGDOM  APEX"
+        krlw = _tw(draw, apex_str, krl)
+        _glow(card, (W - PAD - krlw, 48), apex_str, krl,
+              (*gold, 230), gold, blur=8, spread=1)
+        draw = ImageDraw.Draw(card)
     else:
         kr_str = f"#{kingdom_rank}"
         krf = _font(36, bold=True, cinzel=True)
@@ -970,6 +1216,27 @@ def generate_card(
         draw.text(((W - sk_w) // 2, az + 108), sk_str,
                   font=sk_f, fill=(*t["text2"][:3], 105))
 
+    # ── Badges + relic summary in lower audit zone ────────────────────────────
+    draw = ImageDraw.Draw(card)
+    badges_y = az + 158   # safe below all three audit states
+
+    # Relic summary line
+    if relic_id and relic_id in RELICS_CATALOG:
+        relic_obj = RELICS_CATALOG[relic_id]
+        _line(draw, badges_y - 10, t, alpha=28)
+        rl_f = _font(9)
+        rl_str = f"RELIC ACTIVE:  {relic_obj.name}"
+        rl_w = _tw(draw, rl_str, rl_f)
+        draw.text(((W - rl_w) // 2, badges_y - 8),
+                  rl_str, font=rl_f, fill=(*t["accent"][:3], 160))
+        badges_y += 20
+
+    # Badge seals
+    if badges_list:
+        _line(draw, badges_y, t, alpha=28)
+        _render_badges_card(card, badges_list, badges_y + 10, t)
+        draw = ImageDraw.Draw(card)
+
     _double_line(draw, DIV5, t)
 
     # ────────────────────────────────────────────────────────────────────────
@@ -1009,6 +1276,17 @@ def generate_card(
 
     # ── Relic effect overlay ─────────────────────────────────────────────────
     _apply_relic_effect(card, relic_id, t)
+
+    # ── Rank evolution border aura ────────────────────────────────────────────
+    _rank_evolution_frame(card, rank_level, t)
+
+    # ── Animation illusion — grain + scanlines ────────────────────────────────
+    _grain_texture(card, intensity=min(12, 5 + rank_level // 3))
+    _scanline_illusion(card, alpha=6)
+
+    # ── Kingdom #1 supreme aura (applied last, above everything) ─────────────
+    if is_kingdom1:
+        _kingdom1_aura(card, t)
 
     # ── Apply rounded clip mask ──────────────────────────────────────────────
     card.putalpha(_card_mask(W, H, RADIUS))

@@ -8,10 +8,9 @@ from ..services.cosmetic_service import CosmeticService
 from ..utils.embeds import EmbedFactory
 from ..utils.card_generator import generate_card, fetch_avatar
 from ..utils.result_cards import generate_wealth_card
-from ..utils.skins import get_skin, BADGES_CATALOG
+from ..utils.skins import get_skin
 from ..utils.identity_variant import resolve_identity_card_variant
 from ..utils.routing import check_routing
-from ..ui import IdentityView
 
 
 class ProfileCog(commands.Cog):
@@ -89,23 +88,14 @@ class ProfileCog(commands.Cog):
                 audit_state=audit_state,
                 card_variant=card_variant,
                 relic_id=equipped_relic,
+                equipped_badges=equipped_badges,
             )
             card_file = discord.File(card_buf, filename="identity.png")
             embed     = discord.Embed(color=skin.color)
             embed.set_image(url="attachment://identity.png")
-            # Show active badges as icons in embed
-            if equipped_badges:
-                badge_icons = " ".join(
-                    BADGES_CATALOG[b].icon
-                    for b in equipped_badges[:3]
-                    if b in BADGES_CATALOG
-                )
-                if badge_icons:
-                    embed.add_field(name="Badges", value=badge_icons, inline=True)
             if not is_own_card:
                 embed.set_footer(text=f"Identity of {username}  ·  Kingdom Treasury")
-            view = IdentityView(is_own_card=is_own_card)
-            await interaction.followup.send(embed=embed, file=card_file, view=view)
+            await interaction.followup.send(embed=embed, file=card_file)
         except Exception:
             import logging
             logging.getLogger("kingdom_treasury").exception("Card generation failed")
@@ -114,8 +104,7 @@ class ProfileCog(commands.Cog):
                 avatar_url=avatar_url,
                 mention=target.mention if not is_own_card else None,
             )
-            view = IdentityView(is_own_card=is_own_card)
-            await interaction.followup.send(embed=embed, view=view)
+            await interaction.followup.send(embed=embed)
 
     @app_commands.command(name="wealth", description="Check your current balance.")
     async def wealth(self, interaction: discord.Interaction):
