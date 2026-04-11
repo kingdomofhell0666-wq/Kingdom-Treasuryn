@@ -32,8 +32,8 @@ _SEP = "━━━━━━━━━━━━━━━━━━━"
 
 # ── Daily tax per rank ────────────────────────────────────────────────────────
 DAILY_TAX: dict[str, int] = {
-    "Forsaken":    50,
-    "Vermin":      150,
+    "Forsaken":    0,
+    "Vermin":      0,
     "Corrupted":   500,
     "Folklore":    1_000,
     "Mythology":   2_000,
