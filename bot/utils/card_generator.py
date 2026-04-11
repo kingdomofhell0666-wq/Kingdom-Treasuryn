@@ -15,9 +15,10 @@ from .identity_variant import EffectiveCardVariant
 from .skins import RANK_ORDER, BADGES_CATALOG, RELICS_CATALOG
 
 # ─── Asset paths ──────────────────────────────────────────────────────────────
-_CINZEL = "bot/assets/fonts/Cinzel.ttf"
-_DEJA_B = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
-_DEJA_R = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+_CINZEL    = "bot/assets/fonts/Cinzel.ttf"
+_DEJA_B    = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+_DEJA_R    = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+_LOGO_PATH = "bot/assets/server_logo.png"   # drop file here to use real logo
 
 # ─── Card geometry — 900×320 compact horizontal ID ───────────────────────────
 W, H      = 900, 320
@@ -306,36 +307,61 @@ def _risk_tier_overlay(card: Image.Image, risk: int):
         card.alpha_composite(border_layer)
 
 
-# ─── Background sigil ─────────────────────────────────────────────────────────
+# ─── Right-column authority emblem ────────────────────────────────────────────
+# Loads bot/assets/server_logo.png when present; falls back to drawn crest.
+# The logo is composited at ~75% opacity, centred in the right column.
 
 def _bg_sigil(card: Image.Image, theme: dict):
-    # Right column of 900×320 card — authority emblem crest
-    # Centre of right col: x≈779, y≈133, constrained radius ≈ 70
-    cx, cy, r = 779, 133, 70
+    cx, cy = 779, 133          # right-col centre
+    _render_right_logo(card, theme, cx, cy, max_dim=160)
 
-    for alpha, blur in [(52, 30), (28, 8)]:
-        layer = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-        d = ImageDraw.Draw(layer)
-        col = (*theme["glow"][:3], alpha)
 
-        stype = theme["sigil"]
-        if stype == "star":
-            _sig_star(d, cx, cy, r, col)
-        elif stype == "crown":
-            _sig_crown(d, cx, cy, r, col)
-        elif stype == "eye":
-            _sig_eye(d, cx, cy, r, col)
-        elif stype == "sun":
-            _sig_sun(d, cx, cy, r, col)
-        elif stype == "fleur":
-            _sig_fleur(d, cx, cy, r, col)
-        elif stype == "throne":
-            _sig_throne(d, cx, cy, r, col)
-        elif stype == "sigil":
-            _sig_cross(d, cx, cy, r, col)
+def _render_right_logo(card: Image.Image, theme: dict,
+                        cx: int, cy: int, max_dim: int = 160):
+    import os
 
-        layer = layer.filter(ImageFilter.GaussianBlur(blur))
-        card.alpha_composite(layer)
+    # ── Try loading the server logo ──────────────────────────────────────────
+    logo_loaded = False
+    if os.path.isfile(_LOGO_PATH):
+        try:
+            logo = Image.open(_LOGO_PATH).convert("RGBA")
+
+            # Scale preserving aspect ratio to fit max_dim × max_dim box
+            lw, lh = logo.size
+            scale  = min(max_dim / lw, max_dim / lh)
+            nw, nh = int(lw * scale), int(lh * scale)
+            logo   = logo.resize((nw, nh), Image.LANCZOS)
+
+            # Subtle glow behind the logo — blurred tinted ellipse
+            glow_layer = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+            gd = ImageDraw.Draw(glow_layer)
+            gr = max(nw, nh) // 2 + 20
+            gd.ellipse([(cx - gr, cy - gr), (cx + gr, cy + gr)],
+                       fill=(*theme["glow"][:3], 35))
+            glow_layer = glow_layer.filter(ImageFilter.GaussianBlur(28))
+            card.alpha_composite(glow_layer)
+
+            # Apply 72% opacity watermark treatment
+            logo_data = logo.split()
+            if len(logo_data) == 4:
+                r_, g_, b_, a_ = logo_data
+                new_a = a_.point(lambda v: int(v * 0.72))
+                logo.putalpha(new_a)
+            else:
+                logo = logo.convert("RGBA")
+                alpha_ch = logo.split()[3].point(lambda v: int(v * 0.72))
+                logo.putalpha(alpha_ch)
+
+            paste_x = cx - nw // 2
+            paste_y = cy - nh // 2
+            card.alpha_composite(logo, (paste_x, paste_y))
+            logo_loaded = True
+        except Exception:
+            pass   # fall through to drawn crest
+
+    # ── Fallback: clean drawn infernal crest ────────────────────────────────
+    if not logo_loaded:
+        _draw_infernal_crest(card, theme, cx, cy, max_dim // 2)
 
 
 # ─── Sigil primitives ─────────────────────────────────────────────────────────
@@ -436,6 +462,82 @@ def _sig_cross(draw, cx, cy, r, col):
         draw.ellipse([(ex_ - 8, ey_ - 8), (ex_ + 8, ey_ + 8)], fill=col)
     draw.ellipse([(cx - r - 14, cy - r - 14), (cx + r + 14, cy + r + 14)],
                  outline=(*col[:3], col[3] // 3), width=2)
+
+
+# ─── Clean infernal crest (logo fallback) ────────────────────────────────────
+
+def _draw_infernal_crest(card: Image.Image, theme: dict,
+                          cx: int, cy: int, r: int):
+    """
+    High-quality drawn crest for the right column when no logo PNG is available.
+    Three concentric rings + five-point star + central circle + subtle glow.
+    All drawn at low alpha for the watermark treatment.
+    """
+    col_full  = (*theme["glow"][:3], 58)
+    col_half  = (*theme["glow"][:3], 30)
+    col_dim   = (*theme["glow"][:3], 18)
+    gold_full = (*theme["gold"][:3], 50)
+    gold_dim  = (*theme["gold"][:3], 22)
+
+    # ── Glow halo behind crest ─────────────────────────────────────────────
+    gl = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    gld = ImageDraw.Draw(gl)
+    gld.ellipse([(cx - r - 30, cy - r - 30), (cx + r + 30, cy + r + 30)],
+                fill=(*theme["glow"][:3], 32))
+    gl = gl.filter(ImageFilter.GaussianBlur(24))
+    card.alpha_composite(gl)
+
+    lyr = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    d   = ImageDraw.Draw(lyr)
+
+    # ── Outer ring ─────────────────────────────────────────────────────────
+    d.ellipse([(cx - r, cy - r), (cx + r, cy + r)],
+              outline=col_full, width=2)
+
+    # ── Eight tick marks on the outer ring ─────────────────────────────────
+    for i in range(8):
+        ang   = math.pi * 2 * i / 8 - math.pi / 2
+        r_in  = r - 6
+        r_out = r + 2
+        d.line([(cx + r_in * math.cos(ang),  cy + r_in * math.sin(ang)),
+                (cx + r_out * math.cos(ang), cy + r_out * math.sin(ang))],
+               fill=col_half, width=1)
+
+    # ── Mid ring ────────────────────────────────────────────────────────────
+    mr = int(r * 0.72)
+    d.ellipse([(cx - mr, cy - mr), (cx + mr, cy + mr)],
+              outline=col_half, width=1)
+
+    # ── Five-point star inside mid ring ────────────────────────────────────
+    star_r  = int(r * 0.60)
+    star_in = int(star_r * 0.42)
+    pts = []
+    for i in range(10):
+        ang = math.pi * i / 5 - math.pi / 2
+        rad = star_r if i % 2 == 0 else star_in
+        pts.append((cx + rad * math.cos(ang), cy + rad * math.sin(ang)))
+    d.polygon(pts, outline=gold_full, width=1)
+
+    # ── Inner ring ──────────────────────────────────────────────────────────
+    ir = int(r * 0.32)
+    d.ellipse([(cx - ir, cy - ir), (cx + ir, cy + ir)],
+              outline=gold_full, width=1)
+
+    # ── Central dot ─────────────────────────────────────────────────────────
+    cr_ = int(r * 0.10)
+    d.ellipse([(cx - cr_, cy - cr_), (cx + cr_, cy + cr_)],
+              fill=gold_dim)
+
+    # ── KINGDOM OF HELL arc text (top, tiny, spaced) ───────────────────────
+    # We approximate arc text with straight tiny text above center
+    arc_lbl   = "KINGDOM  OF  HELL"
+    arc_f     = _font(6, cinzel=True)
+    arc_w     = _tw(d, arc_lbl, arc_f)
+    d.text((cx - arc_w // 2, cy - r - 14), arc_lbl,
+           font=arc_f, fill=(*theme["gold"][:3], 42))
+
+    lyr = lyr.filter(ImageFilter.GaussianBlur(0.4))  # light anti-alias
+    card.alpha_composite(lyr)
 
 
 # ─── Avatar ───────────────────────────────────────────────────────────────────
@@ -1065,20 +1167,6 @@ def generate_card(
     _inner_glow_vignette(card, t, rank_level)
 
     draw = ImageDraw.Draw(card)
-
-    # ════════════════════════════════════════════════════════════════════════
-    # CARD BORDER — clean official document frame
-    # ════════════════════════════════════════════════════════════════════════
-    border_a = min(200, 150 + rank_level * 3)
-    draw.rounded_rectangle([(1, 1), (W - 2, H - 2)],
-                            radius=RADIUS, outline=(*t["border"][:3], border_a), width=2)
-    draw.rounded_rectangle([(5, 5), (W - 6, H - 6)],
-                            radius=RADIUS - 3, outline=(*t["border"][:3], 40), width=1)
-    if rank_level >= 16:
-        gold_a = min(255, 55 + (rank_level - 16) * 14)
-        draw.rounded_rectangle([(9, 9), (W - 10, H - 10)],
-                                radius=RADIUS - 6,
-                                outline=(*t["gold"][:3], gold_a), width=1)
 
     # ════════════════════════════════════════════════════════════════════════
     # HEADER STRIP  y = 0 – 32
