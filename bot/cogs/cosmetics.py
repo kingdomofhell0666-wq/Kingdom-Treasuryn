@@ -3,9 +3,8 @@ CosmeticsCog — /market, /relics
 """
 from __future__ import annotations
 
-import os
 import json
-from typing import Optional, List
+from typing import List
 
 import discord
 from discord import app_commands
@@ -21,59 +20,20 @@ from ..ui.infernal_market import InfernalMarketHub
 
 
 VOID_BLACK = 0x0A0A0A
-GOLD       = 0xFFD700
-
 _SEP = "━━━━━━━━━━━━━━━━━━━━━━━"
 
-
-def _get_exchange_url() -> str:
-    domains = os.environ.get("REPLIT_DOMAINS") or os.environ.get("REPLIT_DEV_DOMAIN") or "localhost:80"
-    primary = domains.split(",")[0].strip()
-    if "localhost" in primary:
-        return f"http://{primary}/exchange/"
-    return f"https://{primary}/exchange/"
-
-
-# ── Market entry view ─────────────────────────────────────────────────────────
-
-class MarketEntryView(discord.ui.View):
-    """Shown when a user types /market — links to the web Exchange."""
-
-    def __init__(self, exchange_url: str):
-        super().__init__(timeout=300)
-        self.add_item(discord.ui.Button(
-            label  = "Enter the Exchange",
-            style  = discord.ButtonStyle.link,
-            url    = exchange_url,
-            emoji  = "🩸",
-        ))
-
-    @discord.ui.button(label="Step back", style=discord.ButtonStyle.secondary, emoji="🚪")
-    async def step_back(self, interaction: discord.Interaction, _button: discord.ui.Button):
-        embed = discord.Embed(
-            description=(
-                f"{_SEP}\n\n"
-                "*You stepped back.*\n\n"
-                "*The threshold remains.*\n\n"
-                "*Return when you are ready.*\n\n"
-                f"{_SEP}"
-            ),
-            color=VOID_BLACK,
-        )
-        embed.set_footer(text="Kingdom Treasury  ·  Kingdom of Hell")
-        await interaction.response.edit_message(embed=embed, view=None)
-
-
-# ── Cog ────────────────────────────────────────────────────────────────────────
 
 class CosmeticsCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
     @property
-    def cosmetics(self) -> CosmeticService: return self.bot.cosmetic_service
+    def cosmetics(self) -> CosmeticService:
+        return self.bot.cosmetic_service
+
     @property
-    def db(self):                           return self.bot.db
+    def db(self):
+        return self.bot.db
 
     # ─── /market ──────────────────────────────────────────────────────────────
 
@@ -91,14 +51,15 @@ class CosmeticsCog(commands.Cog):
         discord_id = str(interaction.user.id)
         await self.db.upsert_user(guild_id, discord_id, interaction.user.display_name)
 
-        # Sacrifice gate — market access revoked while under penalty
         user_row = await self.db.get_user(guild_id, discord_id)
+
+        # Sacrifice gate — market access revoked while under debt penalty
         if user_row and user_row.get("sacrifice_active"):
             embed = discord.Embed(
                 description=(
                     f"{_SEP}\n\n"
                     "*The gates are sealed.*\n\n"
-                    "*Settle your debt before you may enter.*\n\n"
+                    "*Your debt binds you. Settle it before you may enter.*\n\n"
                     f"{_SEP}"
                 ),
                 color=VOID_BLACK,
@@ -107,24 +68,36 @@ class CosmeticsCog(commands.Cog):
             await interaction.followup.send(embed=embed, ephemeral=True)
             return
 
-        exchange_url = _get_exchange_url()
+        user_rank     = user_row.get("rank", "Forsaken") if user_row else "Forsaken"
+        user_balance  = user_row.get("balance", 0) if user_row else 0
 
-        embed = discord.Embed(
-            title="💀  Kingdom Exchange",
-            description=(
-                f"{_SEP}\n\n"
-                "*You stand before a threshold not meant for the weak.*\n\n"
-                "*Beyond this point… nothing is given.*\n\n"
-                "*Everything is taken.*\n\n"
-                "*The Kingdom does not guarantee your return unchanged.*\n\n"
-                f"{_SEP}"
-            ),
-            color=VOID_BLACK,
+        # Fetch full cosmetic state
+        owned_skins  = await self.cosmetics.get_owned_skins(guild_id, discord_id)
+        owned_titles = await self.cosmetics.get_owned_titles(guild_id, discord_id)
+        owned_relics = await self.cosmetics.get_owned_relics(guild_id, discord_id)
+        owned_badges = await self.cosmetics.get_owned_badges_list(guild_id, discord_id)
+        eq_skin      = await self.cosmetics.get_equipped_skin_id(guild_id, discord_id)
+        eq_title     = await self.cosmetics.get_equipped_title(guild_id, discord_id)
+        eq_relic     = await self.cosmetics.get_equipped_relic(guild_id, discord_id)
+        eq_badges    = await self.cosmetics.get_equipped_badges(guild_id, discord_id)
+
+        hub = InfernalMarketHub(
+            owner_id        = interaction.user.id,
+            bot             = self.bot,
+            guild_id        = guild_id,
+            discord_id      = discord_id,
+            user_rank       = user_rank,
+            user_balance    = user_balance,
+            owned_skins     = owned_skins,
+            owned_titles    = owned_titles,
+            owned_relics    = owned_relics,
+            owned_badges    = owned_badges,
+            equipped_skin   = eq_skin,
+            equipped_title  = eq_title,
+            equipped_relic  = eq_relic,
+            equipped_badges = eq_badges,
         )
-        embed.set_footer(text="Kingdom Treasury  ·  Kingdom of Hell")
-
-        view = MarketEntryView(exchange_url=exchange_url)
-        await interaction.followup.send(embed=embed, view=view, ephemeral=True)
+        await interaction.followup.send(embed=hub.build_embed(), view=hub, ephemeral=True)
 
     # ─── /relics ──────────────────────────────────────────────────────────────
 
@@ -279,7 +252,7 @@ class RelicsView(discord.ui.View):
                 description = relic.rarity[:100],
                 default     = equipped,
             ))
-        if len(relic_options) > 1:  # only show if user owns at least one relic
+        if len(relic_options) > 1:
             sel = discord.ui.Select(
                 placeholder = "🔮  Activate a relic…",
                 options     = relic_options[:25],

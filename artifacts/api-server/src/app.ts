@@ -41,9 +41,9 @@ app.use(sessionMiddleware);
 
 app.use("/api", router);
 
-// Root redirect — send bare domain visitors straight to the Exchange
+// Root redirect to dashboard
 app.get("/", (_req, res) => {
-  res.redirect(301, "/exchange/");
+  res.redirect(301, "/dashboard/");
 });
 
 // Serve the dashboard SPA at /dashboard/ (fallback to index.html for client-side routing)
@@ -55,13 +55,6 @@ const dashboardDist = path.join(workspaceRoot, "artifacts", "dashboard", "dist",
 app.use("/dashboard", express.static(dashboardDist));
 app.get("/dashboard/*splat", (_req, res) => {
   res.sendFile(path.join(dashboardDist, "index.html"));
-});
-
-// Serve the Kingdom Exchange SPA at /exchange/
-const exchangeDist = path.join(workspaceRoot, "artifacts", "exchange", "dist", "public");
-app.use("/exchange", express.static(exchangeDist));
-app.get("/exchange/*splat", (_req, res) => {
-  res.sendFile(path.join(exchangeDist, "index.html"));
 });
 
 export default app;

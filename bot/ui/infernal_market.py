@@ -1,6 +1,6 @@
 """
 Kingdom Treasury — Infernal Market Hub
-Single-message AAA shop: hub → category browse → acquire → preview.
+Single-message AAA shop: hub → category browse → preview → confirm → acquire.
 """
 
 import asyncio
@@ -49,6 +49,13 @@ _CAT_ICON: Dict[str, str] = {
     "badges": "🎖️",
 }
 
+_CAT_LORE: Dict[str, str] = {
+    "relics": "*Visual enchantments bound to your Identity Card.*",
+    "titles": "*Marks of distinction displayed beneath your name.*",
+    "skins":  "*Full transformation of your Identity Card.*",
+    "badges": "*Insignia of allegiance and achievement.*",
+}
+
 
 # ─── Item helpers ─────────────────────────────────────────────────────────────
 
@@ -76,30 +83,32 @@ def _cat_items(cat: str) -> list:
 class InfernalMarketHub(discord.ui.View):
     """
     One view object manages the entire market session for a single user.
-    Modes: hub → category → preview → done.
+    Modes: hub → category → preview → confirm → done.
     All transitions edit the same message in place.
     """
 
     MODE_HUB      = "hub"
     MODE_CATEGORY = "category"
     MODE_PREVIEW  = "preview"
+    MODE_CONFIRM  = "confirm"
     MODE_DONE     = "done"
 
     def __init__(
         self,
         *,
-        owner_id:       int,
+        owner_id:        int,
         bot,
-        guild_id:       str,
-        discord_id:     str,
-        user_rank:      str,
-        owned_skins:    List[str],
-        owned_titles:   List[str],
-        owned_relics:   List[str],
-        owned_badges:   List[str],
-        equipped_skin:  str,
-        equipped_title: str,
-        equipped_relic: str,
+        guild_id:        str,
+        discord_id:      str,
+        user_rank:       str,
+        user_balance:    int = 0,
+        owned_skins:     List[str],
+        owned_titles:    List[str],
+        owned_relics:    List[str],
+        owned_badges:    List[str],
+        equipped_skin:   str,
+        equipped_title:  str,
+        equipped_relic:  str,
         equipped_badges: List[str],
     ):
         super().__init__(timeout=300)
@@ -109,6 +118,7 @@ class InfernalMarketHub(discord.ui.View):
         self.discord_id      = discord_id
         self.user_rank       = user_rank
         self.user_rank_idx   = _rank_idx(user_rank)
+        self._user_balance   = user_balance
 
         # Mutable ownership state (updated on purchase)
         self._owned_skins:   Set[str] = set(owned_skins)
@@ -176,6 +186,9 @@ class InfernalMarketHub(discord.ui.View):
             return False
         return self.user_rank_idx < _rank_idx(min_rank)
 
+    def _can_afford(self, item) -> bool:
+        return self._user_balance >= getattr(item, "price_dc", 0)
+
     def _status_label(self, item) -> str:
         if self._is_equipped(item):
             return "✦  **EQUIPPED**"
@@ -184,6 +197,8 @@ class InfernalMarketHub(discord.ui.View):
         if self._is_locked(item):
             req = getattr(item, "min_rank", "?")
             return f"🔒  **LOCKED** — Requires **{req}**"
+        if not self._can_afford(item):
+            return "💀  **INSUFFICIENT FUNDS**"
         return "⚔  **AVAILABLE**"
 
     def _can_acquire(self, item) -> bool:
@@ -199,6 +214,8 @@ class InfernalMarketHub(discord.ui.View):
             self._build_category()
         elif self._mode == self.MODE_PREVIEW:
             self._build_preview()
+        elif self._mode == self.MODE_CONFIRM:
+            self._build_confirm()
         elif self._mode == self.MODE_DONE:
             self._build_done()
 
@@ -217,7 +234,7 @@ class InfernalMarketHub(discord.ui.View):
             self.add_item(btn)
 
         leave = discord.ui.Button(
-            label="🚪  Leave", style=discord.ButtonStyle.secondary, row=1
+            label="🚪  Leave the Exchange", style=discord.ButtonStyle.secondary, row=1
         )
         leave.callback = self._leave_cb
         self.add_item(leave)
@@ -229,6 +246,7 @@ class InfernalMarketHub(discord.ui.View):
         idx   = self._item_idx
 
         can_acquire = item is not None and self._can_acquire(item)
+        can_afford  = item is not None and self._can_afford(item)
 
         prev = discord.ui.Button(
             label="⬅️  Previous",
@@ -237,7 +255,7 @@ class InfernalMarketHub(discord.ui.View):
             disabled=(idx <= 0),
         )
         nxt = discord.ui.Button(
-            label="➡️  Next",
+            label="Next  ➡️",
             style=discord.ButtonStyle.secondary,
             row=0,
             disabled=(idx >= n - 1),
@@ -248,13 +266,13 @@ class InfernalMarketHub(discord.ui.View):
         self.add_item(nxt)
 
         acquire = discord.ui.Button(
-            label="🩸  Acquire",
-            style=discord.ButtonStyle.danger if can_acquire else discord.ButtonStyle.secondary,
-            row=1,
-            disabled=not can_acquire,
+            label    = "🩸  Acquire",
+            style    = discord.ButtonStyle.danger if (can_acquire and can_afford) else discord.ButtonStyle.secondary,
+            row      = 1,
+            disabled = not (can_acquire and can_afford),
         )
         preview = discord.ui.Button(
-            label="👁️  Preview",
+            label="👁️  Manifestation",
             style=discord.ButtonStyle.secondary,
             row=1,
         )
@@ -279,6 +297,26 @@ class InfernalMarketHub(discord.ui.View):
         back.callback = self._back_to_cat_cb
         self.add_item(back)
 
+    def _build_confirm(self):
+        item = self._current()
+        can_afford = item is not None and self._can_afford(item)
+
+        seal = discord.ui.Button(
+            label    = "🩸  Seal the Exchange",
+            style    = discord.ButtonStyle.danger if can_afford else discord.ButtonStyle.secondary,
+            row      = 0,
+            disabled = not can_afford,
+        )
+        cancel = discord.ui.Button(
+            label="✖  Cancel",
+            style=discord.ButtonStyle.secondary,
+            row=0,
+        )
+        seal.callback   = self._seal_cb
+        cancel.callback = self._back_to_cat_cb
+        self.add_item(seal)
+        self.add_item(cancel)
+
     def _build_done(self):
         cont = discord.ui.Button(
             label="🔙  Continue Browsing",
@@ -286,7 +324,7 @@ class InfernalMarketHub(discord.ui.View):
             row=0,
         )
         leave = discord.ui.Button(
-            label="🚪  Leave",
+            label="🚪  Leave the Exchange",
             style=discord.ButtonStyle.secondary,
             row=0,
         )
@@ -304,6 +342,8 @@ class InfernalMarketHub(discord.ui.View):
             return self._cat_embed()
         if self._mode == self.MODE_PREVIEW:
             return self._preview_embed()
+        if self._mode == self.MODE_CONFIRM:
+            return self._confirm_embed()
         if self._mode == self.MODE_DONE:
             return self._done_embed()
         return self._hub_embed()
@@ -323,12 +363,12 @@ class InfernalMarketHub(discord.ui.View):
         )
         embed.add_field(
             name="🔮  Relics",
-            value=f"*Visual effects applied to your Identity Card*\n`{len(RELICS_CATALOG)} items`",
+            value=f"*Visual effects on your Identity*\n`{len(RELICS_CATALOG)} items`",
             inline=True,
         )
         embed.add_field(
             name="👑  Titles",
-            value=f"*Marks displayed beneath your name*\n`{sum(1 for t in TITLES_CATALOG.values() if t.price_dc > 0)} items`",
+            value=f"*Marks beneath your name*\n`{sum(1 for t in TITLES_CATALOG.values() if t.price_dc > 0)} items`",
             inline=True,
         )
         embed.add_field(name="\u200b", value="\u200b", inline=True)
@@ -339,10 +379,15 @@ class InfernalMarketHub(discord.ui.View):
         )
         embed.add_field(
             name="🎖️  Badges",
-            value=f"*Insignia displayed on your Identity*\n`{len(BADGES_CATALOG)} items`",
+            value=f"*Insignia on your Identity*\n`{len(BADGES_CATALOG)} items`",
             inline=True,
         )
         embed.add_field(name="\u200b", value="\u200b", inline=True)
+        embed.add_field(
+            name=_SEP,
+            value=f"Your Treasury: **{self._user_balance:,}** {_DC}",
+            inline=False,
+        )
         embed.set_footer(text=f"Kingdom Treasury  ·  {self.user_rank}  ·  Kingdom of Hell")
         return embed
 
@@ -366,20 +411,28 @@ class InfernalMarketHub(discord.ui.View):
         min_rank  = getattr(item, "min_rank", "")
         status    = self._status_label(item)
 
+        lore = _CAT_LORE.get(self._cat or "", "")
+
         cat_label = (self._cat or "").rstrip("s").title()
         if self._cat == "badges":
             cat_label = "Badge"
 
         icon_str = getattr(item, "icon", "") if self._cat == "badges" else ""
 
+        balance_line = (
+            f"**{self._user_balance:,}** {_DC}  ·  "
+            + (f"~~{price_dc:,}~~ insufficient" if self._user_balance < price_dc else f"Cost: **{price_dc:,}** {_DC}")
+        )
+
         embed = discord.Embed(
-            title=f"{icon}  {(self._cat or '').upper()}",
-            color=color,
+            title       = f"{icon}  {(self._cat or '').upper()}",
+            description = lore,
+            color       = color,
         )
         embed.add_field(name="\u200b", value=_SEP, inline=False)
         embed.add_field(
-            name=f"{dot}  **{icon_str}{' ' if icon_str else ''}{item.name}**",
-            value=f"*{item.description}*",
+            name  = f"{dot}  **{icon_str}{' ' if icon_str else ''}{item.name}**",
+            value = f"*{item.description}*",
             inline=False,
         )
         embed.add_field(name="\u200b", value=_SEP, inline=False)
@@ -410,6 +463,11 @@ class InfernalMarketHub(discord.ui.View):
         )
         embed.add_field(name="\u200b", value="\u200b", inline=True)
         embed.add_field(name="\u200b", value=_SEP, inline=False)
+        embed.add_field(
+            name="YOUR TREASURY",
+            value=balance_line,
+            inline=False,
+        )
         embed.set_footer(
             text=f"Item {idx + 1} of {n}  ·  {self.user_rank}  ·  Kingdom Treasury"
         )
@@ -419,10 +477,10 @@ class InfernalMarketHub(discord.ui.View):
         item = self._current()
 
         # Simulate equipped state if this item were equipped
-        preview_skin    = self._eq_skin
-        preview_title   = self._eq_title
-        preview_relic   = self._eq_relic
-        preview_badges  = list(self._eq_badges)
+        preview_skin   = self._eq_skin
+        preview_title  = self._eq_title
+        preview_relic  = self._eq_relic
+        preview_badges = list(self._eq_badges)
 
         if item:
             if self._cat == "skins":
@@ -474,6 +532,51 @@ class InfernalMarketHub(discord.ui.View):
         embed.set_footer(text="Kingdom Treasury  ·  Kingdom of Hell")
         return embed
 
+    def _confirm_embed(self) -> discord.Embed:
+        item = self._current()
+        if not item:
+            return discord.Embed(description="*No item selected.*", color=0x0D0D0D)
+
+        rarity   = getattr(item, "rarity", "Unknown")
+        dot      = _RARITY_DOT.get(rarity, "⬜")
+        color    = _RARITY_COLOR.get(rarity, 0x0D0D0D)
+        price_dc = getattr(item, "price_dc", 0)
+        bal_after = self._user_balance - price_dc
+        icon_str  = getattr(item, "icon", "") if self._cat == "badges" else ""
+
+        embed = discord.Embed(
+            title="⚔  Confirm Acquisition",
+            description=(
+                f"{_SEP}\n\n"
+                "*The Kingdom awaits your offering.*\n\n"
+                "*This transaction cannot be undone.*\n\n"
+                f"{_SEP}"
+            ),
+            color=color,
+        )
+        embed.add_field(
+            name="ITEM",
+            value=f"{dot}  **{icon_str}{' ' if icon_str else ''}{item.name}**  —  {rarity}",
+            inline=False,
+        )
+        embed.add_field(
+            name="COST",
+            value=f"**{price_dc:,}** {_DC}",
+            inline=True,
+        )
+        embed.add_field(
+            name="YOUR TREASURY",
+            value=f"**{self._user_balance:,}** {_DC}",
+            inline=True,
+        )
+        embed.add_field(
+            name="BALANCE AFTER",
+            value=f"**{bal_after:,}** {_DC}" if bal_after >= 0 else "*Insufficient funds*",
+            inline=True,
+        )
+        embed.set_footer(text="Kingdom Treasury  ·  Kingdom of Hell")
+        return embed
+
     def _done_embed(self) -> discord.Embed:
         if self._result_ok and self._result_item:
             item   = self._result_item
@@ -496,7 +599,7 @@ class InfernalMarketHub(discord.ui.View):
                 inline=True,
             )
             embed.add_field(
-                name="BALANCE",
+                name="REMAINING TREASURY",
                 value=f"**{self._result_bal:,}** {_DC}",
                 inline=True,
             )
@@ -575,6 +678,20 @@ class InfernalMarketHub(discord.ui.View):
         self._rebuild()
         await interaction.response.edit_message(embed=self.build_embed(), view=self)
 
+    async def _acquire_cb(self, interaction: discord.Interaction):
+        """Show the confirmation screen before committing the purchase."""
+        if not await self._guard(interaction):
+            return
+        item = self._current()
+        if not item or not self._can_acquire(item):
+            await interaction.response.send_message(
+                "*This item is not available for acquisition.*", ephemeral=True
+            )
+            return
+        self._mode = self.MODE_CONFIRM
+        self._rebuild()
+        await interaction.response.edit_message(embed=self.build_embed(), view=self)
+
     async def _continue_cb(self, interaction: discord.Interaction):
         if not await self._guard(interaction):
             return
@@ -600,9 +717,10 @@ class InfernalMarketHub(discord.ui.View):
         await interaction.response.edit_message(embed=farewell, view=None)
         self.stop()
 
-    # ── Acquire callback ──────────────────────────────────────────────────────
+    # ── Seal callback — executes the actual purchase ──────────────────────────
 
-    async def _acquire_cb(self, interaction: discord.Interaction):
+    async def _seal_cb(self, interaction: discord.Interaction):
+        """Execute the confirmed purchase."""
         if not await self._guard(interaction):
             return
 
@@ -613,15 +731,15 @@ class InfernalMarketHub(discord.ui.View):
             )
             return
 
-        # Immediate response — "Sealing the exchange..."
+        # Show "Sealing..." while the backend call happens
         seal_embed = discord.Embed(
             description=(
                 f"{_SEP}\n\n"
-                "🩸  *Sealing the exchange...*\n\n"
-                "*The Kingdom weighs your offering.*\n\n"
+                "🩸  *Sealing the exchange…*\n\n"
+                "*The Kingdom records your offering.*\n\n"
                 f"{_SEP}"
             ),
-            color=0x0D0D0D,
+            color=0x1A0004,
         )
         seal_embed.set_footer(text="Kingdom Treasury  ·  Kingdom of Hell")
         msg_id = interaction.message.id
@@ -656,10 +774,13 @@ class InfernalMarketHub(discord.ui.View):
             else:
                 raise ValueError("Unknown item category.")
 
-            # Ledger log
+            # Update local balance
             cost    = result.get("cost", 0)
             new_bal = result.get("new_balance", 0)
-            ledger  = getattr(self.bot, "ledger_service", None)
+            self._user_balance = new_bal
+
+            # Ledger log
+            ledger = getattr(self.bot, "ledger_service", None)
             if ledger and cost > 0:
                 try:
                     await ledger.log(
@@ -684,7 +805,7 @@ class InfernalMarketHub(discord.ui.View):
         except ValueError as e:
             self._result_ok  = False
             self._result_msg = str(e)
-        except Exception as e:
+        except Exception:
             log.exception("Market purchase error")
             self._result_ok  = False
             self._result_msg = "An internal error occurred. Please try again."
@@ -708,8 +829,4 @@ class InfernalMarketHub(discord.ui.View):
     # ── Timeout ───────────────────────────────────────────────────────────────
 
     async def on_timeout(self):
-        try:
-            # View will simply stop responding; message stays visible
-            pass
-        except Exception:
-            pass
+        pass

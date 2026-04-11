@@ -17,7 +17,6 @@ from .services.cerberus_aggression import CerberusAggression
 from .services.mission_service import MissionService
 from .services.ledger_service import LedgerService
 from .services.pressure_service import PressureService
-from .services.market_http import MarketHTTPAPI
 
 logger = logging.getLogger("kingdom_treasury")
 
@@ -81,10 +80,6 @@ class KingdomTreasuryBot(commands.Bot):
         self.mission_service     = MissionService(self.db)
         self.ledger_service      = LedgerService(self)   # must come after bot is usable
         self.pressure_service    = PressureService()     # stateless — only needs bot.db at runtime
-
-        # Start internal market HTTP API (localhost:8091)
-        self._market_api = MarketHTTPAPI(self)
-        await self._market_api.start()
 
         # ── Cogs ─────────────────────────────────────────────────────────────
         from .cogs.economy     import EconomyCog
@@ -158,7 +153,6 @@ class KingdomTreasuryBot(commands.Bot):
         logger.info(f"Removed from guild {guild_id} ({guild.name}) — economy data purged.")
 
     async def close(self):
-        await self._market_api.stop()
         await self.db.close()
         await self.config_service.close()
         await self.guild_sync_service.close()
