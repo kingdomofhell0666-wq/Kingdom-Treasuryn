@@ -11,8 +11,15 @@ export default defineConfig({
     emptyOutDir: true,
   },
   server: {
-    port: 5001,
+    port: parseInt(process.env.PORT || "5001"),
     host: "::",
     allowedHosts: true,
+    proxy: {
+      "/api": {
+        target: "http://localhost:8080",
+        changeOrigin: true,
+        secure: false,
+      },
+    },
   },
 });
