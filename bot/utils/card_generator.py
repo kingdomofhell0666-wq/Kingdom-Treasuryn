@@ -1577,9 +1577,6 @@ def generate_card(
     if rank_level <= 2:
         _low_rank_damage(card, rank_level, t)
 
-    # ── Kingdom #1 supreme aura (applied last, above everything) ─────────────
-    if is_kingdom1:
-        _kingdom1_aura(card, t)
 
     # ── Apply rounded clip mask ──────────────────────────────────────────────
     card.putalpha(_card_mask(W, H, RADIUS))

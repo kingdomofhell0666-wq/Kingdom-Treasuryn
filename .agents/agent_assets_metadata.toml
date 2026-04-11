@@ -365,3 +365,9 @@ id = "YG2srWNJB870KieTnS_tF"
 uri = "file://attached_assets/card_no_border.jpg"
 type = "image"
 title = "Identity Card — no gold trim or outer border"
+
+[[outputs]]
+id = "er1RNNOuI-uUhaVonCyWR"
+uri = "file://attached_assets/card_clean.jpg"
+type = "image"
+title = "Identity Card — no gold smoke or glow"
