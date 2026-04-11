@@ -682,8 +682,8 @@ class EconomyCog(commands.Cog):
                 needed = cost - user["balance"]
                 await interaction.followup.send(
                     embed=EmbedFactory.error(
-                        f"Your coffers fall short by **{needed:,} DC**.\n"
-                        f"Ascension to **{rank_name}** costs **{cost:,} DC**."
+                        f"Your coffers fall short by **{needed:,}** <:devilcoinStack:1492184333392412692>.\n"
+                        f"Ascension to **{rank_name}** costs **{cost:,}** <:devilcoinStack:1492184333392412692>."
                     ),
                     ephemeral=True,
                 )
@@ -713,7 +713,7 @@ class EconomyCog(commands.Cog):
         for name, cost, rate in self.rank_service.get_purchasable_ranks():
             if q in name.lower():
                 choices.append(app_commands.Choice(
-                    name  = f"{name} — {cost:,} DC  (Tax {int(rate * 100)}%)",
+                    name  = f"{name} — {cost:,} DC  ({int(rate * 100)}% tax)",
                     value = name,
                 ))
             if len(choices) >= 25:

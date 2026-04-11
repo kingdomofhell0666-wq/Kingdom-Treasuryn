@@ -223,7 +223,7 @@ class MissionView(discord.ui.View):
         if entry_cost > 0:
             desc = (
                 f"*You have accepted the mission **{mission['title']}**.*\n"
-                f"*Entry fee of **{entry_cost:,} DC** has been collected.*\n\n"
+                f"*Entry fee of **{entry_cost:,}** {_DC} has been collected.*\n\n"
                 f"*Complete your task. The Kingdom is watching.*"
             )
         else:
@@ -237,7 +237,7 @@ class MissionView(discord.ui.View):
             description = desc,
             color       = _GOLD,
         )
-        embed.add_field(name="Reward",  value=f"**{mission['reward']:,} DC**", inline=True)
+        embed.add_field(name="Reward",  value=f"**{mission['reward']:,}** {_DC}", inline=True)
         embed.add_field(name="Mission", value=f"**#{mission_id}**",             inline=True)
         embed.set_footer(text="Kingdom Treasury  ·  Kingdom of Hell")
         await interaction.followup.send(embed=embed, ephemeral=True)

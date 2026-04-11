@@ -114,7 +114,7 @@ class EmbedFactory:
             name=f"{skin.stat_icon}  RECORD",
             value=(
                 f"```"
-                f"Taxes Filed     {format_dc(taxes_paid):>14}"
+                f"Taxes Filed  {taxes_paid:>14,}\n"
                 f"{risk_line}\n"
                 f"Card Skin       {skin.name:>14}"
                 f"```"

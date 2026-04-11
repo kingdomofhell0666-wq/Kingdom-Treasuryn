@@ -86,8 +86,8 @@ class AdminCog(commands.Cog):
             description = f"*The Treasury has granted additional wealth to {user.mention}.*",
             color       = _GOLD,
         )
-        embed.add_field(name="Granted",     value=f"**+{amount:,} DC**",  inline=True)
-        embed.add_field(name="New Balance", value=f"**{new_bal:,} DC**",   inline=True)
+        embed.add_field(name="Granted",     value=f"**+{amount:,}** <:devilcoinStack:1492184333392412692>",  inline=True)
+        embed.add_field(name="New Balance", value=f"**{new_bal:,}** <:devilcoinStack:1492184333392412692>",   inline=True)
         embed.add_field(name="Recipient",   value=user.mention,             inline=True)
         embed.set_footer(text=f"Decree by {interaction.user.display_name}  ·  Kingdom Treasury")
         await interaction.followup.send(embed=embed, ephemeral=True)
@@ -139,16 +139,16 @@ class AdminCog(commands.Cog):
 
         embed = discord.Embed(
             title       = "☠  Treasury Decree — Funds Seized",
-            description = f"*DevilCoins have been seized from {user.mention}.*",
+            description = f"*<:devilcoinStack:1492184333392412692> have been seized from {user.mention}.*",
             color       = _CRIMSON,
         )
-        embed.add_field(name="Seized",      value=f"**−{actual:,} DC**",  inline=True)
-        embed.add_field(name="New Balance", value=f"**{new_bal:,} DC**",   inline=True)
+        embed.add_field(name="Seized",      value=f"**−{actual:,}** <:devilcoinStack:1492184333392412692>",  inline=True)
+        embed.add_field(name="New Balance", value=f"**{new_bal:,}** <:devilcoinStack:1492184333392412692>",   inline=True)
         embed.add_field(name="Target",      value=user.mention,             inline=True)
         if actual < amount:
             embed.add_field(
                 name    = "⚠  Clamped",
-                value   = f"Wallet only held **{current_bal:,} DC** — balance floored to 0.",
+                value   = f"Wallet only held **{current_bal:,}** <:devilcoinStack:1492184333392412692> — balance floored to 0.",
                 inline  = False,
             )
         embed.set_footer(text=f"Decree by {interaction.user.display_name}  ·  Kingdom Treasury")
@@ -202,8 +202,8 @@ class AdminCog(commands.Cog):
             description = f"*The ledger has been rewritten for {user.mention}.*",
             color       = _GOLD,
         )
-        embed.add_field(name="Previous",    value=f"**{old_bal:,} DC**",  inline=True)
-        embed.add_field(name="New Balance", value=f"**{amount:,} DC**",   inline=True)
+        embed.add_field(name="Previous",    value=f"**{old_bal:,}** <:devilcoinStack:1492184333392412692>",  inline=True)
+        embed.add_field(name="New Balance", value=f"**{amount:,}** <:devilcoinStack:1492184333392412692>",   inline=True)
         embed.add_field(name="Target",      value=user.mention,            inline=True)
         embed.set_footer(text=f"Decree by {interaction.user.display_name}  ·  Kingdom Treasury")
         await interaction.followup.send(embed=embed, ephemeral=True)
@@ -240,7 +240,7 @@ class AdminCog(commands.Cog):
             ),
             color = _VOID,
         )
-        embed.add_field(name="Wallet",     value="**0 DC**",     inline=True)
+        embed.add_field(name="Wallet",     value="**0** <:devilcoinStack:1492184333392412692>",     inline=True)
         embed.add_field(name="Rank",       value="**Forsaken**", inline=True)
         embed.add_field(name="Cooldowns",  value="**Cleared**",  inline=True)
         embed.add_field(name="Risk Score", value="**0**",        inline=True)
@@ -303,12 +303,12 @@ class AdminCog(commands.Cog):
 
         embed = discord.Embed(
             title       = "⚖  Treasury Decree — Funds Added",
-            description = f"*{amount:,} DC has been added to the Kingdom Treasury.*",
+            description = f"*{amount:,} <:devilcoinStack:1492184333392412692> has been added to the Kingdom Treasury.*",
             color       = _GOLD,
         )
-        embed.add_field(name="Added",    value=f"**+{amount:,} DC**",  inline=True)
-        embed.add_field(name="Previous", value=f"**{bal_before:,} DC**", inline=True)
-        embed.add_field(name="New",      value=f"**{bal_after:,} DC**",  inline=True)
+        embed.add_field(name="Added",    value=f"**+{amount:,}** <:devilcoinStack:1492184333392412692>",  inline=True)
+        embed.add_field(name="Previous", value=f"**{bal_before:,}** <:devilcoinStack:1492184333392412692>", inline=True)
+        embed.add_field(name="New",      value=f"**{bal_after:,}** <:devilcoinStack:1492184333392412692>",  inline=True)
         if note:
             embed.add_field(name="Note", value=note, inline=False)
         embed.set_footer(text=f"Decree by {interaction.user.display_name}  ·  Kingdom Treasury")
@@ -345,7 +345,7 @@ class AdminCog(commands.Cog):
         bal_before = await self.bot.treasury_service.get_balance(guild_id)
         if amount > bal_before:
             await interaction.followup.send(
-                embed=_err(f"Treasury only holds **{bal_before:,} DC**. Cannot remove **{amount:,} DC**."),
+                embed=_err(f"Treasury only holds **{bal_before:,}** <:devilcoinStack:1492184333392412692>. Cannot remove **{amount:,}** <:devilcoinStack:1492184333392412692>."),
                 ephemeral=True,
             )
             return
@@ -355,12 +355,12 @@ class AdminCog(commands.Cog):
 
         embed = discord.Embed(
             title       = "☠  Treasury Decree — Funds Removed",
-            description = f"*{amount:,} DC has been removed from the Kingdom Treasury.*",
+            description = f"*{amount:,} <:devilcoinStack:1492184333392412692> has been removed from the Kingdom Treasury.*",
             color       = _CRIMSON,
         )
-        embed.add_field(name="Removed",  value=f"**−{amount:,} DC**",   inline=True)
-        embed.add_field(name="Previous", value=f"**{bal_before:,} DC**", inline=True)
-        embed.add_field(name="New",      value=f"**{bal_after:,} DC**",  inline=True)
+        embed.add_field(name="Removed",  value=f"**−{amount:,}** <:devilcoinStack:1492184333392412692>",   inline=True)
+        embed.add_field(name="Previous", value=f"**{bal_before:,}** <:devilcoinStack:1492184333392412692>", inline=True)
+        embed.add_field(name="New",      value=f"**{bal_after:,}** <:devilcoinStack:1492184333392412692>",  inline=True)
         if note:
             embed.add_field(name="Note", value=note, inline=False)
         embed.set_footer(text=f"Decree by {interaction.user.display_name}  ·  Kingdom Treasury")
@@ -404,11 +404,11 @@ class AdminCog(commands.Cog):
 
         embed = discord.Embed(
             title       = "📜  Treasury Decree — Balance Set",
-            description = f"*The Kingdom Treasury has been rewritten to **{amount:,} DC**.*",
+            description = f"*The Kingdom Treasury has been rewritten to **{amount:,}** <:devilcoinStack:1492184333392412692>.*",
             color       = _GOLD,
         )
-        embed.add_field(name="Previous", value=f"**{bal_before:,} DC**", inline=True)
-        embed.add_field(name="New",      value=f"**{amount:,} DC**",     inline=True)
+        embed.add_field(name="Previous", value=f"**{bal_before:,}** <:devilcoinStack:1492184333392412692>", inline=True)
+        embed.add_field(name="New",      value=f"**{amount:,}** <:devilcoinStack:1492184333392412692>",     inline=True)
         embed.set_footer(text=f"Decree by {interaction.user.display_name}  ·  Kingdom Treasury")
         await interaction.followup.send(embed=embed, ephemeral=True)
 

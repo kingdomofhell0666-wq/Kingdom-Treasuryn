@@ -51,7 +51,7 @@ class CosmeticService:
             raise ValueError(f"You already own **{skin.name}**.")
         if user["balance"] < skin.price_dc:
             needed = skin.price_dc - user["balance"]
-            raise ValueError(f"Insufficient funds. You need **{needed:,} DC** more.")
+            raise ValueError(f"Insufficient funds. You need **{needed:,}** <:devilcoinStack:1492184333392412692> more.")
         owned.append(skin_id)
         await self.db.update_balance(guild_id, discord_id, -skin.price_dc)
         await self.db.set_owned_skins(guild_id, discord_id, json.dumps(owned))
@@ -89,7 +89,7 @@ class CosmeticService:
             raise ValueError(f"You already own **{title.name}**.")
         if user["balance"] < title.price_dc:
             needed = title.price_dc - user["balance"]
-            raise ValueError(f"Insufficient funds. You need **{needed:,} DC** more.")
+            raise ValueError(f"Insufficient funds. You need **{needed:,}** <:devilcoinStack:1492184333392412692> more.")
         owned.append(title_name)
         await self.db.update_balance(guild_id, discord_id, -title.price_dc)
         await self.db.set_owned_titles(guild_id, discord_id, json.dumps(owned))

@@ -271,10 +271,10 @@ class MissionCreateModal(discord.ui.Modal, title="📜  Kingdom Mission Decree")
             color       = _GOLD,
         )
         confirm.add_field(name="ID",     value=f"**#{mission['id']}**",           inline=True)
-        confirm.add_field(name="Reward", value=f"**{reward_val:,} DC**",          inline=True)
+        confirm.add_field(name="Reward", value=f"**{reward_val:,}** <:devilcoinStack:1492184333392412692>",          inline=True)
         entry = opts["entry_cost"]
         if entry:
-            confirm.add_field(name="Entry",   value=f"**{entry:,} DC**",          inline=True)
+            confirm.add_field(name="Entry",   value=f"**{entry:,}** <:devilcoinStack:1492184333392412692>",          inline=True)
         if opts["max_participants"]:
             confirm.add_field(name="Slots",   value=f"**{opts['max_participants']}**", inline=True)
         if opts["repeat_limit"]:
@@ -460,7 +460,7 @@ class MissionsCog(commands.Cog):
             ),
             color = _GOLD,
         )
-        embed.add_field(name="Reward Paid", value=f"**{result['reward']:,} DC**", inline=True)
+        embed.add_field(name="Reward Paid", value=f"**{result['reward']:,}** <:devilcoinStack:1492184333392412692>", inline=True)
         embed.add_field(name="Recipient",   value=mention,                         inline=True)
         embed.set_footer(text="Kingdom Treasury  ·  Kingdom of Hell")
         await interaction.followup.send(embed=embed, ephemeral=True)

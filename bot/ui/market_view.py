@@ -76,7 +76,7 @@ class MarketView(discord.ui.View):
             return "✓ Owned"
         if item.price == 0:
             return "✓ Free"
-        return f"🔒 {item.price:,} DC"
+        return f"🔒 {item.price:,} <:devilcoinStack:1492184333392412692>"
 
     # ── embed ─────────────────────────────────────────────────────────────────
 
@@ -88,7 +88,7 @@ class MarketView(discord.ui.View):
         embed = discord.Embed(
             title="🛒  Infernal Market — Cosmetics",
             description=(
-                "*Acquire skins and titles with DevilCoins.*\n"
+                "*Acquire skins and titles with* <:devilcoinStack:1492184333392412692>.\n"
                 "*Press **Buy** to purchase. Use `/equip-skin` or `/equip-title` to activate.*"
             ),
             color=BLOOD_RED,
@@ -220,8 +220,8 @@ def _success_embed(item: MarketItem, cost: int, new_balance: int) -> discord.Emb
         description=f"*{item.description}*",
         color=GOLD,
     )
-    embed.add_field(name="COST",    value=f"**{cost:,} DC**",        inline=True)
-    embed.add_field(name="BALANCE", value=f"**{new_balance:,} DC**", inline=True)
+    embed.add_field(name="COST",    value=f"**{cost:,}** <:devilcoinStack:1492184333392412692>",        inline=True)
+    embed.add_field(name="BALANCE", value=f"**{new_balance:,}** <:devilcoinStack:1492184333392412692>", inline=True)
     embed.add_field(name="RARITY",  value=item.rarity,               inline=True)
     hint = "/equip-skin" if item.item_type == "skin" else "/equip-title"
     embed.add_field(

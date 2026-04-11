@@ -52,7 +52,7 @@ class InvestmentService:
             raise ValueError(f"Unknown investment type: **{inv_type}**. Choose `safe`, `medium`, or `risky`.")
         cfg = INVESTMENT_TYPES[inv_type]
         if amount < cfg["min_amount"]:
-            raise ValueError(f"The minimum for **{cfg['label']}** is **{cfg['min_amount']:,} DC**.")
+            raise ValueError(f"The minimum for **{cfg['label']}** is **{cfg['min_amount']:,}** <:devilcoinStack:1492184333392412692>.")
         user = await self.db.upsert_user(guild_id, discord_id, username)
         if user["balance"] < amount:
             raise ValueError("Insufficient funds in your coffers.")

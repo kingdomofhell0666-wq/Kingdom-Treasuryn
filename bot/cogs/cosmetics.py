@@ -143,8 +143,8 @@ class CosmeticsCog(commands.Cog):
                     description=f"*{item.description}*",
                     color=GOLD,
                 )
-                embed.add_field(name="COST",    value=f"**{cost:,} DC**",        inline=True)
-                embed.add_field(name="BALANCE", value=f"**{new_balance:,} DC**", inline=True)
+                embed.add_field(name="COST",    value=f"**{cost:,}** <:devilcoinStack:1492184333392412692>",        inline=True)
+                embed.add_field(name="BALANCE", value=f"**{new_balance:,}** <:devilcoinStack:1492184333392412692>", inline=True)
                 embed.add_field(name="RARITY",  value=item.rarity,               inline=True)
                 embed.add_field(
                     name="\u200b",
@@ -189,7 +189,7 @@ class CosmeticsCog(commands.Cog):
             if q in item.name.lower() or q in item.item_type.lower():
                 type_tag = "Skin" if item.item_type == "skin" else "Title"
                 choices.append(app_commands.Choice(
-                    name  = f"{item.name} [{type_tag} · {item.rarity} · {item.price:,} DC]",
+                    name  = f"{item.name} [{type_tag} · {item.rarity} · {item.price:,} DC]",  # DC kept — autocomplete has char limit
                     value = f"{item.item_type}:{item.id}",
                 ))
             if len(choices) >= 25:

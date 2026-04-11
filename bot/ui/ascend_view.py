@@ -71,7 +71,7 @@ class AscendView(discord.ui.View):
             tax_pct = f"{int(tax_rate * 100)}%"
             embed.add_field(
                 name=f"{'⚔' if is_next else '🔒'}  **{name}**",
-                value=f"Cost: **{cost:,} DC**\nTax Rate: **{tax_pct}**\n{marker}",
+                value=f"Cost: **{cost:,}** <:devilcoinStack:1492184333392412692>\nTax Rate: **{tax_pct}**\n{marker}",
                 inline=True,
             )
 

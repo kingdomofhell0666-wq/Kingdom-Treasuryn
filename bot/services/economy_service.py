@@ -200,7 +200,7 @@ class EconomyService:
             raise ValueError("You cannot transfer to yourself.")
         sender = await self.db.upsert_user(guild_id, sender_id, sender_name)
         if sender["balance"] < amount:
-            raise ValueError(f"Insufficient funds. You have **{sender['balance']:,} DC**.")
+            raise ValueError(f"Insufficient funds. You have **{sender['balance']:,}** <:devilcoinStack:1492184333392412692>.")
         await self.db.upsert_user(guild_id, recipient_id, recipient_name)
 
         TAX_RATE         = 0.02

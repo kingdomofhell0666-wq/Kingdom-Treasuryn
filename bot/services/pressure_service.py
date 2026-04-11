@@ -124,6 +124,23 @@ class PressureService:
             total += tax
             count += 1
 
+            ledger = getattr(bot, "ledger_service", None)
+            if ledger:
+                try:
+                    await ledger.log(
+                        action          = "daily_tax",
+                        amount          = tax,
+                        from_label      = f"<@{user['discord_id']}>",
+                        to_label        = "Kingdom Treasury",
+                        guild_id        = guild_id,
+                        from_discord_id = user["discord_id"],
+                        wallet_before   = old_bal,
+                        wallet_after    = new_bal,
+                        action_type     = "treasury",
+                    )
+                except Exception as exc:
+                    logger.error(f"[Pressure] Ledger daily_tax log failed: {exc}")
+
             await self.after_balance_change(
                 bot        = bot,
                 guild_id   = guild_id,
@@ -195,6 +212,22 @@ class PressureService:
             )
             await self._send(bot, DEBT_CHANNEL,
                              discord.Embed(description=desc, color=0x4A0000))
+            _ledger = getattr(bot, "ledger_service", None)
+            if _ledger:
+                try:
+                    await _ledger.log(
+                        action          = "debt_registered",
+                        amount          = abs(new_balance),
+                        from_label      = "Economy",
+                        to_label        = f"<@{discord_id}> (Debt)",
+                        guild_id        = guild_id,
+                        from_discord_id = discord_id,
+                        wallet_before   = old_balance,
+                        wallet_after    = new_balance,
+                        action_type     = "transfer",
+                    )
+                except Exception as exc:
+                    logger.error(f"[Pressure] Ledger debt_registered log failed: {exc}")
 
         # ── Sacrifice: exit (wallet returned to 0 or above) ──────────────────
         if new_balance >= 0 and sacrifice_active:
@@ -207,6 +240,26 @@ class PressureService:
             await self._send(bot, SACRIFICE_CHANNEL,
                              discord.Embed(description=desc, color=0x2E4A2E))
 
+        # ── Debt: partial repayment (still negative but improved) ────────────
+        if old_balance < 0 and new_balance < 0 and new_balance > old_balance:
+            repaid = new_balance - old_balance
+            _ledger = getattr(bot, "ledger_service", None)
+            if _ledger:
+                try:
+                    await _ledger.log(
+                        action          = "debt_repayment",
+                        amount          = repaid,
+                        from_label      = f"<@{discord_id}> (Income)",
+                        to_label        = "Debt Register",
+                        guild_id        = guild_id,
+                        from_discord_id = discord_id,
+                        wallet_before   = old_balance,
+                        wallet_after    = new_balance,
+                        action_type     = "transfer",
+                    )
+                except Exception as exc:
+                    logger.error(f"[Pressure] Ledger debt_repayment log failed: {exc}")
+
         # ── Debt: exit (crossed zero going up) ────────────────────────────────
         if old_balance < 0 and new_balance >= 0:
             desc = (
@@ -217,6 +270,22 @@ class PressureService:
             )
             await self._send(bot, DEBT_CHANNEL,
                              discord.Embed(description=desc, color=0x1A5C1A))
+            _ledger = getattr(bot, "ledger_service", None)
+            if _ledger:
+                try:
+                    await _ledger.log(
+                        action          = "debt_cleared",
+                        amount          = abs(old_balance),
+                        from_label      = f"<@{discord_id}> (Recovery)",
+                        to_label        = "Debt Register (Cleared)",
+                        guild_id        = guild_id,
+                        from_discord_id = discord_id,
+                        wallet_before   = old_balance,
+                        wallet_after    = new_balance,
+                        action_type     = "transfer",
+                    )
+                except Exception as exc:
+                    logger.error(f"[Pressure] Ledger debt_cleared log failed: {exc}")
 
     # ── Rank downgrade ────────────────────────────────────────────────────────
 

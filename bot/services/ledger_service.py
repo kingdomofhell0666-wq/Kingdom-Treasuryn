@@ -55,6 +55,10 @@ _ACTION_LABELS: dict[str, str] = {
     "remove_dc":       "Extraction",
     "ascend":          "Ascension Cost",
     "market_purchase": "Market Purchase",
+    "daily_tax":       "Daily Tax",
+    "debt_registered": "Debt Registered",
+    "debt_repayment":  "Debt Repayment",
+    "debt_cleared":    "Debt Cleared",
 }
 
 

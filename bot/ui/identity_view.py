@@ -23,7 +23,7 @@ class IdentityView(discord.ui.View):
     )
     async def grind_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_message(
-            "Use `/grind` to descend into the Infernal Mines and extract DevilCoins.",
+            "Use `/grind` to descend into the Infernal Mines and extract <:devilcoinStack:1492184333392412692>.",
             ephemeral=True,
         )
 

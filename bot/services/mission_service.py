@@ -194,8 +194,8 @@ class MissionService:
                 return {
                     "ok": False,
                     "reason": (
-                        f"Insufficient funds. Entry requires **{entry_cost:,} DC** "
-                        f"and you have **{wallet_before:,} DC**."
+                        f"Insufficient funds. Entry requires **{entry_cost:,}** <:devilcoinStack:1492184333392412692> "
+                        f"and you have **{wallet_before:,}** <:devilcoinStack:1492184333392412692>."
                     ),
                 }
             treasury_before = await self.db.get_treasury_balance(guild_id)
@@ -256,7 +256,7 @@ class MissionService:
                 "ok": False,
                 "reason": (
                     f"Treasury has insufficient funds. "
-                    f"Reward: **{reward:,} DC**, Treasury: **{treasury_before:,} DC**."
+                    f"Reward: **{reward:,}** <:devilcoinStack:1492184333392412692>, Treasury: **{treasury_before:,}** <:devilcoinStack:1492184333392412692>."
                 ),
             }
 
