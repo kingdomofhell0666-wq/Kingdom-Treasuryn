@@ -347,3 +347,9 @@ id = "yg0YdKafso5RLDHPlmL-Z"
 uri = "file://leaderboard_preview.png"
 type = "image"
 title = "Leaderboard Image — sample data preview"
+
+[[outputs]]
+id = "Rb7hzcYFjWciN8xEClvvY"
+uri = "file://attached_assets/card_resized.jpg"
+type = "image"
+title = "Screenshot resized to 900×320"
