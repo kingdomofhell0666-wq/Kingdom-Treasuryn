@@ -29,6 +29,8 @@ import logging
 import time
 from typing import Any, Dict, Optional, Tuple
 
+from ..utils.skins import RANK_ORDER as _RANK_ORDER
+
 logger = logging.getLogger("kingdom_treasury")
 
 
@@ -63,11 +65,13 @@ _TAX_TIERS: list[tuple[float, int, int]] = [
 
 _TAX_DEFAULT = (0.05, 50, 1_000)
 
+# _RANK_INDEX is derived from the canonical RANK_ORDER in skins.py.
+# The tax tiers are indexed 0–14 (Forsaken → Duke), matching economy rank order.
+# Staff roles (Centurion, Chancellor, Sovereign, etc.) fall back to index 0.
 _RANK_INDEX: dict[str, int] = {
-    "Forsaken": 0, "Vermin": 1, "Corrupted": 2, "Folklore": 3,
-    "Mythology": 4, "Demonology": 5, "Eschatology": 6, "Archangel": 7,
-    "Archdemon": 8, "Knight": 9, "Baron": 10, "Viscount": 11,
-    "Count": 12, "Marquis": 13, "Duke": 14,
+    name: min(idx, len(_TAX_TIERS) - 1)
+    for name, idx in _RANK_ORDER.items()
+    if idx < len(_TAX_TIERS)
 }
 
 

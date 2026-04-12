@@ -3,23 +3,27 @@ Kingdom Treasury — Role-based permission helpers.
 
 All role/permission checks are centralised here so every cog imports
 from one canonical source.  Deny-embed builders are also kept here.
+
+Role IDs are sourced from rank_service.EXCLUDED_ROLE_IDS so there is a
+single definition for all non-purchasable authority roles.
 """
 from __future__ import annotations
 
 import discord
+from ..services.rank_service import EXCLUDED_ROLE_IDS as _EX
 
 _DC = "<:devilcoinStack:1492184333392412692>"
 
-# ── Kingdom staff role IDs ─────────────────────────────────────────────────────
+# ── Kingdom staff role IDs (sourced from rank_service — single source of truth) ──
 
-ROLE_SOVEREIGN    = 1290484661419638873
-ROLE_CONSORTS     = 1418279591528890508
-ROLE_PRINCES      = 1290484661419638870
-ROLE_PRINCESSES   = 1489067882557079603
-ROLE_CHANCELLOR   = 1414110540128718898
-ROLE_LEGATES      = 1489108767353344130
-ROLE_CENTURION    = 1489108909682589696
-ROLE_LEGIONNAIRES = 1290484661419638871
+ROLE_SOVEREIGN    = int(_EX["Sovereign"])
+ROLE_CONSORTS     = int(_EX["Consorts"])
+ROLE_PRINCES      = int(_EX["Princes"])
+ROLE_PRINCESSES   = int(_EX["Princesses"])
+ROLE_CHANCELLOR   = int(_EX["Chancellor"])
+ROLE_LEGATES      = int(_EX["Legates"])
+ROLE_CENTURION    = int(_EX["Centurion"])
+ROLE_LEGIONNAIRES = int(_EX["Legionnaires"])
 
 # All Kingdom staff roles (Legates included)
 KINGDOM_ROLES: frozenset[int] = frozenset({

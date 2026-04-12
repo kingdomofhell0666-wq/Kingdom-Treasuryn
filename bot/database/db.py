@@ -968,6 +968,89 @@ class Database:
             rows = await cur.fetchall()
             return [dict(r) for r in rows]
 
+    async def get_weekly_kingdom_rank_position(
+        self, guild_id: str, discord_id: str
+    ) -> int:
+        """
+        Return the user's 1-based position in the current weekly Kingdom Ranks standings.
+
+        Ordering mirrors get_weekly_kingdom_leaderboard:
+          1. weekly_active_seconds DESC  (primary)
+          2. weekly_dc_earned DESC       (secondary)
+          3. rank_idx DESC               (tertiary — higher rank wins tiebreak)
+          4. discord_id ASC              (stable final fallback)
+
+        Returns 0 if the user is not found in the eligible set (staff / not in DB).
+        """
+        placeholders = ",".join("?" * len(self._ELIGIBLE_RANKS))
+        async with self._db.execute(
+            f"""
+            SELECT COUNT(*) + 1 AS position
+            FROM users
+            WHERE guild_id = ? AND rank IN ({placeholders})
+              AND (
+                    weekly_active_seconds > (
+                        SELECT weekly_active_seconds FROM users
+                        WHERE guild_id = ? AND discord_id = ?
+                    )
+                OR (
+                    weekly_active_seconds = (
+                        SELECT weekly_active_seconds FROM users
+                        WHERE guild_id = ? AND discord_id = ?
+                    )
+                    AND weekly_dc_earned > (
+                        SELECT weekly_dc_earned FROM users
+                        WHERE guild_id = ? AND discord_id = ?
+                    )
+                )
+                OR (
+                    weekly_active_seconds = (
+                        SELECT weekly_active_seconds FROM users
+                        WHERE guild_id = ? AND discord_id = ?
+                    )
+                    AND weekly_dc_earned = (
+                        SELECT weekly_dc_earned FROM users
+                        WHERE guild_id = ? AND discord_id = ?
+                    )
+                    AND {self._RANK_CASE} > (
+                        SELECT {self._RANK_CASE} FROM users
+                        WHERE guild_id = ? AND discord_id = ?
+                    )
+                )
+                OR (
+                    weekly_active_seconds = (
+                        SELECT weekly_active_seconds FROM users
+                        WHERE guild_id = ? AND discord_id = ?
+                    )
+                    AND weekly_dc_earned = (
+                        SELECT weekly_dc_earned FROM users
+                        WHERE guild_id = ? AND discord_id = ?
+                    )
+                    AND {self._RANK_CASE} = (
+                        SELECT {self._RANK_CASE} FROM users
+                        WHERE guild_id = ? AND discord_id = ?
+                    )
+                    AND discord_id < ?
+                )
+              )
+            """,
+            (
+                guild_id, *self._ELIGIBLE_RANKS,
+                guild_id, discord_id,   # active_seconds >
+                guild_id, discord_id,   # active_seconds =
+                guild_id, discord_id,   # dc_earned >
+                guild_id, discord_id,   # active_seconds =
+                guild_id, discord_id,   # dc_earned =
+                guild_id, discord_id,   # rank_idx > (RANK_CASE subquery)
+                guild_id, discord_id,   # active_seconds =
+                guild_id, discord_id,   # dc_earned =
+                guild_id, discord_id,   # rank_idx = (RANK_CASE subquery)
+                discord_id,             # discord_id <
+            ),
+        ) as cur:
+            row = await cur.fetchone()
+            return row["position"] if row else 0
+
     async def reset_weekly_stats(self, guild_id: str):
         """
         Zero out weekly_active_seconds and weekly_dc_earned for all users in

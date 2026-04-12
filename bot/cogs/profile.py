@@ -49,8 +49,14 @@ class ProfileCog(commands.Cog):
         card_variant    = resolve_identity_card_variant(member_role_ids, live_rank)
 
         # ── Kingdom Rank — only for eligible groups (Nobility + Members) ────
+        # Shows the user's live weekly rank position (weekly activity → weekly DC
+        # earned → eligible rank as tiebreaker).  Non-eligible hierarchy groups
+        # (Owners, Royal Family, Council, Legion) receive kingdom_rank=0 which
+        # the card renders as "EXEMPT".
         if card_variant.kingdom_rank_eligible:
-            kingdom_rank = await self.audit.get_kingdom_rank(guild_id, discord_id)
+            kingdom_rank = await self.db.get_weekly_kingdom_rank_position(guild_id, discord_id)
+            if kingdom_rank == 0:
+                kingdom_rank = 1   # user is in DB but no one ranks above them yet
         else:
             kingdom_rank = 0       # generate_card shows "EXEMPT" for kr_eligible=False
 
