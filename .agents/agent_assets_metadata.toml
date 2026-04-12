@@ -401,3 +401,21 @@ id = "K8T5dER9MRbX4e7GoFFhW"
 uri = "file://attached_assets/card_new_lower_empty2.jpg"
 type = "image"
 title = "Empty state — no relic (UNBOUND), no badges (UNREGISTERED)"
+
+[[outputs]]
+id = "ZS1-1nfBdvLcohsJQHX_O"
+uri = "file://attached_assets/v_relics_badges_full.jpg"
+type = "image"
+title = "Relic: Sanguine Halo + 4 badges — all icon art, no text"
+
+[[outputs]]
+id = "q6O3fKDtH9hCON2Uj8gB8"
+uri = "file://attached_assets/v_relics_badges_empty.jpg"
+type = "image"
+title = "Empty state — dark empty slots only, no text at all"
+
+[[outputs]]
+id = "S4tQfSX8nRUvtv3kINNUT"
+uri = "file://attached_assets/v_6badges_void.jpg"
+type = "image"
+title = "Void Drift relic + 6 badges (abyss skin)"

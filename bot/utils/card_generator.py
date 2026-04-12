@@ -1059,6 +1059,269 @@ def _low_rank_damage(card: Image.Image, rank_level: int, theme: dict):
         card.alpha_composite(stamp_layer)
 
 
+# ─── Infernal Artifact Icon Renderers ─────────────────────────────────────────
+
+def _draw_relic_icon_art(
+    card: Image.Image,
+    cx: int, cy: int, R: int,
+    relic_id: Optional[str],
+    theme: dict,
+    slot_idx: int,
+    uhash: int,
+) -> None:
+    """Draw a relic visual icon (filled or dark-empty slot) at (cx, cy)."""
+    acc = theme["accent"][:3]
+    bg2 = theme["bg2"][:3]
+    bdr = theme["border"][:3]
+    gld = theme.get("gold", acc)[:3]
+
+    if relic_id and relic_id in RELICS_CATALOG:
+        # Glow halo behind icon
+        gl = Image.new("RGBA", card.size, (0, 0, 0, 0))
+        gd = ImageDraw.Draw(gl)
+        gd.ellipse([cx-R-8, cy-R-8, cx+R+8, cy+R+8], fill=(*acc, 22))
+        gl = gl.filter(ImageFilter.GaussianBlur(10))
+        card.alpha_composite(gl)
+
+        draw = ImageDraw.Draw(card)
+
+        if relic_id == "soul_aura":
+            # GLOWING EYE
+            draw.ellipse([cx-R, cy-R, cx+R, cy+R],
+                         fill=(*bg2, 185), outline=(*acc, 175), width=2)
+            ew, eh = int(R*0.78), int(R*0.38)
+            draw.ellipse([cx-ew, cy-eh, cx+ew, cy+eh],
+                         fill=(*bg2, 220), outline=(*acc, 195), width=1)
+            ir = int(R*0.26)
+            draw.ellipse([cx-ir, cy-ir, cx+ir, cy+ir], fill=(*acc, 245))
+            pr = int(R*0.10)
+            draw.ellipse([cx-pr, cy-pr, cx+pr, cy+pr], fill=(0, 0, 0, 255))
+            for adeg in range(0, 360, 60):
+                a = math.radians(adeg)
+                x0 = cx + math.cos(a)*R*1.05
+                y0 = cy + math.sin(a)*R*1.05
+                x1 = cx + math.cos(a)*R*1.40
+                y1 = cy + math.sin(a)*R*1.40
+                draw.line([(int(x0), int(y0)), (int(x1), int(y1))],
+                          fill=(*acc, 130), width=1)
+
+        elif relic_id == "infernal_crown":
+            # INFERNAL CROWN — 3 prongs + base + gem
+            base_y1 = cy + int(R*0.18)
+            base_y2 = cy + int(R*0.78)
+            draw.rounded_rectangle(
+                [cx-int(R*0.78), base_y1, cx+int(R*0.78), base_y2],
+                radius=3, fill=(*gld, 200))
+            draw.polygon([(cx, cy-int(R*0.88)),
+                           (cx-int(R*0.18), base_y1), (cx+int(R*0.18), base_y1)],
+                         fill=(*gld, 225))
+            draw.polygon([(cx-int(R*0.52), cy-int(R*0.48)),
+                           (cx-int(R*0.70), base_y1), (cx-int(R*0.35), base_y1)],
+                         fill=(*gld, 205))
+            draw.polygon([(cx+int(R*0.52), cy-int(R*0.48)),
+                           (cx+int(R*0.35), base_y1), (cx+int(R*0.70), base_y1)],
+                         fill=(*gld, 205))
+            gr = max(3, int(R*0.10))
+            draw.ellipse([cx-gr, cy-int(R*0.88)-gr, cx+gr, cy-int(R*0.88)+gr],
+                         fill=(*acc, 255))
+            draw.ellipse([cx-R, cy-R, cx+R, cy+R], outline=(*gld, 65), width=1)
+
+        elif relic_id == "void_drift":
+            # VORTEX SPIRAL — concentric arcs with rotation offset
+            draw.ellipse([cx-R, cy-R, cx+R, cy+R],
+                         fill=(*bg2, 160), outline=(*acc, 70), width=1)
+            for i in range(5):
+                r_ = int(R*(1.0 - i*0.17))
+                sa  = i * 72
+                draw.arc([cx-r_, cy-r_, cx+r_, cy+r_], sa, sa+270,
+                         fill=(*acc, max(45, 205-i*40)), width=max(1, 3-i//2))
+            draw.ellipse([cx-4, cy-4, cx+4, cy+4], fill=(*acc, 255))
+
+        elif relic_id == "crimson_chains":
+            # CHAIN — two interlocked ovals
+            draw.ellipse([cx-R, cy-R, cx+R, cy+R],
+                         fill=(*bg2, 130), outline=(*acc, 55), width=1)
+            la, lb = int(R*0.42), int(R*0.22)
+            for ox, oy in [(-int(R*0.24), -int(R*0.18)),
+                            (int(R*0.24),   int(R*0.18))]:
+                lx, ly = cx+ox, cy+oy
+                draw.arc([lx-la, ly-lb, lx+la, ly+lb],  30, 210,
+                         fill=(*acc, 205), width=3)
+                draw.arc([lx-la, ly-lb, lx+la, ly+lb], 210, 390,
+                         fill=(*acc, 95),  width=3)
+
+        elif relic_id == "abyssal_veil":
+            # SHROUD TEARDROP
+            draw.ellipse([cx-R, cy-R, cx+R, cy+R],
+                         fill=(*bg2, 120), outline=(*acc, 55), width=1)
+            pts = [(cx,              cy-int(R*0.90)),
+                   (cx+int(R*0.64), cy+int(R*0.24)),
+                   (cx+int(R*0.50), cy+int(R*0.82)),
+                   (cx,              cy+int(R*0.57)),
+                   (cx-int(R*0.50), cy+int(R*0.82)),
+                   (cx-int(R*0.64), cy+int(R*0.24))]
+            draw.polygon(pts, fill=(*acc, 42), outline=(*acc, 165), width=2)
+            ipts = [(cx,              cy-int(R*0.56)),
+                    (cx+int(R*0.32), cy+int(R*0.14)),
+                    (cx,              cy+int(R*0.40)),
+                    (cx-int(R*0.32), cy+int(R*0.14))]
+            draw.polygon(ipts, fill=(*acc, 135))
+
+        elif relic_id == "sanguine_halo":
+            # HALO RING — thick outer + inner ring + gem dots
+            draw.ellipse([cx-R, cy-R, cx+R, cy+R], outline=(*gld, 225), width=4)
+            r2 = int(R*0.72)
+            draw.ellipse([cx-r2, cy-r2, cx+r2, cy+r2], outline=(*gld, 75), width=1)
+            for i in range(6):
+                a = math.radians(i*60 - 30)
+                gx = int(cx + math.cos(a)*R*0.87)
+                gy = int(cy + math.sin(a)*R*0.87)
+                draw.ellipse([gx-4, gy-4, gx+4, gy+4],
+                             fill=(*gld, 240), outline=(*acc, 195), width=1)
+
+        else:
+            # Generic infernal orb
+            draw.ellipse([cx-R, cy-R, cx+R, cy+R],
+                         fill=(*bg2, 195), outline=(*acc, 200), width=2)
+            r2 = int(R*0.55)
+            draw.ellipse([cx-r2, cy-r2, cx+r2, cy+r2],
+                         fill=(*acc, 55), outline=(*acc, 195), width=1)
+            draw.ellipse([cx-int(R*0.22), cy-int(R*0.22),
+                          cx+int(R*0.22), cy+int(R*0.22)], fill=(*acc, 255))
+    else:
+        # Empty slot — dark faint circle with subtle unique pattern
+        draw = ImageDraw.Draw(card)
+        draw.ellipse([cx-R, cy-R, cx+R, cy+R], fill=(*bg2, 28), outline=(*bdr, 42), width=1)
+        pat = (uhash + slot_idx * 7919) % 5
+        if pat == 0:
+            r2 = int(R*0.45)
+            draw.ellipse([cx-r2, cy-r2, cx+r2, cy+r2], outline=(*bdr, 32), width=1)
+        elif pat == 1:
+            s = int(R*0.38)
+            draw.line([cx-s, cy, cx+s, cy], fill=(*bdr, 35), width=1)
+            draw.line([cx, cy-s, cx, cy+s], fill=(*bdr, 35), width=1)
+        elif pat == 2:
+            d_ = int(R*0.40)
+            for ddx, ddy in [(d_, 0), (-d_, 0), (0, d_), (0, -d_)]:
+                draw.ellipse([cx+ddx-2, cy+ddy-2, cx+ddx+2, cy+ddy+2], fill=(*bdr, 38))
+        elif pat == 3:
+            r3 = int(R*0.50)
+            for sa in [0, 120, 240]:
+                draw.arc([cx-r3, cy-r3, cx+r3, cy+r3], sa, sa+72, fill=(*bdr, 38), width=1)
+        else:
+            draw.ellipse([cx-3, cy-3, cx+3, cy+3], fill=(*bdr, 38))
+
+
+def _draw_badge_icon_art(
+    draw: ImageDraw.ImageDraw,
+    cx: int, cy: int, R: int,
+    badge,
+    theme: dict,
+) -> None:
+    """Draw a badge seal icon symbol inside the badge circle."""
+    col = _RARITY_BADGE_COLOR.get(badge.rarity, theme["text2"][:3])
+
+    if badge.id == "haunted":
+        # SKULL — oval head + hollow eyes + nose
+        hw, hh = int(R*0.56), int(R*0.52)
+        ey = cy - int(R*0.10)
+        draw.ellipse([cx-hw, ey-hh, cx+hw, ey],
+                     fill=(*col, 48), outline=(*col, 180), width=1)
+        draw.ellipse([cx-int(R*0.30), ey-int(R*0.36),
+                      cx-int(R*0.08), ey-int(R*0.14)], fill=(*col, 230))
+        draw.ellipse([cx+int(R*0.08), ey-int(R*0.36),
+                      cx+int(R*0.30), ey-int(R*0.14)], fill=(*col, 230))
+        draw.ellipse([cx-int(R*0.08), ey-int(R*0.06),
+                      cx+int(R*0.08), ey+int(R*0.10)], fill=(*col, 130))
+
+    elif badge.id == "void_sworn":
+        # EYE IN TRIANGLE
+        ty = cy - int(R*0.70)
+        draw.polygon([(cx, ty), (cx-int(R*0.62), cy+int(R*0.52)),
+                       (cx+int(R*0.62), cy+int(R*0.52))],
+                     outline=(*col, 185), width=1)
+        draw.ellipse([cx-int(R*0.23), cy-int(R*0.20),
+                      cx+int(R*0.23), cy+int(R*0.20)], fill=(*col, 200))
+        draw.ellipse([cx-int(R*0.09), cy-int(R*0.09),
+                      cx+int(R*0.09), cy+int(R*0.09)], fill=(0, 0, 0, 255))
+
+    elif badge.id == "bloodpact":
+        # BLOOD DROPLET
+        draw.polygon([
+            (cx,              cy-int(R*0.78)),
+            (cx+int(R*0.52), cy+int(R*0.20)),
+            (cx,              cy+int(R*0.68)),
+            (cx-int(R*0.52), cy+int(R*0.20)),
+        ], fill=(*col, 200), outline=(*col, 220), width=1)
+
+    elif badge.id == "infernal_mark":
+        # PENTAGRAM — proper 5-pointed star
+        outer, inner_ = [], []
+        for i in range(5):
+            a_o = math.radians(-90 + i*72)
+            a_i = math.radians(-90 + i*72 + 36)
+            outer.append((int(cx+math.cos(a_o)*R*0.75),
+                           int(cy+math.sin(a_o)*R*0.75)))
+            inner_.append((int(cx+math.cos(a_i)*R*0.30),
+                            int(cy+math.sin(a_i)*R*0.30)))
+        star = []
+        for i in range(5):
+            star.append(outer[i]); star.append(inner_[i])
+        draw.polygon(star, fill=(*col, 195), outline=(*col, 215), width=1)
+
+    elif badge.id == "wraith_touched":
+        # GHOST HEAD + EYES
+        gw = int(R*0.52)
+        draw.ellipse([cx-gw, cy-int(R*0.68), cx+gw, cy+int(R*0.08)],
+                     fill=(*col, 50), outline=(*col, 165), width=1)
+        draw.ellipse([cx-int(R*0.28), cy-int(R*0.50),
+                      cx-int(R*0.08), cy-int(R*0.28)], fill=(*col, 210))
+        draw.ellipse([cx+int(R*0.08), cy-int(R*0.50),
+                      cx+int(R*0.28), cy-int(R*0.28)], fill=(*col, 210))
+
+    elif badge.id == "cerberus_marked":
+        # THREE OVERLAPPING HEAD CIRCLES
+        cr = int(R*0.30)
+        draw.ellipse([cx-int(R*0.62)-cr, cy-cr, cx-int(R*0.62)+cr, cy+cr],
+                     fill=(*col, 40), outline=(*col, 180), width=1)
+        draw.ellipse([cx-cr, cy-int(R*0.48)-cr, cx+cr, cy-int(R*0.48)+cr],
+                     fill=(*col, 40), outline=(*col, 180), width=1)
+        draw.ellipse([cx+int(R*0.62)-cr, cy-cr, cx+int(R*0.62)+cr, cy+cr],
+                     fill=(*col, 40), outline=(*col, 180), width=1)
+
+    elif badge.id == "throne_carved":
+        # MINI CROWN
+        bty, bby = cy+int(R*0.28), cy+int(R*0.75)
+        draw.rectangle([cx-int(R*0.65), bty, cx+int(R*0.65), bby], fill=(*col, 165))
+        draw.polygon([(cx, cy-int(R*0.78)),
+                       (cx-int(R*0.16), bty), (cx+int(R*0.16), bty)], fill=(*col, 210))
+        draw.polygon([(cx-int(R*0.48), cy-int(R*0.42)),
+                       (cx-int(R*0.62), bty), (cx-int(R*0.30), bty)], fill=(*col, 188))
+        draw.polygon([(cx+int(R*0.48), cy-int(R*0.42)),
+                       (cx+int(R*0.30), bty), (cx+int(R*0.62), bty)], fill=(*col, 188))
+
+    elif badge.id == "kingdom_ascendant":
+        # 5-POINTED STAR (solid)
+        outer, inner_ = [], []
+        for i in range(5):
+            a_o = math.radians(-90 + i*72)
+            a_i = math.radians(-90 + i*72 + 36)
+            outer.append((int(cx+math.cos(a_o)*R*0.80),
+                           int(cy+math.sin(a_o)*R*0.80)))
+            inner_.append((int(cx+math.cos(a_i)*R*0.34),
+                            int(cy+math.sin(a_i)*R*0.34)))
+        star = []
+        for i in range(5):
+            star.append(outer[i]); star.append(inner_[i])
+        draw.polygon(star, fill=(*col, 200), outline=(*col, 220), width=1)
+
+    else:
+        # Generic infernal orb fallback
+        draw.ellipse([cx-int(R*0.48), cy-int(R*0.48),
+                      cx+int(R*0.48), cy+int(R*0.48)],
+                     fill=(*col, 115), outline=(*col, 200), width=1)
+
+
 def generate_card(
     username: str,
     display_name: str,
@@ -1390,17 +1653,12 @@ def generate_card(
 
     # ════════════════════════════════════════════════════════════════════════
     # BOUND ARTIFACTS  ART_Y=468 → ARTS_END=628  (160 px)
-    # LEFT COLUMN : RELICS registry
-    # RIGHT COLUMN: BADGES seals (circular)
+    # LEFT : RELICS — 4 icon slots (filled or dark-empty)
+    # RIGHT: BADGES — 6 circular seal slots (filled or dark-empty)
+    # No placeholder text — purely visual
     # ════════════════════════════════════════════════════════════════════════
 
     draw = ImageDraw.Draw(card)
-
-    # ── Relic metadata ───────────────────────────────────────────────────
-    relic_obj_   = RELICS_CATALOG.get(relic_id) if relic_id else None
-    relic_name_  = relic_obj_.name   if relic_obj_ else "UNBOUND"
-    relic_rar_   = relic_obj_.rarity if relic_obj_ else ""
-    relic_col_   = (*t["accent"][:3], 215) if relic_obj_ else (*t["text2"][:3], 60)
 
     # ── Section header — "BOUND ARTIFACTS" centred with diamond dividers ─
     art_lbl_f = _font(9, cinzel=True)
@@ -1420,149 +1678,82 @@ def generate_card(
                  fill=(*t["accent"][:3], 140))
 
     # ── Column geometry ──────────────────────────────────────────────────
-    content_y  = ART_Y + 30          # top of content rows
-    content_h  = ARTS_END - content_y - 6
-    COL_DIV    = W // 2              # x = 600
-    L_X1       = OUT_PAD             # left column left edge
-    L_X2       = COL_DIV - 10        # left column right edge
-    R_X1       = COL_DIV + 10        # right column left edge
-    R_X2       = W - OUT_PAD         # right column right edge
+    content_y = ART_Y + 30
+    content_h = ARTS_END - content_y - 6
+    COL_DIV   = W // 2              # x = 600
+    L_X1      = OUT_PAD             # 24
+    L_X2      = COL_DIV - 10        # 590
+    R_X1      = COL_DIV + 10        # 610
+    R_X2      = W - OUT_PAD         # 1176
 
-    # Column divider — subtle vertical rule
+    # Vertical divider
     draw.line([(COL_DIV, content_y + 4), (COL_DIV, ARTS_END - 8)],
               fill=(*t["border"][:3], 35), width=1)
 
-    # ════════════════════════════════════════════════════════════════════════
-    # LEFT — RELICS
-    # ════════════════════════════════════════════════════════════════════════
-
-    sub_lbl_f = _font(9, cinzel=True)
+    # Sub-labels (9 px Cinzel, very dim)
+    sub_f     = _font(9, cinzel=True)
     draw.text((L_X1, content_y + 2), "RELICS",
-              font=sub_lbl_f, fill=(*t["text2"][:3], 100))
+              font=sub_f, fill=(*t["text2"][:3], 90))
+    bsw = _tw(draw, "BADGES", sub_f)
+    draw.text((R_X2 - bsw, content_y + 2), "BADGES",
+              font=sub_f, fill=(*t["text2"][:3], 90))
 
-    rel_slot_y = content_y + 18
-    rel_slot_h = content_h - 20
-    rel_slot_w = L_X2 - L_X1
-
-    # Slot background panel
-    sp  = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-    spd = ImageDraw.Draw(sp)
-    spd.rounded_rectangle(
-        [(L_X1, rel_slot_y), (L_X1 + rel_slot_w - 1, rel_slot_y + rel_slot_h)],
-        radius=6, fill=(*t["bg2"][:3], 50), outline=(*t["border"][:3], 60), width=1,
-    )
-    card.alpha_composite(sp)
-    d2 = ImageDraw.Draw(card)
-
-    # Left accent stripe
-    d2.line([(L_X1 + 1, rel_slot_y + 6), (L_X1 + 1, rel_slot_y + rel_slot_h - 6)],
-            fill=(*relic_col_[:3], 148), width=2)
-
-    # Relic icon circle
-    ICON_R  = 22
-    icon_cx = L_X1 + 14 + ICON_R
-    icon_cy = rel_slot_y + rel_slot_h // 2
-
-    if relic_obj_:
-        glow_l = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-        gld    = ImageDraw.Draw(glow_l)
-        gld.ellipse([(icon_cx - ICON_R - 5, icon_cy - ICON_R - 5),
-                     (icon_cx + ICON_R + 5, icon_cy + ICON_R + 5)],
-                    fill=(*t["accent"][:3], 30))
-        glow_l = glow_l.filter(ImageFilter.GaussianBlur(5))
-        card.alpha_composite(glow_l)
-        d2 = ImageDraw.Draw(card)
-        d2.ellipse([(icon_cx - ICON_R, icon_cy - ICON_R),
-                    (icon_cx + ICON_R, icon_cy + ICON_R)],
-                   fill=(*t["bg2"][:3], 185),
-                   outline=(*t["accent"][:3], 185), width=2)
-        ab   = relic_id[:2].upper()
-        ab_f = _font(13, bold=True)
-        ab_w = _tw(d2, ab, ab_f)
-        d2.text((icon_cx - ab_w // 2, icon_cy - 8),
-                ab, font=ab_f, fill=(*t["accent"][:3], 220))
-    else:
-        d2.ellipse([(icon_cx - ICON_R, icon_cy - ICON_R),
-                    (icon_cx + ICON_R, icon_cy + ICON_R)],
-                   fill=(*t["bg2"][:3], 90),
-                   outline=(*t["border"][:3], 55), width=1)
-
-    # Relic name + rarity text (right of icon)
-    text_x    = icon_cx + ICON_R + 14
-    avail_w   = (L_X1 + rel_slot_w - 10) - text_x
-    vf_       = _fit_font(d2, relic_name_, avail_w, 18, 9, bold=True)
-    vw_       = _tw(d2, relic_name_, vf_)
-    vfh_      = getattr(vf_, "size", 14)
-    vy_name   = icon_cy - vfh_ // 2 - (6 if relic_rar_ else 0)
-    _glow(card, (text_x, vy_name), relic_name_, vf_,
-          relic_col_, t["glow"], blur=3, spread=1)
-    d2 = ImageDraw.Draw(card)
-    if relic_rar_:
-        rar_f   = _font(8, cinzel=True)
-        rar_col = _RARITY_BADGE_COLOR.get(relic_rar_, t["text2"][:3])
-        d2.text((text_x, vy_name + vfh_ + 4),
-                relic_rar_.upper(), font=rar_f, fill=(*rar_col, 140))
+    # Vertical centre for all icons in this zone
+    uhash    = abs(hash(username))
+    icon_cy  = content_y + 18 + (content_h - 20) // 2
 
     # ════════════════════════════════════════════════════════════════════════
-    # RIGHT — BADGES  (circular seals)
+    # LEFT — RELICS  (4 evenly distributed icon slots)
+    # Slot 0 = equipped relic; slots 1-3 = dark empty
     # ════════════════════════════════════════════════════════════════════════
+    RELIC_R    = 28
+    RELIC_SLOTS = 4
+    lw         = L_X2 - L_X1       # 566 px
+    for i in range(RELIC_SLOTS):
+        icx = L_X1 + int(lw * (i + 0.5) / RELIC_SLOTS)
+        rid = relic_id if i == 0 else None
+        _draw_relic_icon_art(card, icx, icon_cy, RELIC_R, rid, t, i, uhash)
 
-    draw = ImageDraw.Draw(card)
+    # ════════════════════════════════════════════════════════════════════════
+    # RIGHT — BADGES  (6 evenly distributed circular seal slots)
+    # ════════════════════════════════════════════════════════════════════════
+    BADGE_R    = 22
+    BADGE_SLOTS = 6
+    rw         = R_X2 - R_X1       # 566 px
+    valid_badges = [BADGES_CATALOG[b] for b in badges_list[:BADGE_SLOTS]
+                    if b in BADGES_CATALOG]
 
-    # Right-aligned sub-label
-    rgt_sub   = "BADGES"
-    rgt_sub_f = _font(9, cinzel=True)
-    rgt_sub_w = _tw(draw, rgt_sub, rgt_sub_f)
-    draw.text((R_X2 - rgt_sub_w, content_y + 2),
-              rgt_sub, font=rgt_sub_f, fill=(*t["text2"][:3], 100))
+    for i in range(BADGE_SLOTS):
+        bcx   = R_X1 + int(rw * (i + 0.5) / BADGE_SLOTS)
+        badge = valid_badges[i] if i < len(valid_badges) else None
 
-    valid_badges = [BADGES_CATALOG[b] for b in badges_list[:6] if b in BADGES_CATALOG]
-    rgt_w        = R_X2 - R_X1
-    badge_cy     = content_y + 18 + (content_h - 20) // 2
-
-    if valid_badges:
-        SEAL_R_  = 24
-        n_b      = len(valid_badges)
-        gap_b    = max(8, (rgt_w - n_b * SEAL_R_ * 2) // (n_b + 1))
-        seal_x   = R_X1 + gap_b + SEAL_R_
-
-        for badge in valid_badges:
+        if badge:
             col = _RARITY_BADGE_COLOR.get(badge.rarity, t["text2"][:3])
-            # Subtle glow halo
+            # Subtle glow behind badge
             gl  = Image.new("RGBA", (W, H), (0, 0, 0, 0))
             gld = ImageDraw.Draw(gl)
-            gld.ellipse([(seal_x - SEAL_R_ - 4, badge_cy - SEAL_R_ - 4),
-                          (seal_x + SEAL_R_ + 4, badge_cy + SEAL_R_ + 4)],
-                         fill=(*col, 28))
-            gl = gl.filter(ImageFilter.GaussianBlur(4))
+            gld.ellipse([bcx-BADGE_R-5, icon_cy-BADGE_R-5,
+                          bcx+BADGE_R+5, icon_cy+BADGE_R+5], fill=(*col, 20))
+            gl = gl.filter(ImageFilter.GaussianBlur(5))
             card.alpha_composite(gl)
             d2 = ImageDraw.Draw(card)
-            # Badge circle
-            d2.ellipse([(seal_x - SEAL_R_, badge_cy - SEAL_R_),
-                         (seal_x + SEAL_R_, badge_cy + SEAL_R_)],
-                        fill=(*t["bg2"][:3], 190),
-                        outline=(*col, 195), width=2)
-            # 2-letter abbreviation
-            ab    = badge.name[:2].upper()
-            ab_f  = _font(13, bold=True)
-            ab_w  = _tw(d2, ab, ab_f)
-            ab_fh = getattr(ab_f, "size", 13)
-            d2.text((seal_x - ab_w // 2, badge_cy - ab_fh // 2),
-                    ab, font=ab_f, fill=(*col, 225))
-            # Badge name below circle
-            nm_f = _font(8)
-            nm   = badge.name[:14]
-            nm_w = _tw(d2, nm, nm_f)
-            d2.text((seal_x - nm_w // 2, badge_cy + SEAL_R_ + 3),
-                    nm, font=nm_f, fill=(*col, 130))
-            seal_x += SEAL_R_ * 2 + gap_b
-    else:
-        draw = ImageDraw.Draw(card)
-        nb   = "UNREGISTERED"
-        nb_f = _font(10, bold=True)
-        nb_w = _tw(draw, nb, nb_f)
-        draw.text((R_X1 + (rgt_w - nb_w) // 2, badge_cy - 7),
-                  nb, font=nb_f, fill=(*t["text2"][:3], 40))
+            # Badge circle frame
+            d2.ellipse([bcx-BADGE_R, icon_cy-BADGE_R,
+                         bcx+BADGE_R, icon_cy+BADGE_R],
+                        fill=(*t["bg2"][:3], 190), outline=(*col, 195), width=2)
+            # Icon inside the circle
+            _draw_badge_icon_art(d2, bcx, icon_cy, BADGE_R, badge, t)
+        else:
+            # Dark empty slot — faint circle only, NO text
+            d2  = ImageDraw.Draw(card)
+            d2.ellipse([bcx-BADGE_R, icon_cy-BADGE_R,
+                         bcx+BADGE_R, icon_cy+BADGE_R],
+                        fill=(*t["bg2"][:3], 20), outline=(*t["border"][:3], 36), width=1)
+            # Subtle inner ring variation keyed to position + username
+            if (uhash + i * 6271) % 2 == 0:
+                rr = int(BADGE_R*0.52)
+                d2.ellipse([bcx-rr, icon_cy-rr, bcx+rr, icon_cy+rr],
+                            outline=(*t["border"][:3], 25), width=1)
 
     # ── Bottom separator ──────────────────────────────────────────────────
     draw = ImageDraw.Draw(card)
