@@ -170,6 +170,16 @@ PORT=3000 BASE_PATH=/dashboard/ pnpm --filter @workspace/dashboard run build
 - Dark mode: `class="dark"` must be on the `<html>` tag in `index.html` (already set)
 - `/api/app-config` is a public endpoint returning `{ discordClientId }` for the frontend invite link generator
 
+### Block 2 — Complete (Dashboard Shell + Server Overview)
+
+- **AppLayout** (`src/components/layout.tsx`): Full Mee6-style layout with sticky topbar (guild name + member count + breadcrumb), sidebar with 7 sections + active state indicators (crimson bar on active item), guild server-switcher in sidebar header, user footer with logout dropdown
+- **NAV_SECTIONS**: Overview (Dashboard, Bot Status), Economy (Economy, Currency, Treasury), Commands (Routing, Permissions), Ranks & Roles (Ranks & Roles, Ascension), Player Systems (Market, Inventory, Identity), Automation (Kingdom Ranks, Leaderboard, Automation), Server (Settings, Reset)
+- **`PageHeader`** helper component: consistent `title + description + optional action` header for all pages
+- **`PlaceholderPage`** helper component: reusable scaffold for future sections (icon + title + description + coming-soon card)
+- **Enhanced dashboard.tsx**: `StatCard` components (bot status, active users, economy size, investments), `ServerSummaryCard` (guild icon, name, ID, member count, bot presence, heartbeat), `QuickAccessCard` (6 quick-link rows to key sections)
+- **New pages**: `market.tsx`, `inventory.tsx`, `identity-page.tsx`, `kingdom-ranks.tsx`, `automation.tsx` — all using `PlaceholderPage`
+- **App.tsx**: 19 routes registered covering all sidebar sections
+
 ### Block 1 — Complete (Dashboard Login + Guild Selection)
 
 - **Login page** (`src/pages/login.tsx`): Dark obsidian theme, branded Shield icon, "Sign in with Discord" CTA, OAuth error handling (`?error=discord_denied|missing_code|state_mismatch|auth_failed`)

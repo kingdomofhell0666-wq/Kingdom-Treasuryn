@@ -17,6 +17,11 @@ import AscensionPage from "@/pages/guilds/ascension";
 import TreasuryPage from "@/pages/guilds/treasury";
 import ResetPage from "@/pages/guilds/reset";
 import BotStatusPage from "@/pages/guilds/bot-status";
+import MarketPage from "@/pages/guilds/market";
+import InventoryPage from "@/pages/guilds/inventory";
+import IdentityPage from "@/pages/guilds/identity-page";
+import KingdomRanksPage from "@/pages/guilds/kingdom-ranks";
+import AutomationPage from "@/pages/guilds/automation";
 
 const queryClient = new QueryClient();
 
@@ -25,18 +30,40 @@ function Router() {
     <Switch>
       <Route path="/" component={Login} />
       <Route path="/guilds" component={GuildsPage} />
+
+      {/* Guild dashboard */}
       <Route path="/guilds/:guildId" component={GuildDashboardPage} />
+
+      {/* Economy */}
       <Route path="/guilds/:guildId/economy" component={EconomyPage} />
       <Route path="/guilds/:guildId/currency" component={CurrencyPage} />
-      <Route path="/guilds/:guildId/channels" component={ChannelsPage} />
-      <Route path="/guilds/:guildId/settings" component={SettingsPage} />
-      <Route path="/guilds/:guildId/commands" component={CommandsPage} />
-      <Route path="/guilds/:guildId/ranks" component={RanksPage} />
-      <Route path="/guilds/:guildId/leaderboard" component={LeaderboardPage} />
-      <Route path="/guilds/:guildId/ascension" component={AscensionPage} />
       <Route path="/guilds/:guildId/treasury" component={TreasuryPage} />
+
+      {/* Commands */}
+      <Route path="/guilds/:guildId/channels" component={ChannelsPage} />
+      <Route path="/guilds/:guildId/commands" component={CommandsPage} />
+
+      {/* Ranks & Roles */}
+      <Route path="/guilds/:guildId/ranks" component={RanksPage} />
+      <Route path="/guilds/:guildId/ascension" component={AscensionPage} />
+
+      {/* Player Systems */}
+      <Route path="/guilds/:guildId/market" component={MarketPage} />
+      <Route path="/guilds/:guildId/inventory" component={InventoryPage} />
+      <Route path="/guilds/:guildId/identity" component={IdentityPage} />
+
+      {/* Automation */}
+      <Route path="/guilds/:guildId/kingdom-ranks" component={KingdomRanksPage} />
+      <Route path="/guilds/:guildId/leaderboard" component={LeaderboardPage} />
+      <Route path="/guilds/:guildId/automation" component={AutomationPage} />
+
+      {/* Server */}
+      <Route path="/guilds/:guildId/settings" component={SettingsPage} />
       <Route path="/guilds/:guildId/reset" component={ResetPage} />
+
+      {/* Overview */}
       <Route path="/guilds/:guildId/bot-status" component={BotStatusPage} />
+
       <Route component={NotFound} />
     </Switch>
   );
