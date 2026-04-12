@@ -16,45 +16,37 @@ app.use(
     logger,
     serializers: {
       req(req) {
-        return {
-          id: req.id,
-          method: req.method,
-          url: req.url?.split("?")[0],
-        };
+        return { id: req.id, method: req.method, url: req.url?.split("?")[0] };
       },
       res(res) {
-        return {
-          statusCode: res.statusCode,
-        };
+        return { statusCode: res.statusCode };
       },
     },
   }),
 );
 
-app.use(cors({
-  origin: true,
-  credentials: true,
-}));
+app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(sessionMiddleware);
 
 app.use("/api", router);
 
-// Root redirect to dashboard
+// Redirect root → dashboard holding page
 app.get("/", (_req, res) => {
   res.redirect(301, "/dashboard/");
 });
 
-// Serve the dashboard SPA at /dashboard/ (fallback to index.html for client-side routing)
-// __dirname resolves to the directory of THIS file (src/ in dev, dist/ in prod)
-// Go up to the api-server root, then up to the workspace root, then into dashboard
-const apiServerRoot = path.resolve(__dirname, "..");
-const workspaceRoot = path.resolve(apiServerRoot, "..", "..");
-const dashboardDist = path.join(workspaceRoot, "artifacts", "dashboard", "dist", "public");
-app.use("/dashboard", express.static(dashboardDist));
+// Serve the dashboard.
+// During the rebuild phase this is a plain static HTML file.
+// When the SPA is ready, swap this to serve the Vite dist folder.
+const apiServerRoot  = path.resolve(__dirname, "..");
+const workspaceRoot  = path.resolve(apiServerRoot, "..", "..");
+const dashboardSrc   = path.join(workspaceRoot, "artifacts", "dashboard", "src");
+
+app.use("/dashboard", express.static(dashboardSrc));
 app.get("/dashboard/*splat", (_req, res) => {
-  res.sendFile(path.join(dashboardDist, "index.html"));
+  res.sendFile(path.join(dashboardSrc, "index.html"));
 });
 
 export default app;
