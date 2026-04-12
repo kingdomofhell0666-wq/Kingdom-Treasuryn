@@ -377,3 +377,15 @@ id = "CrlG_6RXq-uyOujuHfZWA"
 uri = "file://attached_assets/card_no_gold_deco.jpg"
 type = "image"
 title = "Identity Card — gold kept only on lines and DC balance"
+
+[[outputs]]
+id = "NtoncmKA7ksKFYhPW4B6a"
+uri = "file://attached_assets/card_admin_gold_suppressed.jpg"
+type = "image"
+title = "Sovereign (infernal_gold skin + soul_aura relic) — gold border & relic effects suppressed"
+
+[[outputs]]
+id = "9JROz5maljhx8PPfKLc3c"
+uri = "file://attached_assets/card_normal_compare.jpg"
+type = "image"
+title = "Vermin (normal member) — unchanged"

@@ -1133,6 +1133,10 @@ def generate_card(
     if card_variant and hasattr(card_variant, "kingdom_rank_eligible"):
         kr_eligible = card_variant.kingdom_rank_eligible
 
+    # Staff/authority hierarchy flag — Owners, Royal Family, Council, Legion.
+    # These groups get no relic border effects and a neutral avatar frame.
+    is_staff_hierarchy = not kr_eligible
+
     # Persistent infernal ID (hash of username — deterministic)
     card_id = f"KH-{abs(hash(username)) % 900000 + 100000:06d}"
 
@@ -1211,10 +1215,11 @@ def generate_card(
     av.putalpha(av_mask)
     card.alpha_composite(av, (AV_X, AV_Y))
     draw = ImageDraw.Draw(card)
-    # Inner frame
+    # Inner frame — neutral dark border for staff/authority, skin border for others
+    av_frame_col = (60, 20, 20) if is_staff_hierarchy else t["border"][:3]
     draw.rounded_rectangle([(AV_X - 1, AV_Y - 1), (AV_X + AV_SZ, AV_Y + AV_SZ)],
                              radius=AV_RADIUS + 1,
-                             outline=(*t["border"][:3], 180), width=1)
+                             outline=(*av_frame_col, 180), width=1)
 
     # "IDENTIFICATION PHOTO" caption
     cap_f = _font(8, cinzel=True)
@@ -1561,7 +1566,10 @@ def generate_card(
               mc, font=mc_f, fill=(*t["text2"][:3], 52))
 
     # ── Post-processing (applied in order over the full canvas) ──────────────
-    _apply_relic_effect(card, relic_id, t)
+    # Staff/authority hierarchy (Owners, Royal Family, Council, Legion) never
+    # get relic border/aura effects — no gold or accent borders on their cards.
+    if not is_staff_hierarchy:
+        _apply_relic_effect(card, relic_id, t)
 
     # Subtle paper/document grain (less aggressive than old fantasy card)
     _grain_texture(card, intensity=min(7, 3 + rank_level // 6))
