@@ -552,51 +552,115 @@ router.get("/guilds/:guildId/ascension-history", requireAuth, async (req, res) =
 });
 
 // ═══════════════════════════════════════════════════════════════
-// BOT STATUS (from SQLite + process check)
+// BOT STATUS — enriched (heartbeat, health, economy, commands)
 // ═══════════════════════════════════════════════════════════════
+
+const COMMANDS = [
+  "grind","tribute","transfer","wealth","ascend",
+  "invest","portfolio","withdraw","collect",
+  "treasury","market","blackmarket","identity",
+  "skins","equip-skin","titles","equip-title",
+];
 
 router.get("/guilds/:guildId/bot-status", requireAuth, async (req, res) => {
   const { guildId } = req.params;
   if (!(await assertGuildAdmin(req, res, guildId))) return;
 
+  // Offline fallback — returned on any hard error
+  const offlineFallback = {
+    botStatus:            "offline" as const,
+    heartbeatState:       "lost"    as const,
+    heartbeatAgeSeconds:  null      as number | null,
+    guildCount:           0,
+    uptimeSeconds:        0,
+    lastHeartbeat:        null      as string | null,
+    startedAt:            null      as string | null,
+    discordGatewayStatus: "disconnected" as const,
+    databaseStatus:       "error"   as const,
+    apiSyncStatus:        "failed"  as const,
+    schedulerStatus:      "stopped" as const,
+    totalUsers:           0,
+    activeUsers24h:       0,
+    economySize:          0,
+    treasuryValue:        0,
+    grindCommands24h:     0,
+    tributeTotal:         0,
+    commands: COMMANDS.map((name) => ({ name, status: "unknown" as const })),
+  };
+
   try {
     const Database = (await import("better-sqlite3")).default;
     const botDb    = new Database("kingdom_treasury.db", { readonly: true });
 
-    const meta = botDb.prepare(`
-      SELECT value FROM meta WHERE key = ?
-    `).get("last_heartbeat") as { value: string } | undefined;
+    // ── heartbeat ──────────────────────────────────────────────
+    const hbRow  = botDb.prepare("SELECT value FROM meta WHERE key = ?").get("last_heartbeat") as { value: string } | undefined;
+    const stRow  = botDb.prepare("SELECT value FROM meta WHERE key = ?").get("start_time")     as { value: string } | undefined;
 
-    const guildCount = botDb.prepare(`
-      SELECT COUNT(DISTINCT guild_id) as cnt FROM users
-    `).get() as { cnt: number };
+    // ── guild-level counts ─────────────────────────────────────
+    const guildCount = (botDb.prepare("SELECT COUNT(DISTINCT guild_id) AS cnt FROM users").get() as { cnt: number })?.cnt ?? 0;
 
-    const startTime = botDb.prepare(`
-      SELECT value FROM meta WHERE key = ?
-    `).get("start_time") as { value: string } | undefined;
+    const econRow = botDb.prepare(`
+      SELECT
+        COUNT(*)                           AS totalUsers,
+        COALESCE(SUM(balance), 0)          AS economySize,
+        COALESCE(SUM(grind_count_24h), 0)  AS grindCommands24h,
+        COALESCE(SUM(tribute_count), 0)    AS tributeTotal,
+        COUNT(CASE WHEN grind_count_24h > 0 THEN 1 END) AS activeUsers24h
+      FROM users
+      WHERE guild_id = ?
+    `).get(guildId) as any;
+
+    const treasuryRow = botDb.prepare(
+      "SELECT COALESCE(balance, 0) AS bal FROM treasury WHERE guild_id = ?"
+    ).get(guildId) as { bal: number } | undefined;
 
     botDb.close();
 
-    const lastHeartbeat = meta?.value ?? new Date().toISOString();
-    const startedAt = startTime?.value ? new Date(startTime.value).getTime() : Date.now();
-    const uptimeSeconds = Math.floor((Date.now() - startedAt) / 1000);
+    // ── derive status ──────────────────────────────────────────
+    const lastHeartbeat     = hbRow?.value ?? null;
+    const startedAt         = stRow?.value ?? null;
+    const uptimeSeconds     = startedAt ? Math.max(0, Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000)) : 0;
+    const heartbeatAgeMs    = lastHeartbeat ? (Date.now() - new Date(lastHeartbeat).getTime()) : Infinity;
+    const heartbeatAgeSecs  = lastHeartbeat ? Math.floor(heartbeatAgeMs / 1000) : null;
 
-    const heartbeatAge = Date.now() - new Date(lastHeartbeat).getTime();
-    const online = heartbeatAge < 60_000;
+    // Thresholds: ONLINE < 15s, DEGRADED 15–45s, OFFLINE > 45s
+    let botStatus:      "online" | "degraded" | "offline";
+    let heartbeatState: "live"   | "delayed"  | "lost";
+    if (heartbeatAgeMs < 15_000) {
+      botStatus = "online";   heartbeatState = "live";
+    } else if (heartbeatAgeMs < 45_000) {
+      botStatus = "degraded"; heartbeatState = "delayed";
+    } else {
+      botStatus = "offline";  heartbeatState = "lost";
+    }
+
+    const isAlive = botStatus !== "offline";
 
     res.json({
-      online,
-      guildCount: guildCount?.cnt ?? 0,
-      uptimeSeconds: Math.max(0, uptimeSeconds),
+      botStatus,
+      heartbeatState,
+      heartbeatAgeSeconds:  heartbeatAgeSecs,
+      guildCount,
+      uptimeSeconds,
       lastHeartbeat,
+      startedAt,
+      discordGatewayStatus: isAlive ? "connected"    : "disconnected",
+      databaseStatus:       "connected", // reached here = DB readable
+      apiSyncStatus:        isAlive ? "ok"           : "degraded",
+      schedulerStatus:      heartbeatAgeMs < 120_000 ? "running" : "stopped",
+      totalUsers:           Number(econRow?.totalUsers     ?? 0),
+      activeUsers24h:       Number(econRow?.activeUsers24h ?? 0),
+      economySize:          Number(econRow?.economySize    ?? 0),
+      treasuryValue:        Number(treasuryRow?.bal        ?? 0),
+      grindCommands24h:     Number(econRow?.grindCommands24h ?? 0),
+      tributeTotal:         Number(econRow?.tributeTotal   ?? 0),
+      commands: COMMANDS.map((name) => ({
+        name,
+        status: isAlive ? "active" : "unknown",
+      })),
     });
   } catch {
-    res.json({
-      online: false,
-      guildCount: 0,
-      uptimeSeconds: 0,
-      lastHeartbeat: new Date().toISOString(),
-    });
+    res.json(offlineFallback);
   }
 });
 

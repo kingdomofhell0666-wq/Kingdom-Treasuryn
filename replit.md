@@ -170,6 +170,24 @@ PORT=3000 BASE_PATH=/dashboard/ pnpm --filter @workspace/dashboard run build
 - Dark mode: `class="dark"` must be on the `<html>` tag in `index.html` (already set)
 - `/api/app-config` is a public endpoint returning `{ discordClientId }` for the frontend invite link generator
 
+### Bot Status Page — Elite Rebuild (post-Block 3)
+
+**Backend** — upgraded `/api/guilds/:guildId/bot-status` in `config.ts`:
+- `botStatus: "online" | "degraded" | "offline"` — thresholds: online < 15s, degraded 15–45s, offline > 45s
+- `heartbeatState: "live" | "delayed" | "lost"` with `heartbeatAgeSeconds`
+- `discordGatewayStatus`, `databaseStatus`, `apiSyncStatus`, `schedulerStatus` — 4 derived health fields
+- `totalUsers`, `activeUsers24h`, `economySize`, `treasuryValue`, `grindCommands24h`, `tributeTotal` — all from SQLite
+- `commands: [{name, status}]` — all 17 commands with active/unknown state
+- Full offline fallback on any DB error
+
+**Frontend** — `artifacts/dashboard/src/pages/guilds/bot-status.tsx` — full premium rebuild:
+- **Hero card**: pulsing `animate-ping` status indicator (green/amber/red), ONLINE/DEGRADED/OFFLINE badge, live heartbeat age (`fmtAge` ticking every 1s locally), refresh button with auto-refresh countdown display
+- **Metrics grid**: 8-card responsive grid — Guild Servers, Uptime, Last Heartbeat (live ticker), Active Today, Economy Size, Treasury, Grinds (24h), KR Reset countdown (live)
+- **System Health card**: 4 service rows (Gateway / Database / API / Scheduler) with green checkmark / red X pills
+- **Active Commands card**: 17 command pills with green dot indicators, all-active badge
+- **Alert banner**: amber warn on degraded, red destructive on offline — hidden when healthy
+- **Auto-refresh**: polls every 10s with live countdown display in refresh button; local `setInterval` ticks heartbeat age every 1s between polls — no unnecessary network requests
+
 ### Block 3 — Complete (Live API Connection + Bot Data Integration)
 
 **New API routes** (`artifacts/api-server/src/routes/data.ts`):
