@@ -389,3 +389,15 @@ id = "9JROz5maljhx8PPfKLc3c"
 uri = "file://attached_assets/card_normal_compare.jpg"
 type = "image"
 title = "Vermin (normal member) — unchanged"
+
+[[outputs]]
+id = "iIWFDGBKjFw3dTqUYzpqv"
+uri = "file://attached_assets/card_new_lower_full.jpg"
+type = "image"
+title = "RELICS left + BADGES right — relic equipped, 4 badges"
+
+[[outputs]]
+id = "K8T5dER9MRbX4e7GoFFhW"
+uri = "file://attached_assets/card_new_lower_empty2.jpg"
+type = "image"
+title = "Empty state — no relic (UNBOUND), no badges (UNREGISTERED)"

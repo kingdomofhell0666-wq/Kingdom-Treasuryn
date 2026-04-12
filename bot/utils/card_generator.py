@@ -1389,146 +1389,185 @@ def generate_card(
               fill=(*t["gold"][:3], 32), width=1)
 
     # ════════════════════════════════════════════════════════════════════════
-    # BOUND ARTIFACTS ROW  y = 237 – 277  (full width, 40 px)
-    # Compact inline registry: RELIC · SKIN · TITLE (three equal slots)
+    # BOUND ARTIFACTS  ART_Y=468 → ARTS_END=628  (160 px)
+    # LEFT COLUMN : RELICS registry
+    # RIGHT COLUMN: BADGES seals (circular)
     # ════════════════════════════════════════════════════════════════════════
 
     draw = ImageDraw.Draw(card)
 
-    # Artifact names & colours
-    relic_name_ = (RELICS_CATALOG[relic_id].name
-                   if relic_id and relic_id in RELICS_CATALOG else "UNBOUND")
-    relic_col_  = (*t["accent"][:3], 215) if relic_id else (*t["text2"][:3], 62)
-    skin_name_  = _SKIN_NAMES.get(skin_id or "default", "STANDARD ISSUE")
-    skin_col_   = (*t["text1"][:3], 205) if (skin_id and skin_id != "default") \
-                  else (*t["text2"][:3], 85)
-    title_name_ = equipped_title if has_title else "UNMARKED"
-    title_col_  = (*t["accent"][:3], 205) if has_title else (*t["text2"][:3], 62)
+    # ── Relic metadata ───────────────────────────────────────────────────
+    relic_obj_   = RELICS_CATALOG.get(relic_id) if relic_id else None
+    relic_name_  = relic_obj_.name   if relic_obj_ else "UNBOUND"
+    relic_rar_   = relic_obj_.rarity if relic_obj_ else ""
+    relic_col_   = (*t["accent"][:3], 215) if relic_obj_ else (*t["text2"][:3], 60)
 
-    # Section label
+    # ── Section header — "BOUND ARTIFACTS" centred with diamond dividers ─
     art_lbl_f = _font(9, cinzel=True)
     art_lbl   = "BOUND  ARTIFACTS"
     art_lbl_w = _tw(draw, art_lbl, art_lbl_f)
-    draw.text(((W - art_lbl_w) // 2, ART_Y + 6), art_lbl,
-              font=art_lbl_f, fill=(*t["text2"][:3], 125))
-    # Diamond dividers each side of label
-    art_cx = W // 2
-    draw.line([(OUT_PAD + 24, ART_Y + 18), (art_cx - art_lbl_w // 2 - 12, ART_Y + 18)],
+    art_cx    = W // 2
+    draw.text(((W - art_lbl_w) // 2, ART_Y + 6),
+              art_lbl, font=art_lbl_f, fill=(*t["text2"][:3], 125))
+    draw.line([(OUT_PAD + 24, ART_Y + 18),
+               (art_cx - art_lbl_w // 2 - 12, ART_Y + 18)],
               fill=(*t["border"][:3], 40), width=1)
-    draw.line([(art_cx + art_lbl_w // 2 + 12, ART_Y + 18), (W - OUT_PAD - 24, ART_Y + 18)],
+    draw.line([(art_cx + art_lbl_w // 2 + 12, ART_Y + 18),
+               (W - OUT_PAD - 24, ART_Y + 18)],
               fill=(*t["border"][:3], 40), width=1)
     draw.polygon([(art_cx, ART_Y + 12), (art_cx + 6, ART_Y + 18),
                   (art_cx, ART_Y + 24), (art_cx - 6, ART_Y + 18)],
                  fill=(*t["accent"][:3], 140))
 
-    # Three horizontal artifact slots
-    slot_gap    = 16
-    slot_y      = ART_Y + 30
-    slot_h      = ARTS_END - slot_y - 6
-    usable_w    = W - OUT_PAD * 2
-    slot_w      = (usable_w - slot_gap * 2) // 3
-    slot_xs     = [OUT_PAD,
-                   OUT_PAD + slot_w + slot_gap,
-                   OUT_PAD + (slot_w + slot_gap) * 2]
-    slot_data   = [
-        ("RELIC",  relic_name_, relic_col_),
-        ("SKIN",   skin_name_,  skin_col_),
-        ("TITLE",  title_name_, title_col_),
-    ]
-    slot_lbl_f  = _font(9, cinzel=True)
-    slot_val_sz = 18
+    # ── Column geometry ──────────────────────────────────────────────────
+    content_y  = ART_Y + 30          # top of content rows
+    content_h  = ARTS_END - content_y - 6
+    COL_DIV    = W // 2              # x = 600
+    L_X1       = OUT_PAD             # left column left edge
+    L_X2       = COL_DIV - 10        # left column right edge
+    R_X1       = COL_DIV + 10        # right column left edge
+    R_X2       = W - OUT_PAD         # right column right edge
 
-    for (slot_, val_, vcol_), sx_ in zip(slot_data, slot_xs):
-        # Slot background
-        sp = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-        sp_d = ImageDraw.Draw(sp)
-        sp_d.rounded_rectangle(
-            [(sx_, slot_y), (sx_ + slot_w - 1, slot_y + slot_h)],
-            radius=6, fill=(*t["bg2"][:3], 50),
-            outline=(*t["border"][:3], 60), width=1,
-        )
-        card.alpha_composite(sp)
+    # Column divider — subtle vertical rule
+    draw.line([(COL_DIV, content_y + 4), (COL_DIV, ARTS_END - 8)],
+              fill=(*t["border"][:3], 35), width=1)
+
+    # ════════════════════════════════════════════════════════════════════════
+    # LEFT — RELICS
+    # ════════════════════════════════════════════════════════════════════════
+
+    sub_lbl_f = _font(9, cinzel=True)
+    draw.text((L_X1, content_y + 2), "RELICS",
+              font=sub_lbl_f, fill=(*t["text2"][:3], 100))
+
+    rel_slot_y = content_y + 18
+    rel_slot_h = content_h - 20
+    rel_slot_w = L_X2 - L_X1
+
+    # Slot background panel
+    sp  = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    spd = ImageDraw.Draw(sp)
+    spd.rounded_rectangle(
+        [(L_X1, rel_slot_y), (L_X1 + rel_slot_w - 1, rel_slot_y + rel_slot_h)],
+        radius=6, fill=(*t["bg2"][:3], 50), outline=(*t["border"][:3], 60), width=1,
+    )
+    card.alpha_composite(sp)
+    d2 = ImageDraw.Draw(card)
+
+    # Left accent stripe
+    d2.line([(L_X1 + 1, rel_slot_y + 6), (L_X1 + 1, rel_slot_y + rel_slot_h - 6)],
+            fill=(*relic_col_[:3], 148), width=2)
+
+    # Relic icon circle
+    ICON_R  = 22
+    icon_cx = L_X1 + 14 + ICON_R
+    icon_cy = rel_slot_y + rel_slot_h // 2
+
+    if relic_obj_:
+        glow_l = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+        gld    = ImageDraw.Draw(glow_l)
+        gld.ellipse([(icon_cx - ICON_R - 5, icon_cy - ICON_R - 5),
+                     (icon_cx + ICON_R + 5, icon_cy + ICON_R + 5)],
+                    fill=(*t["accent"][:3], 30))
+        glow_l = glow_l.filter(ImageFilter.GaussianBlur(5))
+        card.alpha_composite(glow_l)
         d2 = ImageDraw.Draw(card)
+        d2.ellipse([(icon_cx - ICON_R, icon_cy - ICON_R),
+                    (icon_cx + ICON_R, icon_cy + ICON_R)],
+                   fill=(*t["bg2"][:3], 185),
+                   outline=(*t["accent"][:3], 185), width=2)
+        ab   = relic_id[:2].upper()
+        ab_f = _font(13, bold=True)
+        ab_w = _tw(d2, ab, ab_f)
+        d2.text((icon_cx - ab_w // 2, icon_cy - 8),
+                ab, font=ab_f, fill=(*t["accent"][:3], 220))
+    else:
+        d2.ellipse([(icon_cx - ICON_R, icon_cy - ICON_R),
+                    (icon_cx + ICON_R, icon_cy + ICON_R)],
+                   fill=(*t["bg2"][:3], 90),
+                   outline=(*t["border"][:3], 55), width=1)
 
-        # Left accent stripe
-        d2.line([(sx_ + 1, slot_y + 6), (sx_ + 1, slot_y + slot_h - 6)],
-                fill=(*vcol_[:3], 148), width=2)
+    # Relic name + rarity text (right of icon)
+    text_x    = icon_cx + ICON_R + 14
+    avail_w   = (L_X1 + rel_slot_w - 10) - text_x
+    vf_       = _fit_font(d2, relic_name_, avail_w, 18, 9, bold=True)
+    vw_       = _tw(d2, relic_name_, vf_)
+    vfh_      = getattr(vf_, "size", 14)
+    vy_name   = icon_cy - vfh_ // 2 - (6 if relic_rar_ else 0)
+    _glow(card, (text_x, vy_name), relic_name_, vf_,
+          relic_col_, t["glow"], blur=3, spread=1)
+    d2 = ImageDraw.Draw(card)
+    if relic_rar_:
+        rar_f   = _font(8, cinzel=True)
+        rar_col = _RARITY_BADGE_COLOR.get(relic_rar_, t["text2"][:3])
+        d2.text((text_x, vy_name + vfh_ + 4),
+                relic_rar_.upper(), font=rar_f, fill=(*rar_col, 140))
 
-        # Slot label (top-left)
-        d2.text((sx_ + 8, slot_y + 5), slot_, font=slot_lbl_f,
-                fill=(*t["text2"][:3], 100))
-
-        # Value (auto-sized, centered vertically)
-        vv_    = (val_[:18] + "…") if len(val_) > 19 else val_
-        vf_    = _fit_font(d2, vv_, slot_w - 14, slot_val_sz, 8, bold=True)
-        vw_    = _tw(d2, vv_, vf_)
-        vfh_   = getattr(vf_, "size", 12)
-        vx_    = sx_ + (slot_w - vw_) // 2
-        vy_    = slot_y + (slot_h - vfh_) // 2 + 4
-        _glow(card, (vx_, vy_), vv_, vf_,
-              vcol_, t["glow"], blur=3, spread=1)
+    # ════════════════════════════════════════════════════════════════════════
+    # RIGHT — BADGES  (circular seals)
+    # ════════════════════════════════════════════════════════════════════════
 
     draw = ImageDraw.Draw(card)
 
-    # Artifacts bottom separator
-    draw.line([(OUT_PAD, ARTS_END - 1), (W - OUT_PAD, ARTS_END - 1)],
-              fill=(*t["border"][:3], 60), width=1)
+    # Right-aligned sub-label
+    rgt_sub   = "BADGES"
+    rgt_sub_f = _font(9, cinzel=True)
+    rgt_sub_w = _tw(draw, rgt_sub, rgt_sub_f)
+    draw.text((R_X2 - rgt_sub_w, content_y + 2),
+              rgt_sub, font=rgt_sub_f, fill=(*t["text2"][:3], 100))
 
-    # ════════════════════════════════════════════════════════════════════════
-    # CIRCULAR SEALS ROW  y = 280 – 304  (24 px)
-    # Circular badge icons — official infernal seals
-    # ════════════════════════════════════════════════════════════════════════
-
-    draw = ImageDraw.Draw(card)
-    valid_badges = [BADGES_CATALOG[b] for b in badges_list[:3] if b in BADGES_CATALOG]
+    valid_badges = [BADGES_CATALOG[b] for b in badges_list[:6] if b in BADGES_CATALOG]
+    rgt_w        = R_X2 - R_X1
+    badge_cy     = content_y + 18 + (content_h - 20) // 2
 
     if valid_badges:
-        # "SEALS OF RECOGNITION" micro-label centered
-        sl_f  = _font(8, cinzel=True)
-        sl    = "SEALS  OF  RECOGNITION"
-        sl_w  = _tw(draw, sl, sl_f)
-        draw.text(((W - sl_w) // 2, BADGE_Y + 2), sl,
-                  font=sl_f, fill=(*t["text2"][:3], 95))
-
-        SEAL_R_  = 16
-        SEAL_CY_ = BADGE_Y + SEAL_R_ + 14
-        spacing  = SEAL_R_ * 2 + 12
-        n_badges = len(valid_badges)
-        total_bw = n_badges * (SEAL_R_ * 2) + (n_badges - 1) * 12
-        bx_start = (W - total_bw) // 2
-        seal_x   = bx_start + SEAL_R_
+        SEAL_R_  = 24
+        n_b      = len(valid_badges)
+        gap_b    = max(8, (rgt_w - n_b * SEAL_R_ * 2) // (n_b + 1))
+        seal_x   = R_X1 + gap_b + SEAL_R_
 
         for badge in valid_badges:
             col = _RARITY_BADGE_COLOR.get(badge.rarity, t["text2"][:3])
-            gl = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+            # Subtle glow halo
+            gl  = Image.new("RGBA", (W, H), (0, 0, 0, 0))
             gld = ImageDraw.Draw(gl)
-            gld.ellipse([(seal_x - SEAL_R_ - 4, SEAL_CY_ - SEAL_R_ - 4),
-                          (seal_x + SEAL_R_ + 4, SEAL_CY_ + SEAL_R_ + 4)],
-                         fill=(*col, 38))
-            gl = gl.filter(ImageFilter.GaussianBlur(5))
+            gld.ellipse([(seal_x - SEAL_R_ - 4, badge_cy - SEAL_R_ - 4),
+                          (seal_x + SEAL_R_ + 4, badge_cy + SEAL_R_ + 4)],
+                         fill=(*col, 28))
+            gl = gl.filter(ImageFilter.GaussianBlur(4))
             card.alpha_composite(gl)
             d2 = ImageDraw.Draw(card)
-            d2.ellipse([(seal_x - SEAL_R_, SEAL_CY_ - SEAL_R_),
-                         (seal_x + SEAL_R_, SEAL_CY_ + SEAL_R_)],
-                        fill=(*t["bg2"][:3], 185),
-                        outline=(*col, 200), width=2)
-            ab   = badge.name[:2].upper()
-            ab_f = _font(10, bold=True)
-            ab_w = _tw(d2, ab, ab_f)
-            ab_fh = getattr(ab_f, "size", 10)
-            d2.text((seal_x - ab_w // 2, SEAL_CY_ - ab_fh // 2),
-                    ab, font=ab_f, fill=(*col, 220))
-            nm_f  = _font(8)
-            nm_w  = _tw(d2, badge.name[:12], nm_f)
-            d2.text((seal_x - nm_w // 2, SEAL_CY_ + SEAL_R_ + 3),
-                    badge.name[:12], font=nm_f, fill=(*col, 145))
-            seal_x += spacing
+            # Badge circle
+            d2.ellipse([(seal_x - SEAL_R_, badge_cy - SEAL_R_),
+                         (seal_x + SEAL_R_, badge_cy + SEAL_R_)],
+                        fill=(*t["bg2"][:3], 190),
+                        outline=(*col, 195), width=2)
+            # 2-letter abbreviation
+            ab    = badge.name[:2].upper()
+            ab_f  = _font(13, bold=True)
+            ab_w  = _tw(d2, ab, ab_f)
+            ab_fh = getattr(ab_f, "size", 13)
+            d2.text((seal_x - ab_w // 2, badge_cy - ab_fh // 2),
+                    ab, font=ab_f, fill=(*col, 225))
+            # Badge name below circle
+            nm_f = _font(8)
+            nm   = badge.name[:14]
+            nm_w = _tw(d2, nm, nm_f)
+            d2.text((seal_x - nm_w // 2, badge_cy + SEAL_R_ + 3),
+                    nm, font=nm_f, fill=(*col, 130))
+            seal_x += SEAL_R_ * 2 + gap_b
     else:
-        nb_f  = _font(10)
-        nb    = "No seals of recognition registered."
-        nb_w  = _tw(draw, nb, nb_f)
-        draw.text(((W - nb_w) // 2, BADGE_Y + 6), nb,
-                  font=nb_f, fill=(*t["text2"][:3], 52))
+        draw = ImageDraw.Draw(card)
+        nb   = "UNREGISTERED"
+        nb_f = _font(10, bold=True)
+        nb_w = _tw(draw, nb, nb_f)
+        draw.text((R_X1 + (rgt_w - nb_w) // 2, badge_cy - 7),
+                  nb, font=nb_f, fill=(*t["text2"][:3], 40))
+
+    # ── Bottom separator ──────────────────────────────────────────────────
+    draw = ImageDraw.Draw(card)
+    draw.line([(OUT_PAD, ARTS_END - 1), (W - OUT_PAD, ARTS_END - 1)],
+              fill=(*t["border"][:3], 60), width=1)
 
     # ════════════════════════════════════════════════════════════════════════
     # FOOTER  y = 678 – 720
