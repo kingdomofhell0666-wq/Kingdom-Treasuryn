@@ -32,21 +32,19 @@ app.use(sessionMiddleware);
 
 app.use("/api", router);
 
-// Redirect root → dashboard holding page
+// Redirect root → dashboard
 app.get("/", (_req, res) => {
   res.redirect(301, "/dashboard/");
 });
 
-// Serve the dashboard.
-// During the rebuild phase this is a plain static HTML file.
-// When the SPA is ready, swap this to serve the Vite dist folder.
+// Serve the compiled Vite SPA from dist/public.
 const apiServerRoot  = path.resolve(__dirname, "..");
 const workspaceRoot  = path.resolve(apiServerRoot, "..", "..");
-const dashboardSrc   = path.join(workspaceRoot, "artifacts", "dashboard", "src");
+const dashboardDist  = path.join(workspaceRoot, "artifacts", "dashboard", "dist", "public");
 
-app.use("/dashboard", express.static(dashboardSrc));
+app.use("/dashboard", express.static(dashboardDist));
 app.get("/dashboard/*splat", (_req, res) => {
-  res.sendFile(path.join(dashboardSrc, "index.html"));
+  res.sendFile(path.join(dashboardDist, "index.html"));
 });
 
 export default app;
