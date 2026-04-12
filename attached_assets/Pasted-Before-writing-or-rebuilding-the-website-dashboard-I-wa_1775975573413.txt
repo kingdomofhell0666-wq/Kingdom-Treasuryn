@@ -1,0 +1,102 @@
+Before writing or rebuilding the website/dashboard, I want you to define the full data architecture first.
+
+Do NOT start coding the full dashboard yet.
+
+I want a complete technical plan for the project data and backend structure.
+
+Show me clearly:
+
+1. PROJECT STRUCTURE
+- folder structure
+- what goes in /bot
+- what goes in /web
+- what goes in /api
+- what goes in /shared
+- what goes in /database
+- what goes in /config
+
+2. DATABASE SCHEMA
+Define all main tables / collections / models needed for the bot and dashboard.
+
+At minimum include:
+- guild_settings
+- guild_routing
+- guild_permissions
+- rank_registry
+- ascension_config
+- market_items
+- user_wallets
+- treasury_state
+- user_inventory
+- identity_equipped
+- kingdom_ranks_weekly
+- automation_jobs
+- audit_logs
+
+For each one, explain:
+- purpose
+- primary keys
+- important fields
+- relations with other tables
+
+3. SOURCE OF TRUTH
+Explain what is the single source of truth for:
+- Discord ranks / role IDs
+- user wallet balance
+- treasury balance
+- inventory ownership
+- equipped identity items
+- market items
+- kingdom ranks weekly stats
+- guild settings
+
+4. BACKEND SERVICES
+List the backend services/modules needed, such as:
+- auth service
+- guild access service
+- bot status service
+- rank service
+- economy service
+- treasury service
+- market service
+- inventory service
+- identity service
+- kingdom ranks service
+- automation service
+
+Explain what each service is responsible for.
+
+5. API ROUTES
+List the API routes needed for the future dashboard.
+Group them by section:
+- auth
+- guilds
+- bot status
+- economy
+- routing
+- permissions
+- ranks
+- ascend
+- market
+- inventory
+- identity
+- kingdom ranks
+- automation
+- settings
+
+6. BOT ↔ DASHBOARD CONNECTION
+Explain how the Discord bot and dashboard backend will stay connected.
+Show:
+- heartbeat flow
+- shared database usage
+- config sync flow
+- live status flow
+
+7. IMPLEMENTATION ORDER
+Give me the exact recommended build order from safest to riskiest.
+
+IMPORTANT:
+Do not code the final dashboard yet.
+First give me the architecture and data plan only.
+
+I want a clean, production-minded foundation before implementation.
