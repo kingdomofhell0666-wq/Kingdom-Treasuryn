@@ -79,6 +79,12 @@ def is_kingdom_or_admin(interaction: discord.Interaction) -> bool:
     return is_kingdom_staff(interaction) or is_admin_user(interaction)
 
 
+def is_freeze_exempt(member: discord.Member) -> bool:
+    """True if this member is immune to being frozen (all Kingdom staff + Centurion + Legionnaires)."""
+    member_role_ids = frozenset(r.id for r in getattr(member, "roles", []))
+    return bool(member_role_ids & EXTENDED_ROLES)
+
+
 # ── Deny-embed builders ───────────────────────────────────────────────────────
 
 def denied_generic() -> discord.Embed:

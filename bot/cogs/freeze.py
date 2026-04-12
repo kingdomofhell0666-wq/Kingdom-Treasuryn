@@ -8,6 +8,7 @@ from discord.ext import commands
 from ..utils.permissions import (
     is_freeze_authorized,
     is_admin_user,
+    is_freeze_exempt,
     denied_freeze,
     denied_unfreeze,
 )
@@ -49,6 +50,16 @@ class FreezeCog(commands.Cog):
 
         if not is_freeze_authorized(interaction):
             await interaction.followup.send(embed=denied_freeze(), ephemeral=True)
+            return
+
+        if is_freeze_exempt(user):
+            await interaction.followup.send(
+                embed=discord.Embed(
+                    description="*The ledger of Kingdom staff cannot be sealed.*",
+                    color=0x0A0A0A,
+                ).set_footer(text="Kingdom Treasury  ·  Kingdom of Hell"),
+                ephemeral=True,
+            )
             return
 
         guild_id   = str(interaction.guild_id)

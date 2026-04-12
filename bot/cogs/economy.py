@@ -13,6 +13,7 @@ from ..services.transaction_service import TransactionService
 from ..services.cerberus_service import CerberusService
 from ..utils.embeds import EmbedFactory
 from ..utils.routing import check_routing
+from ..utils.permissions import is_freeze_exempt
 from ..utils.grind_card import generate_grind_card
 from ..utils.result_cards import generate_tribute_card, generate_transfer_card, generate_ascend_card
 from ..utils.card_generator import fetch_avatar
@@ -151,7 +152,10 @@ class EconomyCog(commands.Cog):
     # ─── Freeze gate ──────────────────────────────────────────────────────────
 
     async def _check_frozen(self, interaction: discord.Interaction) -> bool:
-        """Returns True (and sends denial) when the caller's ledger is sealed."""
+        """Returns True (and sends denial) when the caller's ledger is sealed.
+        Kingdom staff (Sovereign → Legionnaires) are permanently exempt."""
+        if is_freeze_exempt(interaction.user):
+            return False
         guild_id   = str(interaction.guild_id)
         discord_id = str(interaction.user.id)
         user = await self.db.get_user(guild_id, discord_id)
