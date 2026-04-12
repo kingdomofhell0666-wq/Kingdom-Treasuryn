@@ -155,17 +155,26 @@ lib/db/                       # Drizzle ORM + PostgreSQL
 
 The dashboard frontend is a static build served by Express:
 ```bash
-# Build dashboard
-cd artifacts/dashboard && PORT=5000 BASE_PATH=/dashboard/ pnpm run build
+# Build dashboard (run from workspace root)
+PORT=3000 BASE_PATH=/dashboard/ pnpm --filter @workspace/dashboard run build
 # API server serves it automatically from artifacts/dashboard/dist/public/
+# Then restart the API Server workflow to pick up the new build
 ```
 
 ### Important Notes
 
-- Dashboard workflow is FAILED (known port detection issue) — the static build is served from the API server instead
+- Dashboard workflow uses `sleep infinity` — the static build is served from the API server instead
 - Auth OAuth2 callback URL is auto-detected from `REPLIT_DOMAINS` env var
 - Guild configs stored in PostgreSQL `guild_configs` table
 - Bot stats read from `kingdom_treasury.db` SQLite via better-sqlite3
+- Dark mode: `class="dark"` must be on the `<html>` tag in `index.html` (already set)
+- `/api/app-config` is a public endpoint returning `{ discordClientId }` for the frontend invite link generator
+
+### Block 1 — Complete (Dashboard Login + Guild Selection)
+
+- **Login page** (`src/pages/login.tsx`): Dark obsidian theme, branded Shield icon, "Sign in with Discord" CTA, OAuth error handling (`?error=discord_denied|missing_code|state_mismatch|auth_failed`)
+- **Guilds page** (`src/pages/guilds/index.tsx`): Shows ALL admin guilds (not just bot-present); sectioned as "Active Realms" vs "Not Installed"; status badges; "Add Bot" invite link for inactive servers using Discord client ID from `/api/app-config`
+- **GuildsLayout** (`src/components/layout.tsx`): Minimal sticky top-nav with Kingdom Treasury logo left + user avatar dropdown (sign out) right — used for the guilds selection page only
 
 ## Kingdom Exchange (Discord Embed Market)
 

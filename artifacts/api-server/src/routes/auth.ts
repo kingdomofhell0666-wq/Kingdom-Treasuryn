@@ -95,6 +95,14 @@ router.post("/auth/logout", requireAuth, (req, res) => {
   });
 });
 
+// GET /app-config — public config (no auth required)
+// Returns non-sensitive values needed by the frontend at runtime.
+router.get("/app-config", (req, res) => {
+  res.json({
+    discordClientId: process.env["DISCORD_CLIENT_ID"] ?? "",
+  });
+});
+
 // GET /auth/me
 router.get("/auth/me", requireAuth, (req, res) => {
   const u = req.session.discordUser!;
