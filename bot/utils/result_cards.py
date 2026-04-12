@@ -301,7 +301,7 @@ def generate_wealth_card(
     rows = [
         ("🏴  Rank",           rank,                th["text1"]),
         ("⚖  Taxes Rendered",  _fmt(taxes_paid),    th["text2"]),
-        ("🔱  Kingdom Rank",    f"#{kingdom_rank}",  th["text1"]),
+        ("🔱  Kingdom Rank",    f"#{kingdom_rank}" if kingdom_rank > 0 else "EXEMPT",  th["text1"]),
         ("☠  Audit Status",    risk_lbl,            risk_col),
     ]
     ROW_H = 58
