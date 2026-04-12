@@ -126,6 +126,63 @@ THEMES = {
         text2=(178, 118, 118), glow=(192, 22, 22),
         wealth_hl=(30, 5, 5),  sigil="sigil",
     ),
+    # ── New skins added ────────────────────────────────────────────────────────
+    "ember_ash": dict(
+        bg1=(10, 5, 2),   bg2=(26, 12, 5),
+        border=(132, 72, 32), accent=(198, 108, 45),
+        gold=(238, 168, 72), text1=(248, 212, 172),
+        text2=(178, 130, 82), glow=(182, 90, 38),
+        wealth_hl=(26, 12, 5),  sigil="crown",
+    ),
+    "bone_pale": dict(
+        bg1=(8, 6, 3),    bg2=(20, 16, 10),
+        border=(118, 102, 78), accent=(185, 168, 135),
+        gold=(218, 195, 152), text1=(242, 232, 210),
+        text2=(162, 145, 112), glow=(145, 122, 88),
+        wealth_hl=(18, 14, 8),  sigil="star",
+    ),
+    "phantom_teal": dict(
+        bg1=(2, 10, 12),  bg2=(5, 22, 26),
+        border=(0, 90, 108), accent=(0, 170, 190),
+        gold=(0, 222, 232), text1=(178, 240, 244),
+        text2=(80, 170, 182), glow=(0, 142, 158),
+        wealth_hl=(4, 20, 26),  sigil="eye",
+    ),
+    "midnight_azure": dict(
+        bg1=(0, 4, 18),   bg2=(2, 10, 40),
+        border=(20, 62, 168), accent=(45, 118, 228),
+        gold=(138, 190, 255), text1=(200, 222, 255),
+        text2=(88, 136, 202), glow=(28, 92, 202),
+        wealth_hl=(4, 12, 46),  sigil="star",
+    ),
+    "magma_core": dict(
+        bg1=(8, 2, 0),    bg2=(24, 6, 0),
+        border=(168, 55, 0), accent=(228, 88, 0),
+        gold=(255, 172, 45), text1=(255, 222, 178),
+        text2=(188, 122, 68), glow=(212, 72, 0),
+        wealth_hl=(28, 6, 0),  sigil="sigil",
+    ),
+    "cursed_silver": dict(
+        bg1=(4, 4, 6),    bg2=(12, 12, 20),
+        border=(88, 88, 118), accent=(178, 178, 215),
+        gold=(222, 222, 242), text1=(238, 238, 250),
+        text2=(142, 142, 172), glow=(148, 148, 188),
+        wealth_hl=(14, 14, 24),  sigil="throne",
+    ),
+    "verdant_venom": dict(
+        bg1=(2, 10, 2),   bg2=(5, 22, 6),
+        border=(18, 120, 24), accent=(40, 208, 50),
+        gold=(118, 255, 98), text1=(188, 248, 190),
+        text2=(78, 180, 84), glow=(28, 178, 38),
+        wealth_hl=(6, 22, 6),  sigil="sigil",
+    ),
+    "abyssal_jade": dict(
+        bg1=(2, 8, 6),    bg2=(5, 18, 14),
+        border=(14, 100, 72), accent=(28, 188, 138),
+        gold=(88, 242, 195), text1=(178, 242, 218),
+        text2=(58, 168, 120), glow=(18, 152, 108),
+        wealth_hl=(6, 20, 14),  sigil="eye",
+    ),
 }
 
 

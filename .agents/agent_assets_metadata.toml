@@ -419,3 +419,51 @@ id = "S4tQfSX8nRUvtv3kINNUT"
 uri = "file://attached_assets/v_6badges_void.jpg"
 type = "image"
 title = "Void Drift relic + 6 badges (abyss skin)"
+
+[[outputs]]
+id = "k_yTapf3Ob5CDK50DWadz"
+uri = "file://attached_assets/skin_ember_ash.jpg"
+type = "image"
+title = "Ember Ash — Uncommon  ·  35,000 DC"
+
+[[outputs]]
+id = "Ts94X-0RlYcvsPSDbnlA2"
+uri = "file://attached_assets/skin_bone_pale.jpg"
+type = "image"
+title = "Bone Pale — Rare  ·  60,000 DC"
+
+[[outputs]]
+id = "sKJopogd-VqrtMTJE1zjI"
+uri = "file://attached_assets/skin_phantom_teal.jpg"
+type = "image"
+title = "Phantom Teal — Rare  ·  70,000 DC"
+
+[[outputs]]
+id = "_Do6QL6lmXHvHxxrq58LC"
+uri = "file://attached_assets/skin_midnight_azure.jpg"
+type = "image"
+title = "Midnight Azure — Rare  ·  80,000 DC"
+
+[[outputs]]
+id = "C_7uj9OoTq1b2d3XfOWwD"
+uri = "file://attached_assets/skin_magma_core.jpg"
+type = "image"
+title = "Magma Core — Epic  ·  120,000 DC"
+
+[[outputs]]
+id = "VkImym_DI3c1HM6umHq__"
+uri = "file://attached_assets/skin_cursed_silver.jpg"
+type = "image"
+title = "Cursed Silver — Epic  ·  140,000 DC"
+
+[[outputs]]
+id = "hq-hMrB3LS5jFT89sCN12"
+uri = "file://attached_assets/skin_verdant_venom.jpg"
+type = "image"
+title = "Verdant Venom — Legendary  ·  200,000 DC"
+
+[[outputs]]
+id = "RvFrXT1BOtHG3PwP6DsiP"
+uri = "file://attached_assets/skin_abyssal_jade.jpg"
+type = "image"
+title = "Abyssal Jade — Legendary  ·  350,000 DC"
