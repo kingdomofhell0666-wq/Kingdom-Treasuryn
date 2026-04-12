@@ -1,0 +1,177 @@
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🛠 KINGDOM TREASURY BOT — SAFE OPTIMIZATION + DEAD FILE CLEANUP
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+You are a senior backend engineer and codebase cleanup specialist.
+
+Your task is to optimize the Kingdom Treasury bot codebase and clean up only dead, unused, or unnecessary files.
+
+IMPORTANT:
+This is a SAFE cleanup and optimization task.
+
+Do NOT rebuild the project.
+Do NOT redesign systems.
+Do NOT remove working bot features.
+Do NOT delete important logic.
+Do NOT touch production behavior unless clearly improving performance or maintainability.
+
+━━━━━━━━━━━━━━━━━━━━━━━
+🎯 CORE GOAL
+━━━━━━━━━━━━━━━━━━━━━━━
+
+Improve the codebase safely by:
+
+1. optimizing the bot structure where appropriate
+2. removing dead files
+3. removing unused code
+4. cleaning obvious duplicates
+5. improving readability and maintainability
+6. preserving all working bot systems
+
+This is NOT a rewrite.
+This is a safe cleanup + optimization pass.
+
+━━━━━━━━━━━━━━━━━━━━━━━
+🛡 STRICT SAFETY RULES
+━━━━━━━━━━━━━━━━━━━━━━━
+
+Do NOT delete, break, or refactor away any working core system.
+
+Preserve completely:
+- Discord bot runtime
+- bot commands
+- /market
+- /inventory
+- /identity
+- /ascend
+- Kingdom Ranks logic
+- economy logic
+- rank logic
+- routing logic
+- database models/data access
+- environment variables
+- secrets
+- deployment/runtime files if still needed
+
+Do NOT remove a file unless you are highly confident it is unused, dead, duplicated, deprecated, or disconnected.
+
+If unsure:
+- keep it
+- report it instead of deleting it
+
+━━━━━━━━━━━━━━━━━━━━━━━
+📋 WHAT TO CLEAN
+━━━━━━━━━━━━━━━━━━━━━━━
+
+Clean only things like:
+
+- dead files not imported anywhere
+- obsolete temporary files
+- duplicated unused components
+- old experimental files no longer referenced
+- broken leftover web/dashboard files that are clearly unused
+- unused helper modules
+- unused assets not referenced anywhere
+- duplicate mock/test files no longer used
+- commented-out dead code blocks if clearly obsolete
+- unused imports
+- obvious code duplication where safe to simplify
+
+━━━━━━━━━━━━━━━━━━━━━━━
+🚫 WHAT NOT TO DO
+━━━━━━━━━━━━━━━━━━━━━━━
+
+Do NOT:
+- delete active bot modules
+- delete database files blindly
+- delete config files blindly
+- remove code just because it looks old
+- change command behavior without reason
+- change ranking logic
+- change economy behavior
+- remove files that might be used dynamically unless confirmed
+- perform a full rewrite
+
+━━━━━━━━━━━━━━━━━━━━━━━
+🔍 REQUIRED PROCESS
+━━━━━━━━━━━━━━━━━━━━━━━
+
+Work in this exact order:
+
+1. Audit the codebase
+2. Identify dead files / unused files / duplicate files / obvious cleanup candidates
+3. Identify safe optimization opportunities
+4. Show a clear report FIRST
+5. Wait for confirmation before deleting files
+6. After confirmation, clean only the approved dead files
+7. Apply safe code optimizations only where low-risk
+8. Summarize exactly what was cleaned and optimized
+
+━━━━━━━━━━━━━━━━━━━━━━━
+📦 OPTIMIZATION GOALS
+━━━━━━━━━━━━━━━━━━━━━━━
+
+Apply only safe optimizations such as:
+
+- removing unused imports
+- simplifying repeated helper logic
+- reducing duplicated utility code
+- improving modular organization where already obvious
+- cleaning dead branches
+- improving naming clarity where low-risk
+- reducing unnecessary file clutter
+- making the project easier to maintain
+
+Prefer minimal safe improvements over aggressive refactors.
+
+━━━━━━━━━━━━━━━━━━━━━━━
+📋 REPORT FORMAT
+━━━━━━━━━━━━━━━━━━━━━━━
+
+Before changing anything, return a report with:
+
+1. SAFE TO DELETE
+- files clearly unused
+- files clearly dead
+- files clearly duplicated
+
+2. SAFE TO CLEAN
+- unused imports
+- dead code blocks
+- duplicate helpers
+
+3. KEEP
+- files that may look unused but should remain
+- files connected to bot runtime
+- files with uncertain usage
+
+4. SAFE OPTIMIZATION OPPORTUNITIES
+- low-risk improvements only
+
+For every file, explain briefly WHY.
+
+━━━━━━━━━━━━━━━━━━━━━━━
+⚠ CONFIRMATION RULE
+━━━━━━━━━━━━━━━━━━━━━━━
+
+Do NOT delete any files immediately.
+
+First show me the exact files/folders you want to remove or archive.
+Wait for my confirmation before deleting them.
+
+If a file is uncertain, do not delete it.
+
+━━━━━━━━━━━━━━━━━━━━━━━
+📤 FINAL RESULT
+━━━━━━━━━━━━━━━━━━━━━━━
+
+I want a safe cleanup and optimization pass that:
+- improves the bot codebase
+- removes only dead/useless files
+- preserves all working systems
+- avoids risky refactors
+- gives me a clear before/after report
+
+━━━━━━━━━━━━━━━━━━━━━━━
+END
+━━━━━━━━━━━━━━━━━━━━━━━
