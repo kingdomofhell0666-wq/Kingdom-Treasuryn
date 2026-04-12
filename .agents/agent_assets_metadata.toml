@@ -467,3 +467,39 @@ id = "RvFrXT1BOtHG3PwP6DsiP"
 uri = "file://attached_assets/skin_abyssal_jade.jpg"
 type = "image"
 title = "Abyssal Jade — Legendary  ·  350,000 DC"
+
+[[outputs]]
+id = "nocg2bUuAH3c1eYDWI_w_"
+uri = "file://attached_assets/skin_blood_crown.jpg"
+type = "image"
+title = "Blood Crown — Uncommon · 25,000 DC"
+
+[[outputs]]
+id = "gwnlLHKSHd-HYzY8AYOF3"
+uri = "file://attached_assets/skin_abyss_smoke.jpg"
+type = "image"
+title = "Abyss Smoke — Rare · 50,000 DC"
+
+[[outputs]]
+id = "n2N1YG51VaX0OFspS5-QQ"
+uri = "file://attached_assets/skin_infernal_gold.jpg"
+type = "image"
+title = "Infernal Gold — Rare · 75,000 DC"
+
+[[outputs]]
+id = "WO5HIl65_Tkmj2-a3DWZ8"
+uri = "file://attached_assets/skin_royal_dark.jpg"
+type = "image"
+title = "Royal Dark — Epic · 100,000 DC"
+
+[[outputs]]
+id = "8ZIRSbkQJyRi5lUn1m-iM"
+uri = "file://attached_assets/skin_black_throne.jpg"
+type = "image"
+title = "Black Throne — Epic · 150,000 DC"
+
+[[outputs]]
+id = "Q0L7GJMEKmaU042Zg_JkZ"
+uri = "file://attached_assets/skin_crimson_sigil.jpg"
+type = "image"
+title = "Crimson Sigil — Legendary · 250,000 DC"
