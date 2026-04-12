@@ -93,6 +93,9 @@ class Database:
             "ALTER TABLE users ADD COLUMN owned_relics TEXT NOT NULL DEFAULT '[]'",
             "ALTER TABLE users ADD COLUMN equipped_relic TEXT DEFAULT ''",
             "ALTER TABLE users ADD COLUMN equipped_badges TEXT NOT NULL DEFAULT '[]'",
+            # Weekly leaderboard tracking — reset every Monday after post
+            "ALTER TABLE users ADD COLUMN weekly_active_seconds INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE users ADD COLUMN weekly_dc_earned INTEGER NOT NULL DEFAULT 0",
         ]
         for stmt in additive:
             try:
@@ -268,10 +271,19 @@ class Database:
         return await self.get_user(guild_id, discord_id)
 
     async def update_balance(self, guild_id: str, discord_id: str, amount: int):
-        await self._db.execute(
-            "UPDATE users SET balance = balance + ? WHERE guild_id = ? AND discord_id = ?",
-            (amount, guild_id, discord_id),
-        )
+        if amount > 0:
+            await self._db.execute(
+                """UPDATE users
+                   SET balance = balance + ?,
+                       weekly_dc_earned = weekly_dc_earned + ?
+                   WHERE guild_id = ? AND discord_id = ?""",
+                (amount, amount, guild_id, discord_id),
+            )
+        else:
+            await self._db.execute(
+                "UPDATE users SET balance = balance + ? WHERE guild_id = ? AND discord_id = ?",
+                (amount, guild_id, discord_id),
+            )
         await self._db.commit()
 
     async def set_balance(self, guild_id: str, discord_id: str, amount: int):
@@ -900,3 +912,74 @@ class Database:
         )
         await self._db.commit()
         logger.info(f"[DB] Rank set for user {discord_id} in guild {guild_id}: {rank}")
+
+    # ─── Weekly Leaderboard ───────────────────────────────────────────────────
+
+    # Eligible economy rank names (Nobility + Members only — no staff)
+    _ELIGIBLE_RANKS = (
+        "Forsaken", "Vermin", "Corrupted", "Folklore", "Mythology",
+        "Demonology", "Eschatology", "Archangel", "Archdemon",
+        "Knight", "Baron", "Viscount", "Count", "Marquis", "Duke",
+    )
+
+    async def add_weekly_active_seconds(
+        self, guild_id: str, discord_id: str, seconds: int
+    ):
+        """Accumulate voice/activity time for the weekly leaderboard."""
+        if seconds <= 0:
+            return
+        await self._db.execute(
+            """UPDATE users
+               SET weekly_active_seconds = weekly_active_seconds + ?
+               WHERE guild_id = ? AND discord_id = ?""",
+            (seconds, guild_id, discord_id),
+        )
+        await self._db.commit()
+
+    async def get_weekly_kingdom_leaderboard(
+        self, guild_id: str, limit: int = 25
+    ) -> List[dict]:
+        """
+        Return eligible users sorted by:
+          1. weekly_active_seconds DESC  (primary — most active first)
+          2. weekly_dc_earned DESC       (secondary — most earned first)
+          3. eligible rank_idx DESC      (tertiary — higher rank wins tiebreak)
+          4. discord_id ASC              (stable final fallback)
+
+        Only users whose stored rank is in the Nobility / Members eligible set
+        are returned.  Staff roles stored under a different rank name are still
+        excluded at query time; true Discord-role eligibility is then verified
+        in the cog against live member data.
+        """
+        placeholders = ",".join("?" * len(self._ELIGIBLE_RANKS))
+        async with self._db.execute(
+            f"""SELECT discord_id, username, balance, rank,
+                       weekly_active_seconds, weekly_dc_earned,
+                       {self._RANK_CASE} AS rank_idx
+               FROM users
+               WHERE guild_id = ? AND rank IN ({placeholders})
+               ORDER BY weekly_active_seconds DESC,
+                        weekly_dc_earned DESC,
+                        rank_idx DESC,
+                        discord_id ASC
+               LIMIT ?""",
+            (guild_id, *self._ELIGIBLE_RANKS, limit),
+        ) as cur:
+            rows = await cur.fetchall()
+            return [dict(r) for r in rows]
+
+    async def reset_weekly_stats(self, guild_id: str):
+        """
+        Zero out weekly_active_seconds and weekly_dc_earned for all users in
+        the guild.  Called immediately after the Monday leaderboard is posted.
+        Never touches wallet balance, rank, inventory, or any permanent data.
+        """
+        await self._db.execute(
+            """UPDATE users
+               SET weekly_active_seconds = 0,
+                   weekly_dc_earned      = 0
+               WHERE guild_id = ?""",
+            (guild_id,),
+        )
+        await self._db.commit()
+        logger.info(f"[DB] Weekly stats reset for guild {guild_id}.")

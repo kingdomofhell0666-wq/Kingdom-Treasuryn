@@ -23,8 +23,9 @@ logger = logging.getLogger("kingdom_treasury")
 
 class KingdomTreasuryBot(commands.Bot):
     def __init__(self):
-        intents         = discord.Intents.default()
-        intents.members = True
+        intents               = discord.Intents.default()
+        intents.members       = True
+        intents.voice_states  = True
 
         super().__init__(command_prefix="!kt_", intents=intents, help_command=None)
 
@@ -82,15 +83,16 @@ class KingdomTreasuryBot(commands.Bot):
         self.pressure_service    = PressureService()     # stateless — only needs bot.db at runtime
 
         # ── Cogs ─────────────────────────────────────────────────────────────
-        from .cogs.economy     import EconomyCog
-        from .cogs.profile     import ProfileCog
-        from .cogs.investment  import InvestmentCog
-        from .cogs.cosmetics   import CosmeticsCog
-        from .cogs.admin       import AdminCog
-        from .cogs.leaderboard import LeaderboardCog
-        from .cogs.missions    import MissionsCog
-        from .cogs.freeze      import FreezeCog
-        from .cogs.pressure    import PressureCog
+        from .cogs.economy        import EconomyCog
+        from .cogs.profile        import ProfileCog
+        from .cogs.investment     import InvestmentCog
+        from .cogs.cosmetics      import CosmeticsCog
+        from .cogs.admin          import AdminCog
+        from .cogs.leaderboard    import LeaderboardCog
+        from .cogs.missions       import MissionsCog
+        from .cogs.freeze         import FreezeCog
+        from .cogs.pressure       import PressureCog
+        from .cogs.voice_activity import VoiceActivityCog
 
         await self.add_cog(EconomyCog(self))
         await self.add_cog(ProfileCog(self))
@@ -101,6 +103,7 @@ class KingdomTreasuryBot(commands.Bot):
         await self.add_cog(MissionsCog(self))
         await self.add_cog(FreezeCog(self))
         await self.add_cog(PressureCog(self))
+        await self.add_cog(VoiceActivityCog(self))
 
         await self.tree.sync()
         logger.info("Command tree synchronized.")

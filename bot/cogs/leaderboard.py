@@ -1,66 +1,66 @@
 """
-LeaderboardCog — bot-first, dashboard-override scheduled leaderboard posting.
+LeaderboardCog — Weekly Kingdom Ranks: Top 10
 
-Channel resolution — strict priority
-──────────────────────────────────────
-1. Dashboard config channel_id (if row exists AND channel_id is non-null/non-empty)
-2. Hard-default channel: DEFAULT_LEADERBOARD_CHANNEL_ID
-3. If resolved channel cannot be used → log error, abort. NO random fallback.
+Schedule: every Monday at 10:00 AM (timezone-aware, configurable via dashboard).
 
-The bot NEVER walks guild channels or guesses. If neither the dashboard channel
-nor the default channel is reachable, the post is suppressed and logged.
+Ranking logic:
+  PRIMARY  — weekly_active_seconds DESC   (most active in voice/activity)
+  SECONDARY — weekly_dc_earned DESC       (most DevilCoins earned this week)
+  TERTIARY — eligible rank hierarchy      (Duke > … > Forsaken, tiebreaker only)
+  FALLBACK  — discord_id ASC             (stable, never random)
 
-Ranking rule (identical to /identity)
-──────────────────────────────────────
-  PRIMARY:   rank hierarchy (Duke=14 … Forsaken=0)
-  SECONDARY: balance descending
+Eligible groups: Nobility + Members only.
+Excluded: Owners, Royal Family, Council, Legion (verified against live roles).
 
-Leaderboard type: FIXED → Kingdom Rank Top 10 (no other modes).
+After a successful post, weekly stats are immediately reset for the new week.
 """
 
 import asyncio
-import io
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone, timedelta
-from typing import Optional
+from typing import List, Optional
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-import aiohttp
 import discord
 from discord.ext import commands, tasks
 
-from bot.utils.leaderboard_card import generate_leaderboard_image
+from bot.utils.identity_variant import resolve_identity_card_variant
 
 logger = logging.getLogger("kingdom_treasury")
 
-
-# ─── Hard-locked default channel ─────────────────────────────────────────────
-# Used when the dashboard has no explicit override.
-# Changed only when the dashboard saves a valid non-null channel_id.
+# ─── Hard-locked defaults ─────────────────────────────────────────────────────
 
 DEFAULT_LEADERBOARD_CHANNEL_ID = "1488243375579861012"   # #📊┃leaderboard
 
+FALLBACK_FREQUENCY       = "weekly"
+FALLBACK_POST_HOUR       = 10       # 10 AM
+FALLBACK_POST_MINUTE     = 0
+FALLBACK_POST_DAY_OF_WEEK = 0      # Monday (Python weekday)
+FALLBACK_TIMEZONE        = "UTC"
 
-# ─── Fallback schedule defaults ───────────────────────────────────────────────
+LEADERBOARD_TYPE = "kingdom_rank_top_10"
 
-FALLBACK_FREQUENCY    = "weekly"
-FALLBACK_POST_HOUR    = 20
-FALLBACK_POST_MINUTE  = 0
-FALLBACK_TIMEZONE     = "UTC"
-LEADERBOARD_TYPE      = "kingdom_rank_top_10"   # fixed — never changes
+# ─── DevilCoin emoji ──────────────────────────────────────────────────────────
+
+_DC = "<:devilcoinStack:1492184333392412692>"
+
+# ─── Top-3 display data ───────────────────────────────────────────────────────
+
+_TOP3_MEDAL = ["👑", "⚔️", "🩸"]
+_TOP3_TITLE = ["Sovereign of the Week", "Warlord Ascendant", "Blooded Challenger"]
 
 
 # ─── Effective config dataclass ───────────────────────────────────────────────
 
 @dataclass
 class EffectiveLeaderboardConfig:
-    source:             str             # "dashboard" | "fallback"
+    source:             str
     enabled:            bool
-    leaderboard_type:   str             # always LEADERBOARD_TYPE
-    post_channel_id:    str             # always a non-None channel ID string
-    channel_source:     str             # "dashboard" | "default"
-    post_frequency:     str             # "daily" | "weekly" | "monthly"
+    leaderboard_type:   str
+    post_channel_id:    str
+    channel_source:     str
+    post_frequency:     str
     post_hour:          int
     post_minute:        int
     post_day_of_week:   Optional[int]
@@ -73,16 +73,9 @@ class EffectiveLeaderboardConfig:
 # ─── Config resolver ──────────────────────────────────────────────────────────
 
 async def resolve_leaderboard_config(
-    guild_id:       str,
+    guild_id: str,
     config_service,
 ) -> EffectiveLeaderboardConfig:
-    """
-    Load the dashboard config from PostgreSQL.
-    Return an EffectiveLeaderboardConfig for this guild.
-
-    Dashboard channel is used ONLY when the DB row exists AND post_channel_id
-    is non-null and non-empty.  Every other case uses DEFAULT_LEADERBOARD_CHANNEL_ID.
-    """
     rows = await config_service.get_leaderboard_settings_for_guild(guild_id)
 
     if rows and rows.get("enabled") is not None:
@@ -96,15 +89,9 @@ async def resolve_leaderboard_config(
         if lpa is not None and lpa.tzinfo is None:
             lpa = lpa.replace(tzinfo=timezone.utc)
 
-        # Dashboard has an explicit, non-null channel_id → use it.
-        # Otherwise fall through to the hard-locked default.
         db_channel_id = (r.get("post_channel_id") or "").strip() or None
-        if db_channel_id:
-            post_channel_id = db_channel_id
-            channel_source  = "dashboard"
-        else:
-            post_channel_id = DEFAULT_LEADERBOARD_CHANNEL_ID
-            channel_source  = "default"
+        post_channel_id = db_channel_id or DEFAULT_LEADERBOARD_CHANNEL_ID
+        channel_source  = "dashboard" if db_channel_id else "default"
 
         return EffectiveLeaderboardConfig(
             source            = "dashboard",
@@ -127,7 +114,6 @@ async def resolve_leaderboard_config(
             ),
         )
 
-    # ── Fallback: no valid dashboard row — use hard-locked default ─────────────
     return EffectiveLeaderboardConfig(
         source            = "fallback",
         enabled           = True,
@@ -137,11 +123,11 @@ async def resolve_leaderboard_config(
         post_frequency    = FALLBACK_FREQUENCY,
         post_hour         = FALLBACK_POST_HOUR,
         post_minute       = FALLBACK_POST_MINUTE,
-        post_day_of_week  = None,
+        post_day_of_week  = FALLBACK_POST_DAY_OF_WEEK,
         post_day_of_month = None,
         timezone          = FALLBACK_TIMEZONE,
         last_posted_at    = None,
-        resolved_strategy = f"fallback: no valid dashboard config — using default channel={DEFAULT_LEADERBOARD_CHANNEL_ID}",
+        resolved_strategy = f"fallback: default channel={DEFAULT_LEADERBOARD_CHANNEL_ID}",
     )
 
 
@@ -157,7 +143,7 @@ def _parse_tz(tz_name: str) -> ZoneInfo:
 # ─── Schedule check ───────────────────────────────────────────────────────────
 
 def _is_due(cfg: EffectiveLeaderboardConfig, now_utc: datetime) -> bool:
-    """Return True if the leaderboard should post during this minute."""
+    """Return True if the leaderboard should fire during this minute."""
     tz        = _parse_tz(cfg.timezone)
     now_local = now_utc.astimezone(tz)
 
@@ -167,23 +153,24 @@ def _is_due(cfg: EffectiveLeaderboardConfig, now_utc: datetime) -> bool:
     last_posted = cfg.last_posted_at
     frequency   = cfg.post_frequency
 
-    if last_posted is not None:
-        elapsed = now_utc - last_posted
-
-        if frequency == "daily" and elapsed < timedelta(hours=23):
+    if frequency == "weekly":
+        day_of_week = cfg.post_day_of_week
+        if day_of_week is not None and now_local.weekday() != int(day_of_week):
             return False
-
-        if frequency == "weekly":
-            if cfg.post_day_of_week is not None and now_local.weekday() != int(cfg.post_day_of_week):
-                return False
+        if last_posted is not None:
+            elapsed = now_utc - last_posted
             if elapsed < timedelta(days=6, hours=23):
                 return False
 
-        if frequency == "monthly":
-            if cfg.post_day_of_month is not None and now_local.day != int(cfg.post_day_of_month):
-                return False
-            if elapsed < timedelta(days=27):
-                return False
+    elif frequency == "daily":
+        if last_posted is not None and (now_utc - last_posted) < timedelta(hours=23):
+            return False
+
+    elif frequency == "monthly":
+        if cfg.post_day_of_month is not None and now_local.day != int(cfg.post_day_of_month):
+            return False
+        if last_posted is not None and (now_utc - last_posted) < timedelta(days=27):
+            return False
 
     return True
 
@@ -191,83 +178,99 @@ def _is_due(cfg: EffectiveLeaderboardConfig, now_utc: datetime) -> bool:
 # ─── Channel resolution ───────────────────────────────────────────────────────
 
 async def _resolve_channel(
-    guild:      discord.Guild,
+    guild: discord.Guild,
     channel_id: str,
 ) -> Optional[discord.abc.Messageable]:
-    """
-    Resolve a sendable channel from a specific ID.
-
-    STRICT — no guild channel walk, no keyword guessing.
-    Returns None only when the given ID is unreachable or unsendable.
-    The caller must then abort and log; it must NOT pick a random fallback.
-    """
     try:
         raw = int(channel_id)
     except (ValueError, TypeError):
-        logger.warning(f"[Leaderboard ERROR] channel_id {channel_id!r} is not a valid integer — cannot resolve")
+        logger.warning(f"[Leaderboard] channel_id {channel_id!r} is not a valid integer")
         return None
 
     ch = guild.get_channel(raw)
     if ch is None:
-        logger.info(f"[Leaderboard] channel {raw} not in guild cache — calling fetch_channel()")
         try:
             ch = await guild.fetch_channel(raw)
         except discord.NotFound:
-            logger.warning(f"[Leaderboard ERROR] channel {raw} not found (NotFound)")
+            logger.warning(f"[Leaderboard] channel {raw} not found")
             return None
         except discord.Forbidden:
-            logger.warning(f"[Leaderboard ERROR] channel {raw} fetch forbidden (no permission)")
+            logger.warning(f"[Leaderboard] channel {raw} fetch forbidden")
             return None
         except Exception as exc:
-            logger.warning(f"[Leaderboard ERROR] fetch_channel({raw}) failed: {exc}")
+            logger.warning(f"[Leaderboard] fetch_channel({raw}) failed: {exc}")
             return None
 
     if ch is not None and hasattr(ch, "send"):
         return ch
-
-    if ch is not None:
-        logger.warning(
-            f"[Leaderboard ERROR] channel {raw} resolved to {type(ch).__name__} "
-            f"which has no send() — cannot use"
-        )
     return None
 
 
-# ─── Medal labels ─────────────────────────────────────────────────────────────
+# ─── Formatting helpers ───────────────────────────────────────────────────────
 
-MEDALS = ["🥇", "🥈", "🥉"]
-
-
-# ─── Avatar fetcher ───────────────────────────────────────────────────────────
-
-async def _fetch_avatar_bytes(session: aiohttp.ClientSession, url: str, size: int = 64) -> Optional[bytes]:
-    try:
-        cdn_url = f"{url.split('?')[0]}?size={size}"
-        async with session.get(cdn_url, timeout=aiohttp.ClientTimeout(total=5)) as resp:
-            if resp.status == 200:
-                return await resp.read()
-    except Exception as exc:
-        logger.debug(f"Avatar fetch failed for {url}: {exc}")
-    return None
+def _fmt_duration(seconds: int) -> str:
+    """Convert seconds to a compact 'Xh Ym' string."""
+    seconds = max(0, int(seconds))
+    h, rem = divmod(seconds, 3600)
+    m      = rem // 60
+    if h > 0:
+        return f"{h}h {m}m"
+    return f"{m}m"
 
 
-async def _none_bytes() -> None:
-    return None
+def _build_leaderboard_message(rows: List[dict]) -> str:
+    """Build the full leaderboard text in Kingdom of Hell style."""
+    sep = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
+    intro = (
+        f"## 📊  Kingdom Ranks — Weekly Top 10\n"
+        f"{sep}\n\n"
+        "*The Kingdom has judged the week.*\n\n"
+        "*Time has been counted.\n"
+        "Wealth has been measured.\n"
+        "Only the most active have risen.*\n\n"
+        "*Ten names stand above the rest.*\n\n"
+        "*The weak disappear.\n"
+        "The relentless remain.*\n\n"
+        f"{sep}\n"
+    )
 
-async def _fetch_avatars(guild: discord.Guild, rows: list) -> list:
-    async with aiohttp.ClientSession() as session:
-        coros = []
-        for row in rows:
-            discord_id = row.get("discord_id")
-            member = guild.get_member(int(discord_id)) if discord_id else None
-            if member:
-                url = str(member.display_avatar.replace(format="png", size=64).url)
-                coros.append(_fetch_avatar_bytes(session, url))
-            else:
-                coros.append(_none_bytes())
-        results = await asyncio.gather(*coros, return_exceptions=True)
-    return [r if isinstance(r, bytes) else None for r in results]
+    lines: List[str] = [intro]
+
+    for i, row in enumerate(rows[:10], start=1):
+        discord_id = row.get("discord_id")
+        rank       = row.get("rank", "Forsaken")
+        active_s   = int(row.get("weekly_active_seconds", 0))
+        dc_earned  = int(row.get("weekly_dc_earned", 0))
+        mention    = f"<@{discord_id}>" if discord_id else f"**{row.get('username', 'Unknown')}**"
+        activity   = _fmt_duration(active_s)
+
+        if i <= 3:
+            medal      = _TOP3_MEDAL[i - 1]
+            title_line = _TOP3_TITLE[i - 1]
+            block = (
+                f"{medal} **#{i} — {mention}**\n"
+                f"*{title_line}*\n"
+                f"Activity: **{activity}** · "
+                f"Weekly Earned: **{dc_earned:,}** {_DC} · "
+                f"Rank: **{rank}**\n"
+            )
+            lines.append(block)
+        else:
+            line = (
+                f"**#{i}** — {mention} — "
+                f"{activity} — "
+                f"{dc_earned:,} {_DC} — "
+                f"**{rank}**"
+            )
+            lines.append(line)
+
+    lines.append(f"\n{sep}")
+    lines.append(
+        '-# *"The Abyss remembers those who move… and forgets those who idle."*'
+    )
+
+    return "\n".join(lines)
 
 
 # ─── Cog ─────────────────────────────────────────────────────────────────────
@@ -291,7 +294,7 @@ class LeaderboardCog(commands.Cog):
     async def before_scheduler(self):
         await self.bot.wait_until_ready()
 
-    # ── Per-minute scheduler tick ─────────────────────────────────────────────
+    # ── Per-minute tick ───────────────────────────────────────────────────────
 
     async def _check_and_post(self):
         config_svc = getattr(self.bot, "config_service", None)
@@ -316,25 +319,17 @@ class LeaderboardCog(commands.Cog):
         now_utc:    datetime,
     ):
         guild_id = str(guild.id)
-
-        # ── 1. Resolve effective config ────────────────────────────────────────
-        cfg = await resolve_leaderboard_config(guild_id, config_svc)
+        cfg      = await resolve_leaderboard_config(guild_id, config_svc)
 
         logger.debug(
-            f"[Leaderboard] config_source={cfg.source} "
-            f"enabled={cfg.enabled} "
-            f"channel_source={cfg.channel_source} "
-            f"channel_id={cfg.post_channel_id} "
-            f"frequency={cfg.post_frequency} "
-            f"timezone={cfg.timezone} "
-            f"guild={guild_id}"
+            f"[Leaderboard] config_source={cfg.source} enabled={cfg.enabled} "
+            f"channel={cfg.post_channel_id} freq={cfg.post_frequency} "
+            f"day_of_week={cfg.post_day_of_week} hour={cfg.post_hour} "
+            f"tz={cfg.timezone} guild={guild_id}"
         )
 
-        # ── 2. Respect explicit disable ────────────────────────────────────────
         if not cfg.enabled:
             return
-
-        # ── 3. Check schedule ─────────────────────────────────────────────────
         if not _is_due(cfg, now_utc):
             return
 
@@ -343,150 +338,125 @@ class LeaderboardCog(commands.Cog):
             f"source={cfg.source} freq={cfg.post_frequency}"
         )
 
-        # ── 4. Resolve channel (strict — no random fallback) ──────────────────
         channel = await _resolve_channel(guild, cfg.post_channel_id)
-
         if channel is None:
             logger.warning(
-                f"[Leaderboard ERROR] guild={guild_id} "
-                f"channel_source={cfg.channel_source} "
-                f"channel_id={cfg.post_channel_id} "
-                f"— channel unreachable, post suppressed"
+                f"[Leaderboard ERROR] guild={guild_id} channel={cfg.post_channel_id} "
+                f"unreachable — post suppressed"
             )
             return
 
-        logger.info(
-            f"[Leaderboard] channel_source={cfg.channel_source} "
-            f"channel_id={channel.id}"
-        )
-
-        # ── 5. Fetch guild config (currency) ──────────────────────────────────
-        guild_cfg     = await config_svc.get_guild_config(guild_id)
-        currency_name = guild_cfg.get("currency_name", "DevilCoins")
-        currency_icon = guild_cfg.get("currency_icon", "🪙")
-
-        # ── 6. Post the leaderboard ───────────────────────────────────────────
         success = await self._post_leaderboard(
-            channel       = channel,
-            guild         = guild,
-            guild_id      = guild_id,
-            cfg           = cfg,
-            currency_name = currency_name,
-            currency_icon = currency_icon,
+            channel  = channel,
+            guild    = guild,
+            guild_id = guild_id,
         )
 
-        # ── 7. Update last_posted_at ──────────────────────────────────────────
         if success:
             await config_svc.upsert_last_posted_at(guild_id)
+            # Immediately reset weekly stats after a successful post
+            await self.bot.db.reset_weekly_stats(guild_id)
+            logger.info(
+                f"[Leaderboard] weekly stats reset for guild={guild_id} "
+                f"after successful post"
+            )
 
-    # ── Build + send post ─────────────────────────────────────────────────────
+    # ── Build + send ──────────────────────────────────────────────────────────
 
     async def _post_leaderboard(
         self,
-        channel:       discord.abc.Messageable,
-        guild:         discord.Guild,
-        guild_id:      str,
-        cfg:           EffectiveLeaderboardConfig,
-        currency_name: str,
-        currency_icon: str,
+        channel:  discord.abc.Messageable,
+        guild:    discord.Guild,
+        guild_id: str,
     ) -> bool:
-        """Generate and send the leaderboard.  Returns True on success."""
-        logger.info(f"[Leaderboard] generating top 10 kingdom ranks for guild={guild_id}")
+        logger.info(f"[Leaderboard] building weekly top 10 for guild={guild_id}")
 
-        # ── 1. Fetch ranking data (rank hierarchy → balance, same as /identity) ─
+        # 1. Fetch candidates from DB (returns up to 25 eligible-rank rows)
         try:
-            rows = await self.bot.db.get_leaderboard(guild_id, limit=10)
+            candidates = await self.bot.db.get_weekly_kingdom_leaderboard(
+                guild_id, limit=25
+            )
         except Exception as exc:
             logger.warning(f"[Leaderboard] DB fetch failed for guild={guild_id}: {exc}")
-            rows = []
+            candidates = []
+
+        # 2. Filter by live Discord role eligibility
+        rows = await self._filter_eligible(guild, candidates, limit=10)
 
         if not rows:
-            logger.info(f"[Leaderboard] no data for guild={guild_id} — skipping")
+            logger.info(
+                f"[Leaderboard] no eligible data for guild={guild_id} — skipping"
+            )
             return False
 
-        # ── 2. Fetch member avatars ───────────────────────────────────────────
+        # 3. Build and send the message
+        message_text = _build_leaderboard_message(rows)
+
         try:
-            avatar_data = await _fetch_avatars(guild, rows)
-        except Exception as exc:
-            logger.warning(f"[Leaderboard] avatar fetch partial failure: {exc}")
-            avatar_data = [None] * len(rows)
-
-        # ── 3. Generate premium image ─────────────────────────────────────────
-        freq_label = {
-            "daily": "Daily", "weekly": "Weekly", "monthly": "Monthly",
-        }.get(cfg.post_frequency, "")
-
-        tz        = _parse_tz(cfg.timezone)
-        now_local = datetime.now(timezone.utc).astimezone(tz)
-        date_str  = now_local.strftime("%B %d, %Y  ·  %H:%M %Z")
-
-        image_title    = f"{freq_label} Kingdom Leaderboard".strip()
-        image_subtitle = "Ranked by hierarchy · then balance — mirrors /identity"
-
-        loop      = asyncio.get_event_loop()
-        image_buf: io.BytesIO = await loop.run_in_executor(
-            None,
-            lambda: generate_leaderboard_image(
-                rows          = rows,
-                currency_name = currency_name,
-                currency_icon = currency_icon,
-                title         = image_title.upper(),
-                subtitle      = image_subtitle,
-                date_str      = date_str,
-                avatar_data   = avatar_data,
-            ),
-        )
-
-        # ── 4. Build mention block ────────────────────────────────────────────
-        mention_lines = []
-        for i, row in enumerate(rows[:10], start=1):
-            discord_id = row.get("discord_id")
-            rank       = row.get("rank", "Forsaken")
-            balance    = int(row.get("balance", 0))
-            medal      = MEDALS[i - 1] if i <= 3 else f"**#{i}**"
-            mention    = f"<@{discord_id}>" if discord_id else f"**{row.get('username', 'Unknown')}**"
-            mention_lines.append(
-                f"{medal}  {mention}  ·  **{rank}**  ·  "
-                f"{currency_icon} `{balance:,}` {currency_name}"
-            )
-
-        header = (
-            f"## 🏆  {freq_label} Kingdom Leaderboard\n"
-            f"-# Ranked by hierarchy, then balance — matches `/identity`"
-        )
-        message_text = f"{header}\n\n" + "\n".join(mention_lines)
-
-        # ── 5. Send ───────────────────────────────────────────────────────────
-        try:
-            sent = await channel.send(
-                content = message_text,
-                file    = discord.File(image_buf, filename="leaderboard.png"),
-            )
+            sent = await channel.send(content=message_text)
             logger.info(
-                f"[Leaderboard] success message_id={sent.id} "
-                f"guild={guild_id} channel={channel.id} (#{channel.name}) "
-                f"users={len(rows)}"
+                f"[Leaderboard] posted message_id={sent.id} "
+                f"guild={guild_id} channel={channel.id} users={len(rows)}"
             )
             return True
         except discord.Forbidden:
             logger.warning(
                 f"[Leaderboard ERROR] permission denied sending to "
-                f"#{channel.name} ({channel.id}) in guild={guild_id}"
+                f"channel={channel.id} guild={guild_id}"
             )
         except Exception as exc:
             logger.error(
-                f"[Leaderboard ERROR] send failed for guild={guild_id} "
-                f"channel={channel.id}: {exc}",
+                f"[Leaderboard ERROR] send failed guild={guild_id}: {exc}",
                 exc_info=True,
             )
         return False
 
-    # ── Admin: manual trigger via /post_leaderboard ───────────────────────────
-
-    async def force_post(self, guild: discord.Guild):
+    async def _filter_eligible(
+        self,
+        guild:      discord.Guild,
+        candidates: List[dict],
+        limit:      int = 10,
+    ) -> List[dict]:
         """
-        Forcibly post the leaderboard for a guild right now (bypasses schedule check).
-        Called by admin commands.  Returns True on success.
+        Cross-reference candidates against live Discord role data.
+        Excludes members whose highest role is Owners / Royal Family /
+        Council / Legion (i.e. kingdom_rank_eligible == False).
+        """
+        eligible: List[dict] = []
+
+        for row in candidates:
+            discord_id = row.get("discord_id")
+            if not discord_id:
+                continue
+
+            try:
+                member = guild.get_member(int(discord_id))
+                if member is None:
+                    member = await guild.fetch_member(int(discord_id))
+            except (discord.NotFound, discord.HTTPException):
+                member = None
+
+            if member is None:
+                continue
+
+            role_ids = [str(r.id) for r in member.roles]
+            variant  = resolve_identity_card_variant(role_ids, row.get("rank", "Forsaken"))
+
+            if not variant.kingdom_rank_eligible:
+                continue
+
+            eligible.append(row)
+            if len(eligible) >= limit:
+                break
+
+        return eligible
+
+    # ── Admin: force post (bypasses schedule check) ───────────────────────────
+
+    async def force_post(self, guild: discord.Guild) -> bool:
+        """
+        Force-post the weekly leaderboard immediately.
+        Called by admin commands.  Does NOT reset weekly stats — staff use only.
         """
         config_svc = getattr(self.bot, "config_service", None)
         if config_svc is None:
@@ -494,33 +464,19 @@ class LeaderboardCog(commands.Cog):
 
         guild_id = str(guild.id)
         cfg      = await resolve_leaderboard_config(guild_id, config_svc)
+        channel  = await _resolve_channel(guild, cfg.post_channel_id)
 
-        channel = await _resolve_channel(guild, cfg.post_channel_id)
         if channel is None:
             logger.warning(
-                f"[Leaderboard ERROR] force_post: guild={guild_id} "
-                f"channel_source={cfg.channel_source} "
-                f"channel_id={cfg.post_channel_id} "
-                f"— channel unreachable, post suppressed"
+                f"[Leaderboard] force_post: channel={cfg.post_channel_id} "
+                f"unreachable for guild={guild_id}"
             )
             return False
 
-        logger.info(
-            f"[Leaderboard] force_post channel_source={cfg.channel_source} "
-            f"channel_id={channel.id}"
-        )
-
-        guild_cfg     = await config_svc.get_guild_config(guild_id)
-        currency_name = guild_cfg.get("currency_name", "DevilCoins")
-        currency_icon = guild_cfg.get("currency_icon", "🪙")
-
         success = await self._post_leaderboard(
-            channel       = channel,
-            guild         = guild,
-            guild_id      = guild_id,
-            cfg           = cfg,
-            currency_name = currency_name,
-            currency_icon = currency_icon,
+            channel  = channel,
+            guild    = guild,
+            guild_id = guild_id,
         )
         if success:
             await config_svc.upsert_last_posted_at(guild_id)
