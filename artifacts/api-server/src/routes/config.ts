@@ -623,12 +623,16 @@ router.get("/guilds/:guildId/bot-status", requireAuth, async (req, res) => {
     const heartbeatAgeMs    = lastHeartbeat ? (Date.now() - new Date(lastHeartbeat).getTime()) : Infinity;
     const heartbeatAgeSecs  = lastHeartbeat ? Math.floor(heartbeatAgeMs / 1000) : null;
 
-    // Thresholds: ONLINE < 15s, DEGRADED 15–45s, OFFLINE > 45s
+    // Bot writes heartbeat every 30s.
+    // Thresholds must be larger than the interval to avoid false OFFLINE.
+    // ONLINE   < 45s  (comfortable 1.5× margin around the 30s interval)
+    // DEGRADED < 120s (4× interval — 3 missed heartbeats)
+    // OFFLINE  ≥ 120s (clearly dead — 4 missed heartbeats)
     let botStatus:      "online" | "degraded" | "offline";
     let heartbeatState: "live"   | "delayed"  | "lost";
-    if (heartbeatAgeMs < 15_000) {
+    if (heartbeatAgeMs < 45_000) {
       botStatus = "online";   heartbeatState = "live";
-    } else if (heartbeatAgeMs < 45_000) {
+    } else if (heartbeatAgeMs < 120_000) {
       botStatus = "degraded"; heartbeatState = "delayed";
     } else {
       botStatus = "offline";  heartbeatState = "lost";
