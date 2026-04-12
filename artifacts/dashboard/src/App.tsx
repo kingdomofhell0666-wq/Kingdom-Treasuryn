@@ -2,19 +2,21 @@ import { Switch, Route, Router as WouterRouter } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import Home from "@/pages/index";
+import LoginPage from "@/pages/login";
+import GuildsPage from "@/pages/guilds";
 
 const queryClient = new QueryClient();
 
 function Router() {
   return (
     <Switch>
-      <Route path="/" component={Home} />
+      <Route path="/" component={LoginPage} />
+      <Route path="/guilds" component={GuildsPage} />
       <Route>
         <div className="min-h-screen bg-background flex items-center justify-center">
           <div className="text-center space-y-2">
             <p className="text-2xl font-bold text-foreground">404</p>
-            <p className="text-muted-foreground">Page not found</p>
+            <p className="text-muted-foreground text-sm">Page not found</p>
           </div>
         </div>
       </Route>
