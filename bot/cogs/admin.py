@@ -425,3 +425,139 @@ class AdminCog(commands.Cog):
                 treasury_after   = amount,
                 action_type      = "treasury",
             )
+
+    # ── /test-kingdom-ranks ───────────────────────────────────────────────────
+
+    @app_commands.command(
+        name        = "test-kingdom-ranks",
+        description = "[Admin] Post the weekly Kingdom Ranks leaderboard right now for testing. Does NOT reset weekly data.",
+    )
+    @app_commands.describe(
+        channel = "Channel to post the test leaderboard in (defaults to this channel).",
+    )
+    @app_commands.default_permissions(administrator=True)
+    async def test_kingdom_ranks(
+        self,
+        interaction: discord.Interaction,
+        channel:     discord.TextChannel = None,
+    ):
+        await interaction.response.defer(ephemeral=True)
+
+        if not is_admin_user(interaction):
+            await interaction.followup.send(embed=denied_generic(), ephemeral=True)
+            return
+
+        target = channel or interaction.channel
+        guild  = interaction.guild
+
+        # Pull the LeaderboardCog to reuse its build logic
+        from .leaderboard import _build_leaderboard_message
+        from bot.utils.identity_variant import resolve_identity_card_variant
+
+        guild_id   = str(guild.id)
+        candidates = await self.bot.db.get_weekly_kingdom_leaderboard(guild_id, limit=25)
+
+        # Filter by live Discord eligibility
+        eligible = []
+        for row in candidates:
+            discord_id = row.get("discord_id")
+            if not discord_id:
+                continue
+            try:
+                member = guild.get_member(int(discord_id)) or await guild.fetch_member(int(discord_id))
+            except Exception:
+                member = None
+            if member is None:
+                continue
+            role_ids = [str(r.id) for r in member.roles]
+            variant  = resolve_identity_card_variant(role_ids, row.get("rank", "Forsaken"))
+            if not variant.kingdom_rank_eligible:
+                continue
+            eligible.append(row)
+            if len(eligible) >= 10:
+                break
+
+        if not eligible:
+            await interaction.followup.send(
+                embed=discord.Embed(
+                    title       = "📊  Kingdom Ranks — Test",
+                    description = "*No eligible data to display yet.*\n\n"
+                                  "*Have eligible members earn DevilCoins or spend time in voice this week.*",
+                    color       = _VOID,
+                ),
+                ephemeral=True,
+            )
+            return
+
+        message_text = _build_leaderboard_message(eligible)
+
+        try:
+            await target.send(content=message_text)
+        except discord.Forbidden:
+            await interaction.followup.send(
+                embed=_err(f"Cannot send to {target.mention} — missing permissions."),
+                ephemeral=True,
+            )
+            return
+
+        embed = discord.Embed(
+            title       = "📊  Test Leaderboard Posted",
+            description = (
+                f"*Weekly Kingdom Ranks test posted in {target.mention}.*\n\n"
+                f"Weekly data was **not** reset — this was a read-only test."
+            ),
+            color       = _GOLD,
+        )
+        embed.set_footer(text=f"Triggered by {interaction.user.display_name}  ·  Kingdom Treasury")
+        await interaction.followup.send(embed=embed, ephemeral=True)
+
+    # ── /reset-weekly-kingdom-ranks ───────────────────────────────────────────
+
+    @app_commands.command(
+        name        = "reset-weekly-kingdom-ranks",
+        description = "[Admin] Reset weekly active time + weekly DC earned for all users. Permanent data untouched.",
+    )
+    @app_commands.default_permissions(administrator=True)
+    async def reset_weekly_kingdom_ranks(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+
+        if not is_admin_user(interaction):
+            await interaction.followup.send(embed=denied_generic(), ephemeral=True)
+            return
+
+        guild_id = str(interaction.guild_id)
+
+        # Snapshot counts before reset so we can show them in the confirmation
+        candidates = await self.bot.db.get_weekly_kingdom_leaderboard(guild_id, limit=500)
+        users_with_activity = sum(
+            1 for r in candidates
+            if r.get("weekly_active_seconds", 0) > 0 or r.get("weekly_dc_earned", 0) > 0
+        )
+
+        await self.bot.db.reset_weekly_stats(guild_id)
+
+        embed = discord.Embed(
+            title       = "🔄  Weekly Kingdom Ranks — Reset",
+            description = (
+                "*Weekly active time and weekly DevilCoins earned have been zeroed.*\n\n"
+                "*The next leaderboard cycle begins now.*"
+            ),
+            color       = _CRIMSON,
+        )
+        embed.add_field(
+            name   = "Reset",
+            value  = "`weekly_active_seconds`\n`weekly_dc_earned`",
+            inline = True,
+        )
+        embed.add_field(
+            name   = "Untouched",
+            value  = "Wallet · Inventory · Ranks · Profile",
+            inline = True,
+        )
+        embed.add_field(
+            name   = "Users affected",
+            value  = f"**{users_with_activity}** had non-zero weekly stats",
+            inline = False,
+        )
+        embed.set_footer(text=f"Reset by {interaction.user.display_name}  ·  Kingdom Treasury")
+        await interaction.followup.send(embed=embed, ephemeral=True)
