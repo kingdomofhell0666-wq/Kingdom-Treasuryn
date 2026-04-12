@@ -170,6 +170,24 @@ PORT=3000 BASE_PATH=/dashboard/ pnpm --filter @workspace/dashboard run build
 - Dark mode: `class="dark"` must be on the `<html>` tag in `index.html` (already set)
 - `/api/app-config` is a public endpoint returning `{ discordClientId }` for the frontend invite link generator
 
+### Block 3 — Complete (Live API Connection + Bot Data Integration)
+
+**New API routes** (`artifacts/api-server/src/routes/data.ts`):
+- `GET /api/ranks` — public rank registry: all 16 ranks with name, cost, taxRate, purchasable, group, defaultCooldownSeconds (no auth required — canonical metadata)
+- `GET /api/guilds/:id/kingdom-ranks/data` — weekly Kingdom Ranks leaderboard (top 10 by `weekly_active_seconds DESC` → `weekly_dc_earned DESC` → rank tier); returns weekStart/nextReset ISO timestamps, secsToReset countdown, totalEligible count
+- `GET /api/guilds/:id/market-summary` — cosmetics ownership stats from SQLite (usersWithSkins/Titles/Relics/Badges, totalOwnedSkins/Titles, mostPopularRank)
+- `GET /api/guilds/:id/inventory-summary` — per-member cosmetic items (top 20 by wallet: equippedSkin/Title/Relic/badgeCount/ownedSkins/ownedTitles)
+- All routes protected by `requireAuth` + `assertGuildAdmin`
+
+**Upgraded frontend pages** (placeholders replaced with live API data):
+- **`kingdom-ranks.tsx`**: Real weekly leaderboard with live countdown to Monday reset, ranking criteria banner (active time → DC earned → rank tier tiebreaker), eligibility rules, refresh button, empty state handling
+- **`identity-page.tsx`**: Centralized rank registry table from `/api/ranks` — all 16 ranks with cost/tax/cooldown/purchasable columns, nobility group badges, staff section, summary cards
+- **`market.tsx`**: Cosmetics adoption dashboard — stat cards (total members, skins owned, titles owned, relics equipped), animated adoption progress bars per cosmetic type
+- **`inventory.tsx`**: Member inventory browser — grid table with equippedSkin/Title/Relic/badges per member, sorted by wallet balance
+- **`automation.tsx`**: Live automation status — reads real `/api/guilds/:id/leaderboard` + `/api/guilds/:id/ascension-announcements` settings; shows enabled/disabled state, schedule details, last-posted timestamp, links to configuration pages
+
+**Architecture**: All four new frontend pages use `apiGet()` + `useState`/`useEffect` data hooks with loading spinners, error alerts with retry buttons, and empty states. No hardcoded fallback values presented as real data.
+
 ### Block 2 — Complete (Dashboard Shell + Server Overview)
 
 - **AppLayout** (`src/components/layout.tsx`): Full Mee6-style layout with sticky topbar (guild name + member count + breadcrumb), sidebar with 7 sections + active state indicators (crimson bar on active item), guild server-switcher in sidebar header, user footer with logout dropdown
