@@ -1,9 +1,10 @@
 import { Switch, Route, Router as WouterRouter } from "wouter";
-import LoginPage   from "@/pages/login";
-import GuildsPage  from "@/pages/guilds";
-import OverviewPage from "@/pages/guilds/overview";
+import LoginPage     from "@/pages/login";
+import GuildsPage    from "@/pages/guilds";
+import OverviewPage  from "@/pages/guilds/overview";
+import BotStatusPage from "@/pages/guilds/bot-status";
 import {
-  BotStatusPage, EconomyPage, CurrencyPage, TreasuryPage,
+  EconomyPage, CurrencyPage, TreasuryPage,
   RoutingPage, PermissionsPage, RanksPage, AscensionPage,
   MarketPage, InventoryPage, IdentityPage,
   KingdomRanksPage, AutomationPage, SettingsPage, ResetPage,

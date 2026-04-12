@@ -17,6 +17,7 @@ from .services.cerberus_aggression import CerberusAggression
 from .services.mission_service import MissionService
 from .services.ledger_service import LedgerService
 from .services.pressure_service import PressureService
+from .services.heartbeat_service import HeartbeatService
 
 logger = logging.getLogger("kingdom_treasury")
 
@@ -47,6 +48,7 @@ class KingdomTreasuryBot(commands.Bot):
         self.mission_service                 = None
         self.ledger_service: LedgerService    = None
         self.pressure_service: PressureService = None
+        self.heartbeat_service: HeartbeatService = HeartbeatService(self)
 
     async def setup_hook(self):
         await self.db.connect()
@@ -120,6 +122,8 @@ class KingdomTreasuryBot(commands.Bot):
         await self.db.set_meta("start_time", datetime.now(timezone.utc).isoformat())
         if not self._heartbeat_loop.is_running():
             self._heartbeat_loop.start()
+        # Start dashboard heartbeat service
+        asyncio.create_task(self.heartbeat_service.run())
         # Sync all guild structures into PostgreSQL so the dashboard
         # always has up-to-date channel/role data.
         asyncio.create_task(self.guild_sync_service.sync_all(list(self.guilds)))

@@ -1,5 +1,5 @@
 import {
-  Activity, Coins, CircleDollarSign, Landmark, Share2, Shield,
+  Coins, CircleDollarSign, Landmark, Share2, Shield,
   Crown, TrendingUp, ShoppingBag, Package, IdCard, Trophy, Zap,
   Settings, AlertTriangle,
 } from "lucide-react";
@@ -29,11 +29,6 @@ function makePage(
     );
   };
 }
-
-export const BotStatusPage = makePage(
-  "Bot Status", Activity, "Bot Status",
-  "Monitor your Kingdom Treasury bot's connection, latency, and command health in real time.",
-);
 
 export const EconomyPage = makePage(
   "Economy", Coins, "Economy",
