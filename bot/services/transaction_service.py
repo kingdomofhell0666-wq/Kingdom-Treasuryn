@@ -17,10 +17,12 @@ class TransactionService:
 
     async def tribute_reward(self, guild_id: str, discord_id: str, gross: int, tax: int, net: int):
         user = f"user:{discord_id}"
-        await self.db.log_transaction(guild_id, "tribute_gross", "kingdom_mint", user, gross, "Tribute from the realm")
+        # Deduct the full gross from the Treasury (tax stays in treasury, net goes to user)
+        await self.db.update_treasury(guild_id, -gross)
+        await self.db.log_transaction(guild_id, "tribute_gross", "treasury", user, gross, "Tribute paid from Kingdom Treasury")
         if tax > 0:
-            await self.db.log_transaction(guild_id, "tribute_tax", user, "treasury", tax, "Kingdom tax on tribute")
             await self.db.update_treasury(guild_id, tax)
+            await self.db.log_transaction(guild_id, "tribute_tax", user, "treasury", tax, "Kingdom tax returned to Treasury")
             await self.db.add_taxes_paid(guild_id, discord_id, tax)
         if net > 0:
             await self.db.update_balance(guild_id, discord_id, net)

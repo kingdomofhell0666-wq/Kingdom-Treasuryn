@@ -160,6 +160,14 @@ class EconomyService:
         bonus     = self.TRIBUTE_GRIND_BONUS if grind_24h >= self.TRIBUTE_GRIND_THRESHOLD else 0
         gross     = base + bonus
 
+        # Treasury check — tribute is drawn from the Kingdom Treasury, not conjured
+        treasury_balance = await self.db.get_treasury_balance(guild_id)
+        if treasury_balance < gross:
+            raise ValueError(
+                f"The Kingdom Treasury is depleted. "
+                f"Only {treasury_balance:,} DC remains — not enough to honour your tribute of {gross:,} DC."
+            )
+
         tax_rate = self.rank_service.get_tax_rate(user["rank"])
         exempt_perk = next((p for p in perks if p["perk_type"] == "tax_exempt"), None)
         if exempt_perk:
