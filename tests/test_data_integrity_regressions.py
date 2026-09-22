@@ -238,5 +238,98 @@ class CleanupPersistenceRegressionTests(unittest.TestCase):
             self.assertTrue(source.exists())
 
 
+class BackupRestoreRegressionTests(unittest.IsolatedAsyncioTestCase):
+    _EXPECTED_BUSINESS_TABLES = frozenset(
+        {"meta", "users", "treasury", "transactions"}
+    )
+
+    @staticmethod
+    def _snapshot_database(path: Path) -> dict[str, tuple[tuple[object, ...], ...]]:
+        with sqlite3.connect(path) as connection:
+            tables = {
+                row[0]
+                for row in connection.execute(
+                    """
+                    SELECT name
+                    FROM sqlite_master
+                    WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
+                    """
+                )
+            }
+            return {
+                table: tuple(
+                    tuple(row)
+                    for row in connection.execute(
+                        f'SELECT * FROM "{table}" ORDER BY rowid'
+                    )
+                )
+                for table in sorted(tables)
+            }
+
+    def _assert_database_restored(
+        self, source_path: Path, restored_path: Path
+    ) -> None:
+        source = self._snapshot_database(source_path)
+        restored = self._snapshot_database(restored_path)
+
+        self.assertTrue(
+            self._EXPECTED_BUSINESS_TABLES <= source.keys(),
+            "La base source ne contient pas toutes les tables métier attendues.",
+        )
+        self.assertEqual(
+            set(source),
+            set(restored),
+            "La restauration a perdu une table SQLite.",
+        )
+        for table in sorted(source):
+            self.assertEqual(
+                source[table],
+                restored[table],
+                f"La restauration a perdu ou modifié une ligne dans « {table} ».",
+            )
+
+    async def test_backup_restores_users_balances_transactions_and_metadata(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source_path = root / cleanup_module.DATABASE_FILENAME
+            backup_directory = root / "backup"
+            restored_path = root / "restored.db"
+
+            with patch.object(db_module, "DB_PATH", str(source_path)), patch.object(
+                cleanup_module, "PROJECT_ROOT", root
+            ):
+                database = Database()
+                await database.connect()
+                await database.upsert_user("guild-1", "user-1", "Keeper")
+                await database.upsert_user("guild-1", "user-2", "Treasurer")
+                await database.set_balance("guild-1", "user-1", 9876)
+                await database.set_balance("guild-1", "user-2", 4321)
+                await database.update_treasury("guild-1", 2468)
+                await database.log_transaction(
+                    "guild-1",
+                    "tribute",
+                    "user:user-1",
+                    "treasury:guild-1",
+                    2468,
+                    "restoration fixture",
+                )
+                await database.set_meta("backup_marker", "restore-check-2026-09-22")
+                await database.close()
+
+                backup_directory.mkdir()
+                status = cleanup_module._backup_database(backup_directory)
+
+            self.assertIn("copie SQLite vérifiée", status)
+            backup_path = backup_directory / cleanup_module.DATABASE_FILENAME
+
+            # Simulate restoring the verified backup into a fresh database file.
+            with sqlite3.connect(backup_path) as backup, sqlite3.connect(
+                restored_path
+            ) as restored:
+                backup.backup(restored)
+
+            self._assert_database_restored(source_path, restored_path)
+
+
 if __name__ == "__main__":
     unittest.main()
