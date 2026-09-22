@@ -74,6 +74,14 @@ def is_admin_user(interaction: discord.Interaction) -> bool:
     return perms.administrator or perms.manage_guild
 
 
+def is_strict_discord_admin(interaction: discord.Interaction) -> bool:
+    """True only for a member with Discord's Administrator permission."""
+    if not interaction.guild:
+        return False
+    perms = getattr(interaction.user, "guild_permissions", None)
+    return bool(perms and perms.administrator)
+
+
 def is_kingdom_or_admin(interaction: discord.Interaction) -> bool:
     """Kingdom staff OR Discord admin — used for /treasury."""
     return is_kingdom_staff(interaction) or is_admin_user(interaction)

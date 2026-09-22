@@ -1,0 +1,167 @@
+Tu dois effectuer un NETTOYAGE COMPLET du code de mon bot Discord Kingdom Treasury.
+
+⚠️ PRIORITÉ ABSOLUE : NE RIEN CASSER ET NE RIEN SUPPRIMER D’IMPORTANT.
+
+Avant de modifier quoi que ce soit :
+
+1. Analyse l’intégralité du projet et comprends sa structure.
+2. Identifie toutes les commandes, fonctions, événements, systèmes, fichiers et dépendances actuellement utilisés.
+3. Identifie les éléments critiques, notamment :
+   - économie / monnaie
+   - soldes des utilisateurs
+   - inventaires
+   - banques / comptes
+   - transactions
+   - données persistantes
+   - bases de données
+   - sauvegardes
+   - rôles et permissions
+   - systèmes de récompenses
+   - commandes Discord
+   - variables d’environnement
+   - configuration
+   - tâches automatiques
+   - systèmes anti-abus / sécurité
+4. NE SUPPRIME AUCUNE donnée utilisateur et NE RÉINITIALISE AUCUNE base de données.
+5. NE MODIFIE PAS le fonctionnement d’un système critique simplement pour rendre le code plus propre.
+
+OBJECTIF DU NETTOYAGE
+
+Supprime uniquement ce qui est réellement inutile, mort ou abandonné, par exemple :
+
+- fichiers jamais utilisés
+- anciennes fonctions qui ne sont appelées nulle part
+- commandes obsolètes
+- imports inutilisés
+- variables inutilisées
+- dépendances inutiles
+- doublons
+- anciens systèmes remplacés
+- code commenté qui n’est plus nécessaire
+- anciens tests qui ne servent plus
+- logs/debug inutiles
+- fichiers temporaires
+- anciennes versions d’un système qui n’est plus utilisé
+
+⚠️ Si tu n’es pas certain qu’un élément est inutile, NE LE SUPPRIME PAS.
+
+En cas de doute : CONSERVE-LE.
+
+PROTECTION DES SYSTÈMES IMPORTANTS
+
+Les systèmes suivants doivent être considérés comme CRITIQUES :
+
+- économie
+- monnaie
+- balances
+- transactions
+- données utilisateurs
+- database
+- sauvegardes
+- permissions
+- rôles
+- commandes administratives
+- configuration du bot
+- gestion du token Discord
+- systèmes automatiques
+- cooldowns
+- anti-spam / anti-abus
+- logs importants
+
+Tu dois préserver leur fonctionnement exactement autant que possible.
+
+Ne change pas les noms des tables, colonnes, clés, fichiers de données ou structures persistantes sans nécessité absolue.
+
+Ne fais aucune migration destructive.
+
+Ne supprime aucune donnée.
+
+AJOUT DE LA COMMANDE /CONDEMNED
+
+Ajoute une commande Discord :
+
+/condemned
+
+Cette commande doit être STRICTEMENT réservée aux administrateurs autorisés.
+
+IMPORTANT :
+
+- Un utilisateur normal ne doit jamais pouvoir exécuter cette commande.
+- Vérifie les permissions côté serveur ET côté code.
+- Utilise une permission Discord appropriée comme Administrator ou une liste d’IDs d’administrateurs configurée de façon sécurisée.
+- Ne te contente jamais de cacher la commande : la permission doit également être vérifiée lors de son exécution.
+- Si un utilisateur non autorisé tente de l’utiliser, refuse silencieusement ou retourne un message d’accès refusé.
+- Ne révèle aucune information sensible.
+
+FONCTIONNEMENT DE /CONDEMNED
+
+/condemned doit lancer le processus de nettoyage sécurisé.
+
+AVANT de supprimer quoi que ce soit :
+
+1. Génère un rapport de nettoyage.
+2. Liste les fichiers et éléments considérés comme inutiles.
+3. Identifie clairement les éléments critiques détectés.
+4. Vérifie les références croisées afin de confirmer qu’un élément n’est utilisé nulle part.
+5. Crée une sauvegarde du projet avant toute suppression si cela est possible dans l’environnement Replit.
+6. Ne supprime automatiquement que les éléments dont l’inutilité est suffisamment certaine.
+
+Si le système ne peut pas confirmer qu’un élément est inutile, il doit le laisser intact.
+
+MODE SÉCURISÉ
+
+Je préfère avoir du code inutile qui reste dans le projet plutôt que de perdre une fonctionnalité importante.
+
+Donc :
+
+INCERTITUDE = CONSERVER.
+
+Ne jamais faire :
+
+- suppression massive de fichiers
+- suppression de database
+- reset de données
+- suppression de variables d’environnement
+- suppression du token/configuration
+- suppression de commandes sans vérifier leurs références
+- modification destructive des structures de données
+- remplacement complet du projet par une nouvelle architecture
+- réécriture massive du bot simplement parce qu’une architecture différente serait « plus propre »
+
+APRÈS LE NETTOYAGE
+
+Une fois terminé :
+
+1. Vérifie que le bot démarre correctement.
+2. Vérifie que les commandes principales sont toujours présentes.
+3. Vérifie que les systèmes économiques fonctionnent toujours.
+4. Vérifie que la database est accessible.
+5. Vérifie que les permissions fonctionnent.
+6. Vérifie que "/condemned" est uniquement accessible aux administrateurs.
+7. Vérifie qu’aucune donnée utilisateur n’a été supprimée.
+8. Vérifie qu’il n’y a pas d’erreurs évidentes dans les logs.
+9. Fais un résumé des modifications.
+
+Le rapport final doit contenir :
+
+- fichiers supprimés
+- fichiers modifiés
+- code supprimé
+- dépendances retirées
+- éléments conservés volontairement
+- systèmes critiques détectés
+- tests effectués
+- problèmes éventuels
+- éléments laissés volontairement parce qu’ils étaient incertains
+
+⚠️ RÈGLE FINALE :
+
+Le but n’est PAS de réécrire Kingdom Treasury.
+
+Le but est de nettoyer le projet sans détruire son fonctionnement actuel.
+
+Conserve tout ce qui est important.
+
+Supprime uniquement ce qui est clairement inutile.
+
+En cas de doute, NE SUPPRIME PAS.

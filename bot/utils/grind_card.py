@@ -7,12 +7,11 @@ Outcome-aware: badge, Net Gain highlight, and avatar border reflect the grind re
 """
 
 import io
-import math
 from typing import Optional
 from PIL import Image, ImageDraw, ImageFilter
 
 from .card_generator import (
-    _font, _tw, _glow, _gradient, _card_mask, THEMES, _t, fetch_avatar,
+    _font, _tw, _glow, _gradient, _card_mask, _t,
     _sig_star, _sig_crown, _sig_eye, _sig_sun, _sig_fleur, _sig_throne, _sig_cross,
 )
 

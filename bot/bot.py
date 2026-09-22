@@ -60,14 +60,15 @@ class KingdomTreasuryBot(commands.Bot):
         force_reset = os.environ.get("FULL_RESET_ON_START", "").lower() in ("1", "true", "yes")
 
         if force_reset:
-            logger.warning("FULL_RESET_ON_START is set — wiping all economy data.")
-            await self.db.reset_all_data()
+            logger.error(
+                "FULL_RESET_ON_START was requested but ignored: startup must never "
+                "wipe economy data. Use an explicit, audited admin action instead."
+            )
         elif stored_fp and stored_fp != current_fp:
             logger.warning(
                 f"Token fingerprint mismatch (stored={stored_fp}, current={current_fp}). "
-                "Resetting all economy data."
+                "Preserving all economy data; token changes are not a reset trigger."
             )
-            await self.db.reset_all_data()
 
         await self.db.set_meta("token_fingerprint", current_fp)
 
@@ -154,10 +155,12 @@ class KingdomTreasuryBot(commands.Bot):
         await self.db.set_meta("last_heartbeat", datetime.now(timezone.utc).isoformat())
 
     async def on_guild_remove(self, guild: discord.Guild):
-        """When the bot is kicked from or leaves a guild, purge that guild's economy data."""
+        """Preserve guild data when the bot leaves; deletion requires explicit action."""
         guild_id = str(guild.id)
-        await self.db.reset_guild_data(guild_id)
-        logger.info(f"Removed from guild {guild_id} ({guild.name}) — economy data purged.")
+        logger.info(
+            f"Removed from guild {guild_id} ({guild.name}) — "
+            "economy data preserved for a future return or explicit admin action."
+        )
 
     async def close(self):
         await self.db.close()

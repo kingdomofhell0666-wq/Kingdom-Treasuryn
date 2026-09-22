@@ -64,10 +64,38 @@ class Database:
 
         if current < SCHEMA_VERSION:
             logger.info(
-                f"Schema version {current} → {SCHEMA_VERSION}: rebuilding all economy tables."
+                f"Schema version {current} → {SCHEMA_VERSION}: "
+                "running a non-destructive migration."
             )
-            await self._drop_economy_tables()
             await self._create_economy_tables()
+            await self._additive_migrations()
+
+            required_columns = {
+                "users": ("guild_id", "discord_id", "balance"),
+                "transactions": ("guild_id", "amount"),
+                "treasury": ("guild_id", "balance"),
+                "cooldowns": ("guild_id", "discord_id"),
+            }
+            incompatible = []
+            for table, columns in required_columns.items():
+                async with self._db.execute(f"PRAGMA table_info({table})") as cur:
+                    existing = {row[1] for row in await cur.fetchall()}
+                missing = [column for column in columns if column not in existing]
+                if missing:
+                    incompatible.append(f"{table}: {', '.join(missing)}")
+
+            if incompatible:
+                details = "; ".join(incompatible)
+                logger.critical(
+                    "Schema migration stopped without deleting data. "
+                    "Manual migration is required: %s",
+                    details,
+                )
+                raise RuntimeError(
+                    "Incompatible legacy database schema; no data was deleted. "
+                    "Manual migration required."
+                )
+
             await self.set_meta("schema_version", str(SCHEMA_VERSION))
             logger.info("Schema migration complete.")
         else:

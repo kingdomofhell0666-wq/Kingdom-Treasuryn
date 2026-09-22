@@ -20,15 +20,11 @@ cleaned up after each full sync.
 import asyncio
 import logging
 import os
-from typing import List, Optional
+from typing import List
 
 import discord
 
 logger = logging.getLogger("kingdom_treasury")
-
-# Channel types we store
-_TEXT_TYPES = {0, 5}  # 0 = text, 5 = announcement
-
 
 class GuildSyncService:
     def __init__(self):

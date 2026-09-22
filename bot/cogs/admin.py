@@ -10,6 +10,7 @@ Permission tiers (enforced at Discord-level visibility AND backend):
 """
 
 import asyncio
+import io
 import discord
 from discord import app_commands
 from discord.ext import commands
@@ -18,12 +19,13 @@ _DC = "<:devilcoinStack:1492184333392412692>"
 
 from ..utils.permissions import (
     is_admin_user,
+    is_strict_discord_admin,
     is_extended_staff,
     is_kingdom_or_admin,
     denied_generic,
 )
 from ..utils.result_cards import generate_treasury_card
-from ..utils.card_generator import fetch_avatar
+from ..services.cleanup_service import run_cleanup
 
 _VOID    = 0x0A0A0A
 _CRIMSON = 0xB22222
@@ -51,6 +53,72 @@ class AdminCog(commands.Cog):
     @property
     def ledger(self):
         return getattr(self.bot, "ledger_service", None)
+
+    # ── /condemned ────────────────────────────────────────────────────────────
+
+    @app_commands.command(
+        name="condemned",
+        description="[Admin] Generate a safe cleanup report; confirm only generated caches.",
+    )
+    @app_commands.describe(
+        confirm="Explicitly confirm removal of CERTAIN generated Python caches only.",
+    )
+    @app_commands.default_permissions(administrator=True)
+    async def condemned(self, interaction: discord.Interaction, confirm: bool = False):
+        await interaction.response.defer(ephemeral=True)
+
+        # default_permissions controls command visibility in Discord, but is
+        # not an authorization boundary.  This strict check rejects Manage
+        # Guild-only users and all DM invocations.
+        if not is_strict_discord_admin(interaction):
+            await interaction.followup.send(embed=denied_generic(), ephemeral=True)
+            return
+
+        result = await asyncio.to_thread(run_cleanup, confirm)
+        mode = "Nettoyage confirmé" if confirm else "Rapport uniquement"
+        embed = discord.Embed(
+            title=f"☠  Condemned — {mode}",
+            description=(
+                "Les systèmes critiques sont protégés. "
+                "Aucune donnée utilisateur ni base de données n’est ciblée."
+            ),
+            color=_GOLD if not result.error else _CRIMSON,
+        )
+        embed.add_field(
+            name="Référence croisée",
+            value=(
+                f"**{result.report_after.cog_count}** cogs · "
+                f"**{result.report_after.command_count}** commandes détectées"
+            ),
+            inline=True,
+        )
+        embed.add_field(
+            name="Candidats certains restants",
+            value=str(len(result.report_after.candidates)),
+            inline=True,
+        )
+        embed.add_field(
+            name="Éléments supprimés",
+            value=str(len(result.removed)),
+            inline=True,
+        )
+        embed.add_field(
+            name="Sauvegarde",
+            value=result.backup_status[:1024],
+            inline=False,
+        )
+        if result.error:
+            embed.add_field(name="Aucune suppression", value=result.error[:1024], inline=False)
+        embed.set_footer(
+            text=f"Rapport {result.report_after.report_id} · "
+                 f"Déclenché par {interaction.user.display_name}"
+        )
+
+        report_file = discord.File(
+            io.BytesIO(result.text().encode("utf-8")),
+            filename=f"condemned-report-{result.report_after.report_id}.txt",
+        )
+        await interaction.followup.send(embed=embed, file=report_file, ephemeral=True)
 
     # ── /add-dc ───────────────────────────────────────────────────────────────
 

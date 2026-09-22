@@ -27,6 +27,7 @@ bot/
 │   ├── cerberus_service.py      # risk_score audit system
 │   ├── blackmarket_service.py   # rotating 4/8 item black market
 │   └── investment_service.py    # safe/medium/risky time-locked investments
+│   ├── cleanup_service.py       # conservative /condemned cleanup reports
 ├── ui/                  # Discord Views
 │   ├── infernal_market.py       # AAA hub market (hub→category→acquire→preview)
 │   ├── market_view.py           # legacy paginated market (kept for compat)
@@ -65,6 +66,7 @@ main.py                  # Entry point
 | `/portfolio` | View active and matured investments |
 | `/collect` | Claim all matured investments |
 | `/withdraw` | Early withdrawal of all positions (20% penalty) |
+| `/condemned` | Admin-only, report-first cleanup of only certain generated caches |
 
 ## Economy
 

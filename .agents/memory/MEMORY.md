@@ -1,0 +1,1 @@
+- [Conservative cleanup policy](conservative-cleanup.md) — cleanup reports first; only fixed generated-cache candidates may be removed after backup and explicit confirmation.
