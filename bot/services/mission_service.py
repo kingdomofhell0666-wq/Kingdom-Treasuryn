@@ -19,6 +19,7 @@ logger = logging.getLogger("kingdom_treasury")
 
 # Canonical rank order — lower index = lower rank
 _RANK_INDEX: dict[str, int] = {
+    "Unranked": -1,
     "Forsaken": 0, "Vermin": 1, "Corrupted": 2, "Folklore": 3,
     "Mythology": 4, "Demonology": 5, "Eschatology": 6, "Archangel": 7,
     "Archdemon": 8, "Knight": 9, "Baron": 10, "Viscount": 11,
@@ -177,9 +178,9 @@ class MissionService:
         required_rank = mission.get("required_rank")
         if required_rank:
             user = await self.db.get_user(guild_id, discord_id)
-            user_rank  = user.get("rank", "Forsaken") if user else "Forsaken"
+            user_rank  = user.get("rank", "Unranked") if user else "Unranked"
             req_idx    = _RANK_INDEX.get(required_rank, 0)
-            user_idx   = _RANK_INDEX.get(user_rank, 0)
+            user_idx   = _RANK_INDEX.get(user_rank, -1)
             if user_idx < req_idx:
                 return {"ok": False, "reason": "You are not worthy of this task."}
 

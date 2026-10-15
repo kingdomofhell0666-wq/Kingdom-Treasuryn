@@ -11,6 +11,9 @@ Permission tiers (enforced at Discord-level visibility AND backend):
 
 import asyncio
 import io
+import logging
+import os
+from typing import Optional
 import discord
 from discord import app_commands
 from discord.ext import commands
@@ -26,10 +29,13 @@ from ..utils.permissions import (
 )
 from ..utils.result_cards import generate_treasury_card
 from ..services.cleanup_service import run_cleanup
+from ..services.database_backup_service import DatabaseBackupService
+from ..database.db import DB_PATH
 
 _VOID    = 0x0A0A0A
 _CRIMSON = 0xB22222
 _GOLD    = 0xFFD700
+logger   = logging.getLogger("kingdom_treasury")
 
 
 def _err(msg: str) -> discord.Embed:
@@ -119,6 +125,137 @@ class AdminCog(commands.Cog):
             filename=f"condemned-report-{result.report_after.report_id}.txt",
         )
         await interaction.followup.send(embed=embed, file=report_file, ephemeral=True)
+
+    @app_commands.command(
+        name="reset",
+        description="[Founder only] Back up, then clear Kingdom Treasury player data.",
+    )
+    @app_commands.describe(
+        confirmation="Type exactly RESET. A verified backup is required before data is cleared.",
+    )
+    async def reset_kingdom_treasury(
+        self,
+        interaction: discord.Interaction,
+        confirmation: Optional[str] = None,
+    ):
+        actor_id = str(interaction.user.id)
+        founder_id = os.environ.get("FOUNDER_ID", "").strip()
+
+        if not founder_id.isdigit():
+            logger.warning(
+                "Global reset blocked: FOUNDER_ID is not configured; actor_id=%s",
+                actor_id,
+            )
+            await interaction.response.send_message(
+                embed=_err("Reset unavailable: FOUNDER_ID is not configured correctly."),
+                ephemeral=True,
+            )
+            return
+        if actor_id != founder_id:
+            logger.warning("Global reset denied: unauthorized actor_id=%s", actor_id)
+            await interaction.response.send_message(
+                embed=denied_generic(),
+                ephemeral=True,
+            )
+            return
+        if confirmation is None:
+            logger.info("Global reset warning shown: actor_id=%s", actor_id)
+            warning = discord.Embed(
+                title="Destructive Kingdom Treasury reset",
+                description=(
+                    "This permanently erases player and economy data for **all guilds**. "
+                    "A verified database backup is created first; if backup fails, no data is changed.\n\n"
+                    "The bot code, database tables, schema metadata, environment variables, "
+                    "Discord configuration, and PostgreSQL configuration are preserved.\n\n"
+                    "To continue, run `/reset confirmation:RESET`. Any other text cancels the operation."
+                ),
+                color=_CRIMSON,
+            )
+            await interaction.response.send_message(embed=warning, ephemeral=True)
+            return
+        if confirmation != "RESET":
+            logger.warning(
+                "Global reset cancelled: incorrect confirmation; actor_id=%s",
+                actor_id,
+            )
+            await interaction.response.send_message(
+                embed=_err("No data changed. To confirm, enter exactly RESET."),
+                ephemeral=True,
+            )
+            return
+
+        requested_at = discord.utils.utcnow().isoformat()
+        await interaction.response.send_message(
+            embed=discord.Embed(
+                title="Reset confirmed",
+                description="Creating and verifying the backup before clearing data…",
+                color=_CRIMSON,
+            ),
+            ephemeral=True,
+        )
+        logger.warning(
+            "Global reset started: actor_id=%s requested_at=%s",
+            actor_id,
+            requested_at,
+        )
+
+        try:
+            backup_path = await DatabaseBackupService(DB_PATH).create_verified_backup()
+        except Exception as exc:
+            logger.exception(
+                "Global reset aborted because verified backup failed: actor_id=%s requested_at=%s",
+                actor_id,
+                requested_at,
+            )
+            await interaction.followup.send(
+                embed=_err(
+                    "Reset aborted: the database backup could not be created and verified. "
+                    f"No data was cleared. Details: {str(exc)[:500]}"
+                ),
+                ephemeral=True,
+            )
+            return
+
+        try:
+            deleted_counts = await self.db.reset_kingdom_treasury_data()
+        except Exception as exc:
+            logger.exception(
+                "Global reset failed after backup: actor_id=%s requested_at=%s backup=%s",
+                actor_id,
+                requested_at,
+                backup_path,
+            )
+            await interaction.followup.send(
+                embed=_err(
+                    "Reset failed. The verified backup was preserved at "
+                    f"`{backup_path}`. Details: {str(exc)[:500]}"
+                ),
+                ephemeral=True,
+            )
+            return
+
+        deleted_total = sum(deleted_counts.values())
+        completed_at = discord.utils.utcnow().isoformat()
+        logger.warning(
+            "Global reset completed: actor_id=%s completed_at=%s rows_deleted=%s backup=%s",
+            actor_id,
+            completed_at,
+            deleted_total,
+            backup_path,
+        )
+        embed = discord.Embed(
+            title="Kingdom Treasury reset completed",
+            description=(
+                "Player/economy data was cleared after a verified backup. "
+                "Bot code, database tables, schema metadata, environment variables, "
+                "and PostgreSQL configuration were preserved."
+            ),
+            color=_GOLD,
+        )
+        embed.add_field(name="Rows cleared", value=f"**{deleted_total:,}**", inline=True)
+        embed.add_field(name="Verified backup", value=f"`{backup_path}`", inline=False)
+        embed.set_footer(text=f"Completed by founder · {completed_at}")
+        await interaction.followup.send(embed=embed, ephemeral=True)
 
     # ── /add-dc ───────────────────────────────────────────────────────────────
 

@@ -10,7 +10,54 @@ from ..utils.card_generator import generate_card, fetch_avatar
 from ..utils.result_cards import generate_wealth_card
 from ..utils.skins import get_skin, detect_rank_from_roles
 from ..utils.identity_variant import resolve_identity_card_variant
+from ..utils.permissions import (
+    IDENTITY_CARD_CHANNEL_ID,
+    identity_card_required_embed,
+    is_identity_card_exempt,
+)
 from ..utils.routing import check_routing
+
+
+class IdentityCardCreateModal(discord.ui.Modal, title="Create your Demon Identity Card"):
+    card_name = discord.ui.TextInput(
+        label="Nom affiché sur ta carte",
+        placeholder="Entre le nom de ton profil Discord",
+        required=True,
+        min_length=1,
+        max_length=32,
+    )
+
+    def __init__(self, cog: "ProfileCog"):
+        super().__init__()
+        self.cog = cog
+
+    async def on_submit(self, interaction: discord.Interaction):
+        card_name = self.card_name.value.strip()
+        if not card_name:
+            await interaction.response.send_message(
+                "Le nom de la carte ne peut pas être vide.", ephemeral=True
+            )
+            return
+        if interaction.guild is None or interaction.channel_id != IDENTITY_CARD_CHANNEL_ID:
+            await interaction.response.send_message(
+                embed=identity_card_required_embed(), ephemeral=True
+            )
+            return
+
+        guild_id = str(interaction.guild.id)
+        discord_id = str(interaction.user.id)
+        if await self.cog.db.has_identity_card(guild_id, discord_id):
+            await interaction.response.send_message(
+                "Ta carte d’identité existe déjà. Utilise `/identity` pour l’afficher.",
+                ephemeral=True,
+            )
+            return
+
+        await self.cog.db.upsert_user(
+            guild_id, discord_id, interaction.user.display_name
+        )
+        await self.cog.db.set_identity_display_name(guild_id, discord_id, card_name)
+        await ProfileCog.identity.callback(self.cog, interaction)
 
 
 class ProfileCog(commands.Cog):
@@ -24,6 +71,28 @@ class ProfileCog(commands.Cog):
     @property
     def cosmetics(self):    return self.bot.cosmetic_service
 
+    @app_commands.command(
+        name="createid",
+        description="Create your Demon Identity Card before using Kingdom Treasury.",
+    )
+    async def create_identity_card(self, interaction: discord.Interaction):
+        if interaction.guild is None or interaction.channel_id != IDENTITY_CARD_CHANNEL_ID:
+            await interaction.response.send_message(
+                embed=identity_card_required_embed(), ephemeral=True
+            )
+            return
+
+        guild_id = str(interaction.guild.id)
+        discord_id = str(interaction.user.id)
+        if await self.db.has_identity_card(guild_id, discord_id):
+            await interaction.response.send_message(
+                "Ta carte d’identité existe déjà. Utilise `/identity` pour l’afficher.",
+                ephemeral=True,
+            )
+            return
+
+        await interaction.response.send_modal(IdentityCardCreateModal(self))
+
     @app_commands.command(name="identity", description="View your Kingdom Identity Card, or inspect another soul's.")
     @app_commands.describe(user="The soul whose identity you wish to inspect.")
     async def identity(self, interaction: discord.Interaction, user: Optional[discord.Member] = None):
@@ -36,13 +105,30 @@ class ProfileCog(commands.Cog):
         target      = user or interaction.user
         is_own_card = target.id == interaction.user.id
         discord_id  = str(target.id)
+        exempt      = is_identity_card_exempt(interaction)
 
-        # ── Real rank from live Discord roles ────────────────────────────────
-        # detect_rank_from_roles returns the highest matched economy rank name.
-        live_rank = detect_rank_from_roles(target.roles)
+        if not is_own_card and not exempt:
+            if not await self.db.has_identity_card(guild_id, str(interaction.user.id)):
+                await interaction.followup.send(
+                    embed=identity_card_required_embed(),
+                    ephemeral=True,
+                )
+                return
+        if (
+            is_own_card
+            and not exempt
+            and interaction.channel_id != IDENTITY_CARD_CHANNEL_ID
+        ):
+            await interaction.followup.send(
+                embed=identity_card_required_embed(),
+                ephemeral=True,
+            )
+            return
 
-        # Upsert with the display_name; live_rank drives the card variant.
+        # The stored rank is the fallback when no economy rank role is present.
         user_data = await self.db.upsert_user(guild_id, discord_id, target.display_name)
+        live_rank = detect_rank_from_roles(target.roles) or user_data.get("rank", "Unranked")
+        card_display_name = user_data.get("identity_display_name") or target.display_name
 
         # ── Hierarchy variant — full group + eligibility + classification ────
         member_role_ids = [str(r.id) for r in target.roles]
@@ -85,7 +171,7 @@ class ProfileCog(commands.Cog):
         try:
             card_buf = generate_card(
                 username       = target.name,
-                display_name   = target.display_name,
+                display_name   = card_display_name,
                 equipped_title = equipped_title,
                 rank           = live_rank,
                 balance        = user_data.get("balance", 0),
@@ -115,6 +201,9 @@ class ProfileCog(commands.Cog):
             )
             await interaction.followup.send(embed=embed)
 
+        if is_own_card and interaction.channel_id == IDENTITY_CARD_CHANNEL_ID:
+            await self.db.mark_identity_card_created(guild_id, discord_id)
+
     @app_commands.command(name="wealth", description="Check your current balance.")
     async def wealth(self, interaction: discord.Interaction):
         import asyncio
@@ -128,8 +217,8 @@ class ProfileCog(commands.Cog):
         username   = interaction.user.display_name
         user_data  = await self.db.upsert_user(guild_id, discord_id, username)
 
-        # Live rank & eligibility — matches /identity logic exactly
-        live_rank    = detect_rank_from_roles(interaction.user.roles)
+        # Live Discord role wins; otherwise use the stored economy rank.
+        live_rank    = detect_rank_from_roles(interaction.user.roles) or user_data.get("rank", "Unranked")
         member_role_ids = [str(r.id) for r in interaction.user.roles]
         card_variant_w  = resolve_identity_card_variant(member_role_ids, live_rank)
         if card_variant_w.kingdom_rank_eligible:

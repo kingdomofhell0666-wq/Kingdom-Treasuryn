@@ -510,15 +510,15 @@ DISCORD_ROLE_RANKS: Dict[int, str] = {
 }
 
 
-def detect_rank_from_roles(member_roles) -> str:
+def detect_rank_from_roles(member_roles) -> Optional[str]:
     """
-    Return the highest Kingdom rank for a member based on their Discord roles.
+    Return the highest Kingdom rank found in the member's Discord roles.
 
     member_roles: iterable of objects with an `.id` attribute (discord.Role list).
-    Falls back to "Forsaken" if no known role is found.
+    Return None if no known economy-rank role is present.
     """
-    best_rank  = "Forsaken"
-    best_level = RANK_ORDER.get("Forsaken", 0)
+    best_rank  = None
+    best_level = -1
     for role in member_roles:
         rank_name = DISCORD_ROLE_RANKS.get(role.id)
         if rank_name:

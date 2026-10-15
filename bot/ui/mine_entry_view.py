@@ -58,7 +58,7 @@ class MineEntryView(discord.ui.View):
     @discord.ui.button(
         label="Walk Away",
         style=discord.ButtonStyle.secondary,
-        emoji="🚶",
+        emoji="🚪",
         custom_id="mine_walk",
     )
     async def walk_away(self, inter: discord.Interaction, button: discord.ui.Button):

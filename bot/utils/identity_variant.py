@@ -16,6 +16,7 @@ Kingdom Rank eligibility: ONLY Nobility + Members (groups 5 & 6).
 from __future__ import annotations
 from dataclasses import dataclass
 from typing import List, Optional
+from ..services.rank_service import PUBLIC_KINGDOM_RANKS
 
 
 # ─── Full hierarchy priority list ─────────────────────────────────────────────
@@ -48,8 +49,8 @@ _HIERARCHY: List[tuple] = [
     ("Folklore",     "1290484661419638868", "Members",      True,  "LOWER ENTITY"),
     ("Mythology",    "1290484661419638867", "Members",      True,  "LOWER ENTITY"),
     ("Corrupted",    "1290484661419638866", "Members",      True,  "LOWER ENTITY"),
-    ("Vermin",       "1484302112241352744", "Members",      True,  "CONDEMNED"),
-    ("Forsaken",     "1489101267048468490", "Members",      True,  "CONDEMNED — LOWEST CLASS"),
+    ("Vermin",       "1484302112241352744", "Members",      True,  "LOW-TIER MEMBER"),
+    ("Forsaken",     "1489101267048468490", "Members",      False, "ENTRY-TIER MEMBER"),
 ]
 
 # Build lookup by role_id — priority = list index (lower = higher authority)
@@ -112,6 +113,6 @@ def resolve_identity_card_variant(
         source_role_id        = None,
         public_rank           = public_rank,
         hierarchy_group       = "Members",
-        kingdom_rank_eligible = True,
+        kingdom_rank_eligible = public_rank in PUBLIC_KINGDOM_RANKS,
         classification        = "REGISTERED ENTITY",
     )

@@ -399,11 +399,16 @@ class MissionsCog(commands.Cog):
 
     # ── /mission group ────────────────────────────────────────────────────────
 
-    mission = app_commands.Group(name="mission", description="Kingdom Mission management.")
+    mission = app_commands.Group(
+        name="mission",
+        description="Kingdom Mission management.",
+        default_permissions=discord.Permissions(administrator=True),
+    )
 
     # ── /mission create — opens interactive modal ─────────────────────────────
 
     @mission.command(name="create", description="Open the Kingdom Mission creation form.")
+    @app_commands.default_permissions(administrator=True)
     async def mission_create(self, interaction: discord.Interaction):
         if not await _is_admin(interaction):
             await interaction.response.send_message(embed=_denied(), ephemeral=True)
@@ -413,6 +418,7 @@ class MissionsCog(commands.Cog):
     # ── /mission complete — participant autocomplete ───────────────────────────
 
     @mission.command(name="complete", description="Mark a participant complete and pay their reward.")
+    @app_commands.default_permissions(administrator=True)
     @app_commands.describe(
         mission_id = "Mission (autocomplete: search by title).",
         user       = "Accepted participant (autocomplete — select mission first).",
@@ -542,6 +548,7 @@ class MissionsCog(commands.Cog):
     # ── /mission delete ───────────────────────────────────────────────────────
 
     @mission.command(name="delete", description="Withdraw and remove a mission.")
+    @app_commands.default_permissions(administrator=True)
     @app_commands.describe(mission_id="Mission to withdraw (use autocomplete to search by title).")
     async def mission_delete(self, interaction: discord.Interaction, mission_id: int):
         await interaction.response.defer(ephemeral=True)

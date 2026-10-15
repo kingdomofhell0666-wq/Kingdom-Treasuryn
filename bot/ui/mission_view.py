@@ -11,6 +11,8 @@ import discord
 import logging
 from typing import List
 
+from ..utils.permissions import KINGDOM_ROLES
+
 logger = logging.getLogger("kingdom_treasury")
 
 _CRIMSON = 0x6B0000
@@ -22,6 +24,72 @@ _DC  = "<:devilcoinStack:1492184333392412692>"
 
 # Discord embed description hard limit
 _EMBED_MAX = 4000
+
+
+def _can_review_missions(member: discord.Member, guild: discord.Guild) -> bool:
+    permissions = member.guild_permissions
+    role_ids = {role.id for role in member.roles}
+    return (
+        member.id == guild.owner_id
+        or permissions.administrator
+        or permissions.manage_guild
+        or permissions.manage_threads
+        or bool(role_ids & KINGDOM_ROLES)
+    )
+
+
+async def create_mission_proof_thread(
+    guild: discord.Guild,
+    channel,
+    participant: discord.Member,
+    mission: dict,
+) -> discord.Thread:
+    """Create a private proof thread for only the member and mission reviewers."""
+    if not hasattr(channel, "create_thread"):
+        raise RuntimeError("The mission channel does not support private threads.")
+
+    owner = guild.get_member(guild.owner_id)
+    if owner is None:
+        owner = await guild.fetch_member(guild.owner_id)
+
+    reviewers = {
+        member.id: member
+        for member in guild.members
+        if _can_review_missions(member, guild)
+    }
+    reviewers[owner.id] = owner
+
+    safe_title = " ".join(mission["title"].split())
+    thread_name = f"mission-{mission['id']}-{safe_title}"[:100]
+    thread = await channel.create_thread(
+        name=thread_name,
+        type=discord.ChannelType.private_thread,
+        invitable=False,
+        auto_archive_duration=10080,
+        reason=f"Private proof thread for mission #{mission['id']}",
+    )
+
+    try:
+        invited = {participant.id: participant, **reviewers}
+        for member in invited.values():
+            await thread.add_user(member)
+        await thread.send(
+            content=(
+                f"{participant.mention} accepted **{mission['title']}**.\n"
+                "Post your proof for the mission here. This private thread is visible only to you and the mission reviewers."
+            ),
+            allowed_mentions=discord.AllowedMentions(
+                users=[participant], roles=False, everyone=False
+            ),
+        )
+    except Exception:
+        try:
+            await thread.delete(reason="Mission acceptance setup failed")
+        except Exception:
+            logger.exception("Failed to remove incomplete proof thread for mission #%s", mission["id"])
+        raise
+
+    return thread
 
 
 def build_mission_embed(mission: dict, participants: List[str]) -> discord.Embed:
@@ -206,9 +274,72 @@ class MissionView(discord.ui.View):
         username   = interaction.user.display_name
         mission_id = self.mission_id
 
-        result = await svc.accept_mission(guild_id, discord_id, username, mission_id)
+        guild = interaction.guild
+        mission = await db.get_mission(mission_id)
+        if guild is None or mission is None or str(mission["guild_id"]) != guild_id:
+            await interaction.followup.send(
+                embed=discord.Embed(
+                    description="*This mission is not available in this server.*",
+                    color=_CRIMSON,
+                ),
+                ephemeral=True,
+            )
+            return
+
+        channel = bot.get_channel(int(mission["channel_id"]))
+        if channel is None:
+            try:
+                channel = await bot.fetch_channel(int(mission["channel_id"]))
+            except Exception:
+                channel = None
+        if channel is None:
+            await interaction.followup.send(
+                embed=discord.Embed(
+                    description="*The private proof channel is unavailable. Your mission was not accepted and no entry fee was charged.*",
+                    color=_CRIMSON,
+                ),
+                ephemeral=True,
+            )
+            return
+
+        try:
+            proof_thread = await create_mission_proof_thread(
+                guild, channel, interaction.user, mission
+            )
+        except Exception as exc:
+            logger.warning(
+                "[MissionView] private proof thread setup failed for mission=%s member=%s: %s",
+                mission_id,
+                discord_id,
+                exc,
+            )
+            await interaction.followup.send(
+                embed=discord.Embed(
+                    description=(
+                        "*A private proof thread could not be created. "
+                        "Your mission was not accepted and no entry fee was charged.* "
+                        "Ask an administrator to check Create Private Threads and Manage Threads permissions."
+                    ),
+                    color=_CRIMSON,
+                ),
+                ephemeral=True,
+            )
+            return
+
+        try:
+            result = await svc.accept_mission(guild_id, discord_id, username, mission_id)
+        except Exception:
+            try:
+                await proof_thread.delete(reason="Mission acceptance failed")
+            except Exception:
+                logger.exception("[MissionView] failed to remove unused proof thread for mission=%s", mission_id)
+            raise
 
         if not result["ok"]:
+            try:
+                await proof_thread.delete(reason="Mission acceptance was rejected")
+            except Exception:
+                logger.exception("[MissionView] failed to remove rejected proof thread for mission=%s", mission_id)
             embed = discord.Embed(
                 description = f"*{result['reason']}*",
                 color       = _CRIMSON,
@@ -217,7 +348,17 @@ class MissionView(discord.ui.View):
             await interaction.followup.send(embed=embed, ephemeral=True)
             return
 
-        mission    = await db.get_mission(mission_id)
+        try:
+            await db.set_mission_participant_thread(
+                mission_id, discord_id, str(proof_thread.id)
+            )
+        except Exception:
+            logger.exception(
+                "[MissionView] accepted mission but could not persist proof thread ID: mission=%s member=%s",
+                mission_id,
+                discord_id,
+            )
+
         entry_cost = result.get("entry_cost", 0)
 
         if entry_cost > 0:
@@ -239,6 +380,7 @@ class MissionView(discord.ui.View):
         )
         embed.add_field(name="Reward",  value=f"**{mission['reward']:,}** {_DC}", inline=True)
         embed.add_field(name="Mission", value=f"**#{mission_id}**",             inline=True)
+        embed.add_field(name="Private proof thread", value=proof_thread.mention, inline=False)
         embed.set_footer(text="Kingdom Treasury  ·  Kingdom of Hell")
         await interaction.followup.send(embed=embed, ephemeral=True)
 

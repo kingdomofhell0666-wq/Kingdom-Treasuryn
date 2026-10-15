@@ -18,17 +18,54 @@ from .services.mission_service import MissionService
 from .services.ledger_service import LedgerService
 from .services.pressure_service import PressureService
 from .services.heartbeat_service import HeartbeatService
+from .utils.permissions import identity_card_required_embed, is_identity_card_exempt
 
 logger = logging.getLogger("kingdom_treasury")
+
+
+class KingdomCommandTree(discord.app_commands.CommandTree):
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.guild is None:
+            return True
+
+        command_name = (interaction.data or {}).get("name")
+        if command_name == "createid" or is_identity_card_exempt(interaction):
+            return True
+
+        database = getattr(self.client, "db", None)
+        if database is not None:
+            try:
+                if await database.has_identity_card(
+                    str(interaction.guild.id), str(interaction.user.id)
+                ):
+                    return True
+            except Exception:
+                logger.exception(
+                    "Identity-card onboarding check failed for member=%s guild=%s",
+                    interaction.user.id,
+                    interaction.guild.id,
+                )
+
+        await interaction.response.send_message(
+            embed=identity_card_required_embed(),
+            ephemeral=True,
+        )
+        return False
 
 
 class KingdomTreasuryBot(commands.Bot):
     def __init__(self):
         intents               = discord.Intents.default()
         intents.members       = True
+        intents.message_content = True
         intents.voice_states  = True
 
-        super().__init__(command_prefix="!kt_", intents=intents, help_command=None)
+        super().__init__(
+            command_prefix="!kt_",
+            intents=intents,
+            help_command=None,
+            tree_cls=KingdomCommandTree,
+        )
 
         self.db: Database = Database()
         self.config_service: ConfigService = ConfigService()
@@ -125,12 +162,12 @@ class KingdomTreasuryBot(commands.Bot):
             self._heartbeat_loop.start()
         # Start dashboard heartbeat service
         asyncio.create_task(self.heartbeat_service.run())
-        # Sync all guild structures into PostgreSQL so the dashboard
-        # always has up-to-date channel/role data.
-        asyncio.create_task(self.guild_sync_service.sync_all(list(self.guilds)))
-        # Seed canonical role IDs for all guilds (DO NOTHING on conflict, so
-        # manual dashboard overrides are preserved across restarts).
-        asyncio.create_task(self._seed_canonical_roles())
+        # Sync guild metadata only when PostgreSQL is intentionally enabled.
+        if self.config_service.is_postgres_enabled():
+            asyncio.create_task(self.guild_sync_service.sync_all(list(self.guilds)))
+            # Seed canonical role IDs for all guilds (DO NOTHING on conflict, so
+            # manual dashboard overrides are preserved across restarts).
+            asyncio.create_task(self._seed_canonical_roles())
 
     async def _seed_canonical_roles(self):
         """Seed hardcoded canonical role IDs into the DB for all guilds."""
@@ -143,11 +180,15 @@ class KingdomTreasuryBot(commands.Bot):
 
     async def on_guild_join(self, guild: discord.Guild):
         """Immediately sync a newly joined guild's channels and roles."""
+        if not self.config_service.is_postgres_enabled():
+            return
         logger.info(f"Joined guild {guild.id} ({guild.name}) — syncing channels+roles.")
         asyncio.create_task(self.guild_sync_service.sync_guild(guild))
 
     async def on_guild_available(self, guild: discord.Guild):
         """Called when a guild becomes available after a reconnect — re-sync."""
+        if not self.config_service.is_postgres_enabled():
+            return
         asyncio.create_task(self.guild_sync_service.sync_guild(guild))
 
     @tasks.loop(seconds=30)

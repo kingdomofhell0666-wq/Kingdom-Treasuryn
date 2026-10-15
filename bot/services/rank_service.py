@@ -6,32 +6,34 @@ from typing import List, Dict, Optional, Tuple
 # This is the SINGLE SOURCE OF TRUTH for all public economy rank logic.
 #
 # Rules:
-#  - Forsaken is the default starting rank (non-purchasable).
-#  - PUBLIC_KINGDOM_RANKS are the only ranks a player can ascend through.
+#  - New users begin unranked and must purchase Forsaken to enter the hierarchy.
+#  - PUBLIC_KINGDOM_RANKS are the ascent path after Forsaken.
 #  - Chancellor is a STAFF/MODERATOR role — excluded from all public rank logic.
 #
-# Cost ordering is ascending: each rank must cost more than the previous.
+# At default mine settings, expected net mining income is about 242 DC/hour.
+# Forsaken is therefore a roughly three-hour first goal; later prices escalate
+# sharply after the first three ranks. Actual time depends on activity and luck.
 # Tax ordering is descending: higher ranks pay lower tax rates.
 
 # (name, cost, tax_rate, purchasable)
 RANKS = [
-    ("Forsaken",     0,           0.12, False),   # default start, not purchasable
-    ("Vermin",       1_500,       0.11, True),
-    ("Corrupted",    6_000,       0.10, True),
-    ("Folklore",     15_000,      0.09, True),    # rank 3 — cheaper than Mythology
-    ("Mythology",    35_000,      0.09, True),    # rank 4
-    ("Demonology",   80_000,      0.08, True),    # rank 5 — cheaper than Eschatology
-    ("Eschatology",  160_000,     0.08, True),    # rank 6
-    ("Archangel",    400_000,     0.07, True),
-    ("Archdemon",    1_000_000,   0.06, True),
-    ("Knight",       2_500_000,   0.05, True),
-    ("Baron",        5_000_000,   0.04, True),
-    ("Viscount",     10_000_000,  0.03, True),
-    ("Count",        20_000_000,  0.03, True),
-    ("Marquis",      40_000_000,  0.02, True),
-    ("Duke",         80_000_000,  0.01, True),    # highest public rank
+    ("Forsaken",     750,          0.12, True),
+    ("Vermin",       2_000,        0.11, True),
+    ("Corrupted",    5_000,        0.10, True),
+    ("Folklore",     20_000,       0.09, True),
+    ("Mythology",    300_000,      0.09, True),
+    ("Demonology",   650_000,      0.08, True),
+    ("Eschatology",  1_400_000,    0.08, True),
+    ("Archangel",    3_000_000,    0.07, True),
+    ("Archdemon",   6_000_000,    0.06, True),
+    ("Knight",       12_000_000,   0.05, True),
+    ("Baron",        24_000_000,   0.04, True),
+    ("Viscount",     42_000_000,   0.03, True),
+    ("Count",        60_000_000,   0.03, True),
+    ("Marquis",      75_000_000,   0.02, True),
+    ("Duke",         90_000_000,   0.01, True),
     # ─── Staff/moderator role — NOT part of public ascension ─────────────────
-    ("Chancellor",   0,           0.00, False),   # staff only, never purchasable
+    ("Chancellor",   0,            0.00, False),
 ]
 
 RANK_NAMES: List[str] = [r[0] for r in RANKS]
@@ -42,7 +44,7 @@ RANK_DICT: Dict[str, dict] = {
 }
 
 # ─── Canonical public rank list (the only ranks players can earn/ascend) ─────
-# Excludes Forsaken (start state) and Chancellor (staff role).
+# Excludes Forsaken (entry purchase) and Chancellor (staff role).
 PUBLIC_KINGDOM_RANKS: List[str] = [
     "Vermin",
     "Corrupted",
@@ -104,7 +106,8 @@ EXCLUDED_ROLE_IDS: Dict[str, str] = {
 # Dashboard config (rank_cooldown_settings table) overrides these per guild.
 # All values in seconds.
 DEFAULT_ASCENSION_COOLDOWNS: Dict[str, int] = {
-    "Forsaken":    0,               # no wait — buy Vermin immediately
+    "Unranked":    0,               # entry is gated by its DC price, not an artificial wait
+    "Forsaken":    0,
     "Vermin":      15 * 60,         # 15 minutes
     "Corrupted":   30 * 60,         # 30 minutes
     "Folklore":    1 * 3600,        # 1 hour
@@ -134,7 +137,9 @@ class RankService:
         return None
 
     def is_purchasable(self, rank_name: str) -> bool:
-        """True only for ranks in PUBLIC_KINGDOM_RANKS (excludes Forsaken and Chancellor)."""
+        """Forsaken is the entry rank; public ranks remain the progression ladder."""
+        if rank_name == "Forsaken":
+            return True
         return rank_name in _PUBLIC_RANK_SET
 
     def rank_exists(self, rank_name: str) -> bool:
@@ -142,16 +147,42 @@ class RankService:
 
     def is_public_rank(self, rank_name: str) -> bool:
         """Return True if rank_name is a valid public economy rank."""
-        return rank_name in _PUBLIC_RANK_SET
+        return rank_name in _PUBLIC_RANK_SET or rank_name == "Forsaken"
+
+    def get_rank_from_roles(self, member_roles, role_mappings=None) -> Optional[str]:
+        """Return the highest public economy rank found in the member's roles."""
+        if role_mappings is None:
+            role_to_name = {
+                int(role_id): rank_name
+                for rank_name, role_id in CANONICAL_ROLE_IDS.items()
+            }
+        else:
+            role_to_name = {
+                int(mapping["role_id"]): mapping["rank_name"]
+                for mapping in role_mappings
+                if self.is_public_rank(mapping["rank_name"])
+            }
+
+        held_role_ids = {role.id for role in member_roles}
+        matched_ranks = {
+            rank_name
+            for role_id, rank_name in role_to_name.items()
+            if role_id in held_role_ids
+        }
+        if not matched_ranks:
+            return None
+        return max(matched_ranks, key=self.get_rank_index)
 
     def get_next_rank(self, current_rank: str) -> Optional[str]:
         """
-        Return the next rank in PUBLIC_KINGDOM_RANKS progression.
+        Return the next rank in the public progression.
         Returns None if current_rank is Duke (highest public rank) or unknown.
         Chancellor and any staff role are never returned.
         """
+        if current_rank == "Unranked":
+            return "Forsaken"
         if current_rank == "Forsaken":
-            return PUBLIC_KINGDOM_RANKS[0]   # first purchasable rank
+            return PUBLIC_KINGDOM_RANKS[0]   # first purchasable rank after entry
         try:
             idx = PUBLIC_KINGDOM_RANKS.index(current_rank)
         except ValueError:
@@ -163,12 +194,14 @@ class RankService:
 
     def can_ascend_to(self, current_rank: str, target_rank: str) -> bool:
         """Users must ascend one step at a time — no skipping."""
+        if current_rank == target_rank:
+            return False
         return self.get_next_rank(current_rank) == target_rank
 
     def get_purchasable_ranks(self) -> List[Tuple[str, int, float]]:
-        """Return only PUBLIC_KINGDOM_RANKS with their cost and tax_rate."""
+        """Return Forsaken and every subsequent public rank with cost and tax rate."""
         result = []
-        for name in PUBLIC_KINGDOM_RANKS:
+        for name in ["Forsaken", *PUBLIC_KINGDOM_RANKS]:
             entry = RANK_DICT[name]
             result.append((name, entry["cost"], entry["tax_rate"]))
         return result

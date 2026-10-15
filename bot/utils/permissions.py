@@ -24,6 +24,7 @@ ROLE_CHANCELLOR   = int(_EX["Chancellor"])
 ROLE_LEGATES      = int(_EX["Legates"])
 ROLE_CENTURION    = int(_EX["Centurion"])
 ROLE_LEGIONNAIRES = int(_EX["Legionnaires"])
+IDENTITY_CARD_CHANNEL_ID = 1488255553170837565
 
 # All Kingdom staff roles (Legates included)
 KINGDOM_ROLES: frozenset[int] = frozenset({
@@ -72,6 +73,38 @@ def is_admin_user(interaction: discord.Interaction) -> bool:
         return False
     perms = interaction.user.guild_permissions
     return perms.administrator or perms.manage_guild
+
+
+def is_identity_card_exempt(interaction: discord.Interaction) -> bool:
+    """True if the member is the server owner, a moderator, or an administrator."""
+    if not interaction.guild:
+        return False
+    permissions = getattr(interaction.user, "guild_permissions", None)
+    return (
+        interaction.user.id == interaction.guild.owner_id
+        or is_admin_user(interaction)
+        or is_extended_staff(interaction)
+        or bool(
+            permissions
+            and (
+                getattr(permissions, "manage_messages", False)
+                or getattr(permissions, "kick_members", False)
+                or getattr(permissions, "ban_members", False)
+                or getattr(permissions, "moderate_members", False)
+            )
+        )
+    )
+
+
+def identity_card_required_embed() -> discord.Embed:
+    return discord.Embed(
+        title="Create your Demon Identity Card",
+        description=(
+            f"Before using Kingdom Treasury commands, create your own card with `/createid` "
+            f"in <#{IDENTITY_CARD_CHANNEL_ID}>."
+        ),
+        color=0x8B0000,
+    )
 
 
 def is_strict_discord_admin(interaction: discord.Interaction) -> bool:

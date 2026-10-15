@@ -24,6 +24,7 @@ from typing import Optional
 import discord
 
 from ..utils.embeds import EmbedFactory
+from ..utils.permissions import IDENTITY_CARD_CHANNEL_ID
 
 logger = logging.getLogger("kingdom_treasury")
 
@@ -34,8 +35,8 @@ DELETE_DELAY = 45   # seconds before denial messages are auto-deleted
 
 DEFAULT_CHANNEL_ROUTING: dict[str, str] = {
     # Identity
-    "identity":    "1488255553170837565",   # #🪪┃identity
-    "wealth":      "1488255553170837565",   # #🪪┃identity
+    "identity":    str(IDENTITY_CARD_CHANNEL_ID),   # #🪪┃identity
+    "wealth":      str(IDENTITY_CARD_CHANNEL_ID),   # #🪪┃identity
     # Economy
     "grind":       "1488360369364926586",   # #⛏️┃grind
     "tribute":     "1488255003574534274",   # #🎗️┃tribute

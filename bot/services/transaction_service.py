@@ -42,9 +42,37 @@ class TransactionService:
         user         = f"user:{discord_id}"
         treasury_cut = int(cost * 0.10)
         burned       = cost - treasury_cut
+        if not await self.db.deduct_balance_if_sufficient(guild_id, discord_id, cost):
+            raise ValueError("Insufficient DC for ascension.")
+
         await self.db.log_transaction(guild_id, "ascend_debit", user, "treasury", cost, f"Ascension to {rank_name}")
-        await self.db.update_balance(guild_id, discord_id, -cost)
         await self.db.log_transaction(guild_id, "ascend_treasury", "kingdom_mint", "treasury", treasury_cut, f"Treasury cut: {rank_name}")
         await self.db.update_treasury(guild_id, treasury_cut)
         await self.db.log_transaction(guild_id, "ascend_burn", user, "void", burned, f"Burned on ascension to {rank_name}")
         await self.db.set_rank(guild_id, discord_id, rank_name)
+
+    async def rollback_ascension(
+        self,
+        guild_id: str,
+        discord_id: str,
+        previous_rank: str,
+        rank_name: str,
+        cost: int,
+    ):
+        user = f"user:{discord_id}"
+        treasury_cut = int(cost * 0.10)
+        burned = cost - treasury_cut
+        if not await self.db.restore_balance(guild_id, discord_id, cost):
+            raise RuntimeError("Cannot restore ascension payment: user record is missing.")
+        await self.db.update_treasury(guild_id, -treasury_cut)
+        await self.db.set_rank(guild_id, discord_id, previous_rank)
+        if burned > 0:
+            await self.db.log_transaction(
+                guild_id, "ascend_refund_burn", "void", user, burned,
+                f"Role assignment failed for {rank_name}",
+            )
+        if treasury_cut > 0:
+            await self.db.log_transaction(
+                guild_id, "ascend_refund_treasury", "treasury", user, treasury_cut,
+                f"Role assignment failed for {rank_name}",
+            )

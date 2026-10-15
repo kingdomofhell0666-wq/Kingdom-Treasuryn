@@ -1104,17 +1104,6 @@ def _low_rank_damage(card: Image.Image, rank_level: int, theme: dict):
     layer = layer.filter(ImageFilter.GaussianBlur(0.6))
     card.alpha_composite(layer)
 
-    # Faint "CONDEMNED" watermark stamp for rank 0
-    if rank_level == 0:
-        stamp_layer = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-        sd = ImageDraw.Draw(stamp_layer)
-        sf = _font(60, cinzel=True)
-        sw = _tw(sd, "CONDEMNED", sf)
-        sd.text(((W - sw) // 2, H // 2 - 30), "CONDEMNED",
-                font=sf, fill=(180, 0, 0, 22))
-        stamp_layer = stamp_layer.rotate(-25, center=(W // 2, H // 2))
-        card.alpha_composite(stamp_layer)
-
 
 # ─── Infernal Artifact Icon Renderers ─────────────────────────────────────────
 
@@ -1408,8 +1397,8 @@ def generate_card(
 
     # ── Classification table ────────────────────────────────────────────────
     _CLASS = [
-        "CONDEMNED — LOWEST CLASS",   # 0  Forsaken
-        "CONDEMNED — LOWEST CLASS",   # 1  Vermin
+        "ENTRY-TIER MEMBER",          # 0  Forsaken
+        "LOW-TIER MEMBER",            # 1  Vermin
         "LOWER ENTITY",               # 2  Corrupted
         "LOWER ENTITY",               # 3  Folklore
         "LESSER ENTITY",              # 4  Mythology

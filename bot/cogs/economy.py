@@ -1,5 +1,4 @@
 import asyncio
-import random as _random
 import os
 from typing import List, Optional
 
@@ -15,6 +14,7 @@ from ..utils.embeds import EmbedFactory
 from ..utils.routing import check_routing
 from ..utils.permissions import is_freeze_exempt
 from ..utils.grind_card import generate_grind_card
+from ..utils.mine_animation import ANIMATION_DURATION_SECONDS, generate_mine_animation
 from ..utils.result_cards import generate_tribute_card, generate_transfer_card, generate_ascend_card
 from ..utils.card_generator import fetch_avatar
 from ..ui import AscendView, MineEntryView
@@ -26,74 +26,7 @@ _DC = "<:devilcoinStack:1492184333392412692>"
 
 _ASSETS     = os.path.join(os.path.dirname(__file__), "..", "assets")
 ENTRY_COLOR  = 0x1A0000
-SEARCH_COLOR = 0x3D0000
 WALK_COLOR   = 0x0D0D0D
-
-# Entry screen — atmospheric descriptions
-_MINE_DESCRIPTIONS = [
-    (
-        "*The entrance breathes heat.*\n\n"
-        "*The deeper you go, the less returns.*\n"
-        "*Some return richer. Some return empty.*\n"
-        "*Some… do not return the same.*"
-    ),
-    (
-        "*The gates to the Infernal Mines stand open.*\n\n"
-        "*The stone walls pulse with ancient heat.*\n"
-        "*The Kingdom expects its share.*\n"
-        "*Whatever you find below — it will take its cut.*"
-    ),
-    (
-        "*The mine demands a decision.*\n\n"
-        "*Beyond this threshold, the rules of the surface no longer apply.*\n"
-        "*Wealth lies in the dark.*\n"
-        "*So does risk.*"
-    ),
-    (
-        "*A foul wind carries the scent of sulfur.*\n\n"
-        "*The pickaxe is yours. The mine is old.*\n"
-        "*It has swallowed many who entered confident.*\n"
-        "*Do you step forward?*"
-    ),
-]
-
-# Phase 1 — "entering" animation text
-_ENTER_TEXTS = [
-    "*You step into the abyss…*",
-    "*The mine closes behind you…*",
-    "*The darkness swallows your silhouette…*",
-    "*The heat intensifies with each step…*",
-    "*You descend past the threshold…*",
-]
-
-# Phase 2 — "searching" animation text
-_SEARCH_TEXTS = [
-    "*The darkness responds to your presence…*",
-    "*The veins are being tested…*",
-    "*The stone trembles underfoot…*",
-    "*Your pickaxe strikes ancient rock…*",
-    "*Something stirs deep within the seam…*",
-    "*The ore whispers of its worth…*",
-    "*Shadows shift in the hellfire light…*",
-]
-
-# Walk away
-_WALKAWAY_DESCRIPTIONS = [
-    (
-        "*You turn your back on the mine.*\n\n"
-        "*The Kingdom remembers cowardice… and restraint.*"
-    ),
-    (
-        "*The gates remain open — but you do not enter.*\n\n"
-        "*Perhaps wisdom. Perhaps fear.*\n"
-        "*The mine will be here.*"
-    ),
-    (
-        "*You step back.*\n\n"
-        "*The mine watches you leave.*\n"
-        "*It always watches.*"
-    ),
-]
 
 
 class EconomyCog(commands.Cog):
@@ -229,12 +162,16 @@ class EconomyCog(commands.Cog):
         view = MineEntryView(owner_id=interaction.user.id)
 
         entry_embed = discord.Embed(
-            title="⛏  Infernal Mines",
-            description=_random.choice(_MINE_DESCRIPTIONS),
+            title="Infernal Mines",
+            description=(
+                "*“A foul wind carries the scent of sulfur.”*\n\n"
+                "*“The pickaxe is yours. The mine is old.”*\n\n"
+                "*“It has swallowed many who entered confident.”*\n\n"
+                "*“Do you step forward?”*"
+            ),
             color=ENTRY_COLOR,
         )
         entry_embed.set_image(url="attachment://mine_entry.png")
-        entry_embed.set_footer(text="Choose wisely.  ·  Kingdom Treasury  ·  Kingdom of Hell")
 
         entry_path = os.path.join(_ASSETS, "mine_entry.png")
         entry_file = discord.File(entry_path, filename="mine_entry.png")
@@ -244,6 +181,8 @@ class EconomyCog(commands.Cog):
         # ── Enter callback ────────────────────────────────────
 
         async def on_enter(inter: discord.Interaction):
+            await inter.response.edit_message(view=view)
+
             # Cooldown is set NOW — the commitment is made
             await self.cooldown.set_cooldown(guild_id, discord_id, "grind")
 
@@ -251,38 +190,39 @@ class EconomyCog(commands.Cog):
             try:
                 result = await self.economy.grind(guild_id, discord_id, username)
             except Exception as e:
-                await inter.response.edit_message(
+                await inter.edit_original_response(
                     embed=EmbedFactory.error(str(e)), view=None, attachments=[]
                 )
                 return
 
-            # ── Phase 1: entering ─────────────────────────────
-            p1 = discord.Embed(
-                title="⛏  Infernal Mines",
-                description=_random.choice(_ENTER_TEXTS),
-                color=ENTRY_COLOR,
-            )
-            # Preserve the uploaded image via its CDN URL
-            if msg.attachments:
-                p1.set_image(url=msg.attachments[0].url)
-            p1.set_footer(text="Kingdom Treasury  ·  Kingdom of Hell")
-            await inter.response.edit_message(embed=p1, view=None)
+            # Render from the already-calculated net result; never roll a second reward.
+            loop = asyncio.get_running_loop()
+            try:
+                animation_buf = await loop.run_in_executor(
+                    None,
+                    lambda: generate_mine_animation(result["net"]),
+                )
+            except Exception:
+                import logging
+                logging.getLogger("kingdom_treasury").exception(
+                    "Infernal Mines animation failed; showing the real grind result without animation."
+                )
+            else:
+                animation_embed = discord.Embed(
+                    title="⛏️ Infernal Mining",
+                    description="Your demon enters the mine and strikes the ancient stone…",
+                    color=ENTRY_COLOR,
+                )
+                animation_embed.set_image(url="attachment://infernal_mining.gif")
+                animation_file = discord.File(animation_buf, filename="infernal_mining.gif")
+                await inter.edit_original_response(
+                    embed=animation_embed,
+                    attachments=[animation_file],
+                    view=None,
+                )
+                await asyncio.sleep(ANIMATION_DURATION_SECONDS)
 
-            # ── Phase 2: searching ────────────────────────────
-            await asyncio.sleep(2.0)
-            p2 = discord.Embed(
-                title="⛏  Infernal Mines",
-                description=_random.choice(_SEARCH_TEXTS),
-                color=SEARCH_COLOR,
-            )
-            if msg.attachments:
-                p2.set_image(url=msg.attachments[0].url)
-            p2.set_footer(text="Kingdom Treasury  ·  Kingdom of Hell")
-            await inter.message.edit(embed=p2)
-
-            # ── Phase 3: generate + reveal result card ────────
-            await asyncio.sleep(1.5)
-
+            # ── Generate + reveal the real result card ─────────
             outcome = result.get("outcome_label", "common")
 
             # Fetch avatar (async HTTP, fast)
@@ -313,7 +253,14 @@ class EconomyCog(commands.Cog):
                 "failure": 0x0A0A0A, "meager": 0x6B0000,
                 "common":  0xB22222, "rich":   0xCC7700, "jackpot": 0xFFD700,
             }
-            card_embed = discord.Embed(color=_CARD_COLORS.get(outcome, 0xB22222))
+            card_embed = discord.Embed(
+                title="⛏️ Infernal Mining",
+                description=(
+                    "The mine has paid its tribute.\n\n"
+                    f"**+{result['net']:,} DC**"
+                ),
+                color=_CARD_COLORS.get(outcome, 0xB22222),
+            )
             card_embed.set_image(url="attachment://grind_result.png")
 
             card_file = discord.File(card_buf, filename="grind_result.png")
@@ -351,12 +298,9 @@ class EconomyCog(commands.Cog):
 
         async def on_walk_away(inter: discord.Interaction):
             walk_embed = discord.Embed(
-                title="⛏  Infernal Mines",
-                description=_random.choice(_WALKAWAY_DESCRIPTIONS),
+                title="Infernal Mines",
+                description="You left the mine entrance. No coins were spent.",
                 color=WALK_COLOR,
-            )
-            walk_embed.set_footer(
-                text="No coins lost. None gained.  ·  Kingdom Treasury  ·  Kingdom of Hell"
             )
             await inter.response.edit_message(embed=walk_embed, view=None, attachments=[])
 
@@ -537,7 +481,14 @@ class EconomyCog(commands.Cog):
         username   = interaction.user.display_name
 
         user         = await self.db.upsert_user(guild_id, discord_id, username)
-        current_rank = user.get("rank", "Forsaken")
+        try:
+            role_mappings = await self.config_service.get_all_rank_role_mappings(guild_id)
+        except Exception:
+            role_mappings = None
+        current_rank = (
+            self.rank_service.get_rank_from_roles(interaction.user.roles, role_mappings)
+            or user.get("rank", "Unranked")
+        )
         next_rank    = self.rank_service.get_next_rank(current_rank)
 
         # ── shared ascend logic (used by both UI button and direct buy) ────────
@@ -575,8 +526,102 @@ class EconomyCog(commands.Cog):
                         await inter.followup.send(embed=embed, ephemeral=True)
                         return
 
+            guild = inter.guild
+            member = inter.user
+            try:
+                if guild is None:
+                    raise RuntimeError("Ascension can only be completed inside a Discord server.")
+                if not isinstance(member, discord.Member):
+                    member = guild.get_member(inter.user.id) or await guild.fetch_member(inter.user.id)
+
+                mapping = await self.config_service.get_rank_role_mapping(guild_id, rank_name)
+                if not mapping:
+                    raise RuntimeError(f"No Discord role is configured for {rank_name}.")
+
+                role_id = int(mapping["role_id"])
+                new_role = guild.get_role(role_id)
+                if new_role is None:
+                    new_role = next(
+                        (role for role in await guild.fetch_roles() if role.id == role_id),
+                        None,
+                    )
+                if new_role is None:
+                    raise RuntimeError(f"The configured Discord role for {rank_name} does not exist.")
+
+                bot_member = guild.me
+                if bot_member is None:
+                    bot_user = inter.client.user
+                    if bot_user is None:
+                        raise RuntimeError("The bot's server membership is unavailable.")
+                    bot_member = guild.get_member(bot_user.id) or await guild.fetch_member(bot_user.id)
+                if not bot_member.guild_permissions.manage_roles:
+                    raise RuntimeError("The bot is missing the Manage Roles permission.")
+                if new_role.position >= bot_member.top_role.position:
+                    raise RuntimeError("The rank role is not below the bot's highest role.")
+                if member.id != bot_member.id and member.top_role.position >= bot_member.top_role.position:
+                    raise RuntimeError("The member's highest role is not below the bot's highest role.")
+
+                role_was_present = any(role.id == new_role.id for role in member.roles)
+            except Exception as role_err:
+                import logging
+                logging.getLogger("kingdom_treasury").warning(
+                    f"Rank role preflight failed for {rank_name}: {role_err}"
+                )
+                await inter.followup.send(
+                    embed=EmbedFactory.error(
+                        f"The **{rank_name}** role cannot be assigned right now, so no DC was charged. "
+                        "Ask staff to verify the role and the bot's Manage Roles permission and role order."
+                    ),
+                    ephemeral=True,
+                )
+                return
+
             tx_service = TransactionService(self.db)
-            await tx_service.ascension_payment(guild_id, discord_id, rank_name, cost)
+            try:
+                await tx_service.ascension_payment(guild_id, discord_id, rank_name, cost)
+            except ValueError:
+                current_user = await self.db.get_user(guild_id, discord_id)
+                current_balance = current_user["balance"] if current_user else 0
+                needed = cost - current_balance
+                await inter.followup.send(
+                    embed=EmbedFactory.error(
+                        f"You need **{needed:,}** more <:devilcoinStack:1492184333392412692> to ascend to **{rank_name}**."
+                    ),
+                    ephemeral=True,
+                )
+                return
+
+            try:
+                if not role_was_present:
+                    await member.add_roles(new_role, reason=f"Kingdom Treasury: ascended to {rank_name}")
+            except Exception as role_err:
+                import logging
+                logger = logging.getLogger("kingdom_treasury")
+                logger.warning(f"Discord role assignment failed for {rank_name}: {role_err}")
+                try:
+                    await tx_service.rollback_ascension(
+                        guild_id, discord_id, current_rank, rank_name, cost
+                    )
+                except Exception as refund_err:
+                    logger.exception(
+                        f"Failed to roll back ascension to {rank_name} after role assignment failure: {refund_err}"
+                    )
+                    await inter.followup.send(
+                        embed=EmbedFactory.error(
+                            f"Discord refused the **{rank_name}** role and the automatic refund failed. "
+                            "Contact staff to restore the purchase."
+                        ),
+                        ephemeral=True,
+                    )
+                    return
+                await inter.followup.send(
+                    embed=EmbedFactory.error(
+                        f"Discord refused the **{rank_name}** role. The ascension was cancelled and your DC was refunded."
+                    ),
+                    ephemeral=True,
+                )
+                return
+
             updated     = await self.db.get_user(guild_id, discord_id)
             new_balance = updated["balance"] if updated else 0
             skin_id     = updated.get("equipped_skin") if updated else None
@@ -586,28 +631,24 @@ class EconomyCog(commands.Cog):
 
             # ── Discord role assignment ───────────────────────────────────────
             try:
-                guild   = inter.guild
-                member  = inter.user
-                mapping = await self.config_service.get_rank_role_mapping(guild_id, rank_name)
-
-                if mapping and guild and member:
-                    new_role = guild.get_role(int(mapping["role_id"]))
-                    if new_role:
-                        await member.add_roles(new_role, reason=f"Kingdom Treasury: ascended to {rank_name}")
-
-                    if mapping.get("remove_previous"):
-                        all_mappings = await self.config_service.get_all_rank_role_mappings(guild_id)
-                        old_role_ids = {
-                            int(m["role_id"])
-                            for m in all_mappings
-                            if m["rank_name"] != rank_name and m["role_id"] != mapping["role_id"]
-                        }
-                        roles_to_remove = [r for r in member.roles if r.id in old_role_ids]
-                        if roles_to_remove:
-                            await member.remove_roles(*roles_to_remove, reason="Kingdom Treasury: rank role update")
+                if mapping.get("remove_previous"):
+                    all_mappings = await self.config_service.get_all_rank_role_mappings(guild_id)
+                    old_role_ids = {
+                        int(item["role_id"])
+                        for item in all_mappings
+                        if item["rank_name"] != rank_name and item["role_id"] != mapping["role_id"]
+                    }
+                    roles_to_remove = [role for role in member.roles if role.id in old_role_ids]
+                    if roles_to_remove:
+                        await member.remove_roles(
+                            *roles_to_remove,
+                            reason="Kingdom Treasury: rank role update",
+                        )
             except Exception as role_err:
                 import logging
-                logging.getLogger("kingdom_treasury").warning(f"Role assignment failed: {role_err}")
+                logging.getLogger("kingdom_treasury").warning(
+                    f"Previous rank role removal failed after ascending to {rank_name}: {role_err}"
+                )
 
             try:
                 av_url = inter.user.display_avatar.with_size(128).url
@@ -706,6 +747,7 @@ class EconomyCog(commands.Cog):
             owner_id     = interaction.user.id,
             current_rank = current_rank,
             next_rank    = next_rank,
+            balance      = user["balance"],
             ascend_cb    = _execute_ascend,
         )
         await interaction.followup.send(embed=view.build_embed(), view=view, ephemeral=True)

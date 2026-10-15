@@ -46,10 +46,22 @@ class ConfigService:
     def __init__(self):
         self._pool = None
         self._lock = asyncio.Lock()
+        self._postgres_disabled_logged = False
+
+    @staticmethod
+    def is_postgres_enabled() -> bool:
+        return os.getenv("USE_POSTGRES", "false").strip().lower() in {"1", "true", "yes", "on"}
 
     async def _get_pool(self):
         if self._pool is not None:
             return self._pool
+        if not self.is_postgres_enabled():
+            if not self._postgres_disabled_logged:
+                logger.info(
+                    "PostgreSQL disabled via USE_POSTGRES=false; bot is running in SQLite-only mode."
+                )
+                self._postgres_disabled_logged = True
+            return None
         async with self._lock:
             if self._pool is not None:
                 return self._pool

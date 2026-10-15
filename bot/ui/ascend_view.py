@@ -21,6 +21,7 @@ class AscendView(discord.ui.View):
         owner_id:     int,
         current_rank: str,
         next_rank:    Optional[str],
+        balance:      int,
         ascend_cb:    Callable[[discord.Interaction, str, int], Awaitable[None]],
     ):
         super().__init__(timeout=180)
@@ -28,6 +29,7 @@ class AscendView(discord.ui.View):
         self.owner_id     = owner_id
         self.current_rank = current_rank
         self.next_rank    = next_rank
+        self.balance      = balance
         self.ascend_cb    = ascend_cb
         self.page         = 0
         self.total_pages  = max(1, math.ceil(len(ranks) / PAGE_SIZE))
@@ -50,14 +52,17 @@ class AscendView(discord.ui.View):
     # ── embed ─────────────────────────────────────────────────────────────────
 
     def build_embed(self) -> discord.Embed:
+        is_unranked = self.current_rank == "Unranked"
+        current_label = "*Current Rank:* **None yet**" if is_unranked else f"*Current Rank:* **{self.current_rank}**"
         next_label = (
-            f"**{self.next_rank}**" if self.next_rank
+            f"**{self.next_rank}** (entry purchase)" if is_unranked and self.next_rank
+            else f"**{self.next_rank}**" if self.next_rank
             else "*You stand at the Apex of the Kingdom.*"
         )
         embed = discord.Embed(
             title="👑  Ascension Ritual — Rank Hierarchy",
             description=(
-                f"*Current Rank:* **{self.current_rank}**\n"
+                f"{current_label}\n"
                 f"*Next Ascension:* {next_label}\n\n"
                 "*The ritual is strict. Ascend one step at a time. No skipping.*"
             ),
@@ -67,7 +72,12 @@ class AscendView(discord.ui.View):
 
         for name, cost, tax_rate in self._current():
             is_next = name == self.next_rank
-            marker  = "⚔ **AVAILABLE**" if is_next else "🔒 Locked"
+            can_afford = is_next and self.balance >= cost
+            marker = (
+                "⚔ **AVAILABLE**" if can_afford
+                else f"🔒 Need **{cost - self.balance:,}** more DC" if is_next
+                else "🔒 Locked"
+            )
             tax_pct = f"{int(tax_rate * 100)}%"
             embed.add_field(
                 name=f"{'⚔' if is_next else '🔒'}  **{name}**",
@@ -102,11 +112,18 @@ class AscendView(discord.ui.View):
 
         for i, (name, cost, _) in enumerate(current):
             is_next = name == self.next_rank
+            can_afford = is_next and self.balance >= cost
+            if is_next and not can_afford:
+                label = f"🔒  Need {cost - self.balance:,} DC"
+            elif is_next and self.current_rank == "Unranked":
+                label = f"⚔  Buy → {name}"
+            else:
+                label = f"⚔  Ascend → {name}"
             btn = discord.ui.Button(
-                label    = f"⚔  Ascend → {name}" if is_next else f"🔒  {name}",
+                label    = label if is_next else f"🔒  {name}",
                 style    = discord.ButtonStyle.danger if is_next else discord.ButtonStyle.secondary,
                 row      = i + 1,
-                disabled = not is_next,
+                disabled = not can_afford,
             )
             if is_next:
                 btn.callback = self._make_ascend_cb(name, cost)

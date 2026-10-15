@@ -14,6 +14,18 @@ logger = logging.getLogger("kingdom_treasury")
 
 DB_PATH       = "kingdom_treasury.db"
 SCHEMA_VERSION = 2   # bumped when schema changes require a migration
+RESETTABLE_TABLES = (
+    "users",
+    "transactions",
+    "treasury",
+    "cooldowns",
+    "investments",
+    "user_perks",
+    "ascension_history",
+    "missions",
+    "mission_participants",
+    "identity_card_registry",
+)
 
 
 class Database:
@@ -124,6 +136,8 @@ class Database:
             # Weekly leaderboard tracking — reset every Monday after post
             "ALTER TABLE users ADD COLUMN weekly_active_seconds INTEGER NOT NULL DEFAULT 0",
             "ALTER TABLE users ADD COLUMN weekly_dc_earned INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE users ADD COLUMN identity_display_name TEXT",
+            "ALTER TABLE mission_participants ADD COLUMN thread_id TEXT",
         ]
         for stmt in additive:
             try:
@@ -144,8 +158,9 @@ class Database:
                 guild_id         TEXT NOT NULL,
                 discord_id       TEXT NOT NULL,
                 username         TEXT NOT NULL,
+                identity_display_name TEXT,
                 balance          INTEGER NOT NULL DEFAULT 0,
-                rank             TEXT NOT NULL DEFAULT 'Forsaken',
+                rank             TEXT NOT NULL DEFAULT 'Unranked',
                 taxes_paid       INTEGER NOT NULL DEFAULT 0,
                 risk_score       INTEGER NOT NULL DEFAULT 0,
                 owned_titles     TEXT NOT NULL DEFAULT '[]',
@@ -239,9 +254,17 @@ class Database:
                 guild_id     TEXT NOT NULL,
                 discord_id   TEXT NOT NULL,
                 status       TEXT NOT NULL DEFAULT 'accepted',
+                thread_id    TEXT,
                 accepted_at  TEXT NOT NULL DEFAULT (datetime('now')),
                 completed_at TEXT,
                 UNIQUE(mission_id, discord_id)
+            );
+
+            CREATE TABLE IF NOT EXISTS identity_card_registry (
+                guild_id   TEXT NOT NULL,
+                discord_id TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                PRIMARY KEY (guild_id, discord_id)
             );
         """)
         await self._db.commit()
@@ -253,6 +276,7 @@ class Database:
         tables = [
             "users", "transactions", "treasury", "cooldowns", "investments",
             "user_perks", "ascension_history", "missions", "mission_participants",
+            "identity_card_registry",
         ]
         for tbl in tables:
             await self._db.execute(f"DELETE FROM {tbl} WHERE guild_id = ?", (guild_id,))
@@ -264,11 +288,66 @@ class Database:
         tables = [
             "users", "transactions", "treasury", "cooldowns", "investments",
             "user_perks", "ascension_history", "missions", "mission_participants",
+            "identity_card_registry",
         ]
         for tbl in tables:
             await self._db.execute(f"DELETE FROM {tbl}")
         await self._db.commit()
         logger.info("Global reset complete — all economy data purged.")
+
+    async def reset_kingdom_treasury_data(self) -> dict[str, int]:
+        """Clear only allowlisted bot data, preserving schema and metadata."""
+        if self._db is None:
+            raise RuntimeError("Database is not connected.")
+
+        async with self._db.execute("PRAGMA integrity_check") as cursor:
+            integrity = (await cursor.fetchone())[0]
+        if integrity != "ok":
+            raise RuntimeError("SQLite database failed its integrity check; reset aborted.")
+
+        async with self._db.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table'"
+        ) as cursor:
+            existing_tables = {row[0] for row in await cursor.fetchall()}
+        missing_tables = set(RESETTABLE_TABLES) - existing_tables
+        if missing_tables:
+            raise RuntimeError(
+                "Reset aborted because expected tables are missing: "
+                + ", ".join(sorted(missing_tables))
+            )
+
+        deleted_counts: dict[str, int] = {}
+        try:
+            await self._db.execute("BEGIN IMMEDIATE")
+            for table in RESETTABLE_TABLES:
+                async with self._db.execute(f"SELECT COUNT(*) FROM {table}") as cursor:
+                    deleted_counts[table] = (await cursor.fetchone())[0]
+                await self._db.execute(f"DELETE FROM {table}")
+
+            if "sqlite_sequence" in existing_tables:
+                placeholders = ", ".join("?" for _ in RESETTABLE_TABLES)
+                await self._db.execute(
+                    f"DELETE FROM sqlite_sequence WHERE name IN ({placeholders})",
+                    RESETTABLE_TABLES,
+                )
+
+            remaining = {}
+            for table in RESETTABLE_TABLES:
+                async with self._db.execute(f"SELECT COUNT(*) FROM {table}") as cursor:
+                    remaining[table] = (await cursor.fetchone())[0]
+            if any(remaining.values()):
+                raise RuntimeError("Reset verification failed; changes rolled back.")
+
+            await self._db.commit()
+        except Exception:
+            await self._db.rollback()
+            raise
+
+        async with self._db.execute("PRAGMA integrity_check") as cursor:
+            integrity = (await cursor.fetchone())[0]
+        if integrity != "ok":
+            raise RuntimeError("SQLite integrity check failed after reset.")
+        return deleted_counts
 
     # ─── Token fingerprint ────────────────────────────────────────────────────
 
@@ -289,14 +368,37 @@ class Database:
     async def upsert_user(self, guild_id: str, discord_id: str, username: str) -> dict:
         await self._db.execute(
             """
-            INSERT INTO users (guild_id, discord_id, username)
-            VALUES (?, ?, ?)
+            INSERT INTO users (guild_id, discord_id, username, rank)
+            VALUES (?, ?, ?, 'Unranked')
             ON CONFLICT(guild_id, discord_id) DO UPDATE SET username = excluded.username
             """,
             (guild_id, discord_id, username),
         )
         await self._db.commit()
         return await self.get_user(guild_id, discord_id)
+
+    async def set_identity_display_name(self, guild_id: str, discord_id: str, display_name: str) -> None:
+        await self._db.execute(
+            "UPDATE users SET identity_display_name = ? WHERE guild_id = ? AND discord_id = ?",
+            (display_name, guild_id, discord_id),
+        )
+        await self._db.commit()
+
+    async def has_identity_card(self, guild_id: str, discord_id: str) -> bool:
+        async with self._db.execute(
+            "SELECT 1 FROM identity_card_registry WHERE guild_id = ? AND discord_id = ?",
+            (guild_id, discord_id),
+        ) as cursor:
+            return await cursor.fetchone() is not None
+
+    async def mark_identity_card_created(self, guild_id: str, discord_id: str) -> None:
+        await self._db.execute(
+            """INSERT INTO identity_card_registry (guild_id, discord_id)
+               VALUES (?, ?)
+               ON CONFLICT(guild_id, discord_id) DO NOTHING""",
+            (guild_id, discord_id),
+        )
+        await self._db.commit()
 
     async def update_balance(self, guild_id: str, discord_id: str, amount: int):
         if amount > 0:
@@ -313,6 +415,28 @@ class Database:
                 (amount, guild_id, discord_id),
             )
         await self._db.commit()
+
+    async def deduct_balance_if_sufficient(self, guild_id: str, discord_id: str, amount: int) -> bool:
+        if amount < 0:
+            raise ValueError("Deduction amount cannot be negative.")
+        cursor = await self._db.execute(
+            """UPDATE users
+               SET balance = balance - ?
+               WHERE guild_id = ? AND discord_id = ? AND balance >= ?""",
+            (amount, guild_id, discord_id, amount),
+        )
+        await self._db.commit()
+        return cursor.rowcount == 1
+
+    async def restore_balance(self, guild_id: str, discord_id: str, amount: int) -> bool:
+        if amount < 0:
+            raise ValueError("Restored amount cannot be negative.")
+        cursor = await self._db.execute(
+            "UPDATE users SET balance = balance + ? WHERE guild_id = ? AND discord_id = ?",
+            (amount, guild_id, discord_id),
+        )
+        await self._db.commit()
+        return cursor.rowcount == 1
 
     async def set_balance(self, guild_id: str, discord_id: str, amount: int):
         await self._db.execute(
@@ -401,21 +525,22 @@ class Database:
     # it does not appear here. Duke (14) is the highest public economy rank.
     _RANK_CASE = """
         CASE rank
-            WHEN 'Forsaken'    THEN 0
-            WHEN 'Vermin'      THEN 1
-            WHEN 'Corrupted'   THEN 2
-            WHEN 'Folklore'    THEN 3
-            WHEN 'Mythology'   THEN 4
-            WHEN 'Demonology'  THEN 5
-            WHEN 'Eschatology' THEN 6
-            WHEN 'Archangel'   THEN 7
-            WHEN 'Archdemon'   THEN 8
-            WHEN 'Knight'      THEN 9
-            WHEN 'Baron'       THEN 10
-            WHEN 'Viscount'    THEN 11
-            WHEN 'Count'       THEN 12
-            WHEN 'Marquis'     THEN 13
-            WHEN 'Duke'        THEN 14
+            WHEN 'Unranked'    THEN 0
+            WHEN 'Forsaken'    THEN 1
+            WHEN 'Vermin'      THEN 2
+            WHEN 'Corrupted'   THEN 3
+            WHEN 'Folklore'    THEN 4
+            WHEN 'Mythology'   THEN 5
+            WHEN 'Demonology'  THEN 6
+            WHEN 'Eschatology' THEN 7
+            WHEN 'Archangel'   THEN 8
+            WHEN 'Archdemon'   THEN 9
+            WHEN 'Knight'      THEN 10
+            WHEN 'Baron'       THEN 11
+            WHEN 'Viscount'    THEN 12
+            WHEN 'Count'       THEN 13
+            WHEN 'Marquis'     THEN 14
+            WHEN 'Duke'        THEN 15
             ELSE 0
         END
     """
@@ -700,7 +825,7 @@ class Database:
         # Reset all user stats to default
         await self._db.execute(
             """UPDATE users
-               SET balance = 0, rank = 'Forsaken', risk_score = 0,
+               SET balance = 0, rank = 'Unranked', risk_score = 0,
                    taxes_paid = 0, grind_count = 0, grind_count_24h = 0,
                    tribute_count = 0
                WHERE guild_id = ? AND discord_id = ?""",
@@ -845,6 +970,17 @@ class Database:
         )
         await self._db.commit()
 
+    async def set_mission_participant_thread(
+        self, mission_id: int, discord_id: str, thread_id: str
+    ) -> None:
+        await self._db.execute(
+            """UPDATE mission_participants
+               SET thread_id = ?
+               WHERE mission_id = ? AND discord_id = ?""",
+            (thread_id, mission_id, discord_id),
+        )
+        await self._db.commit()
+
     async def complete_mission_participant(self, mission_id: int, discord_id: str):
         now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
         await self._db.execute(
@@ -943,9 +1079,9 @@ class Database:
 
     # ─── Weekly Leaderboard ───────────────────────────────────────────────────
 
-    # Eligible economy rank names (Nobility + Members only — no staff)
+    # Eligible economy rank names (Vermin through Duke; no Forsaken or staff)
     _ELIGIBLE_RANKS = (
-        "Forsaken", "Vermin", "Corrupted", "Folklore", "Mythology",
+        "Vermin", "Corrupted", "Folklore", "Mythology",
         "Demonology", "Eschatology", "Archangel", "Archdemon",
         "Knight", "Baron", "Viscount", "Count", "Marquis", "Duke",
     )
@@ -1010,6 +1146,10 @@ class Database:
 
         Returns 0 if the user is not found in the eligible set (staff / not in DB).
         """
+        user = await self.get_user(guild_id, discord_id)
+        if user is None or user.get("rank") not in self._ELIGIBLE_RANKS:
+            return 0
+
         placeholders = ",".join("?" * len(self._ELIGIBLE_RANKS))
         async with self._db.execute(
             f"""
